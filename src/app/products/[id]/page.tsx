@@ -75,7 +75,7 @@ export default async function ProductDetail({
           <div>
             <h2 className="font-serif text-3xl font-semibold tracking-normal text-[#202829]">来源报价</h2>
             <p className="mt-2 text-[0.72rem] font-medium uppercase tracking-[0.18em] text-[#5a6061]">
-              {product.offers.length} offers · 只区分有货和缺货
+              {product.offers.length} 条报价 · 只区分有货和缺货
             </p>
           </div>
           <div className="flex items-center gap-2 text-sm text-[#5a6061]">

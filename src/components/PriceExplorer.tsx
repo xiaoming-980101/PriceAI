@@ -8,6 +8,7 @@ import {
   Filter,
   Layers3,
   PackageCheck,
+  Plus,
   Search,
   Store,
 } from "lucide-react";
@@ -23,8 +24,8 @@ type SortMode = "available_price" | "price" | "updated" | "channels";
 
 const productTypeLabels: Record<string, string> = {
   全部: "全部",
-  会员充值: "会员充值 (Subs)",
-  成品号: "成品号 (Ready)",
+  会员充值: "会员充值",
+  成品号: "成品号",
   "共享/镜像": "共享/镜像",
   "卡密/CDK": "卡密/CDK",
   "邮箱/账号": "邮箱/账号",
@@ -94,6 +95,9 @@ export function PriceExplorer({ data }: { data: DashboardData }) {
       const stockDelta = Number(b.inStockCount > 0) - Number(a.inStockCount > 0);
       if (stockDelta !== 0) return stockDelta;
 
+      const trustDelta = productSortPenalty(a) - productSortPenalty(b);
+      if (trustDelta !== 0) return trustDelta;
+
       return (a.lowestPrice ?? Number.MAX_SAFE_INTEGER) - (b.lowestPrice ?? Number.MAX_SAFE_INTEGER);
     });
   }, [data.products, maxPrice, minPrice, platform, productType, query, sort, stock]);
@@ -101,6 +105,7 @@ export function PriceExplorer({ data }: { data: DashboardData }) {
   const totalAvailable = data.products.reduce((sum, product) => sum + product.inStockCount, 0);
   const totalOutOfStock = data.products.reduce((sum, product) => sum + product.outOfStockCount, 0);
   const title = buildTitle(platform, productType);
+  const activeFilters = buildActiveFilters({ platform, productType, stock, minPrice, maxPrice });
 
   return (
     <div className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
@@ -118,7 +123,7 @@ export function PriceExplorer({ data }: { data: DashboardData }) {
         </div>
       </header>
 
-      <section className="sticky top-[72px] z-20 bg-[#f2f4f4]/90 px-5 py-6 backdrop-blur-xl sm:px-8">
+      <section className="sticky top-[72px] z-20 hidden bg-[#f2f4f4]/90 px-5 py-6 backdrop-blur-xl sm:px-8 md:block">
         <div className="mx-auto max-w-[1500px] space-y-6">
           <div className="flex gap-3 overflow-x-auto pb-1">
             {["全部", ...platformOptions].map((item) => (
@@ -163,13 +168,30 @@ export function PriceExplorer({ data }: { data: DashboardData }) {
             <h1 className="font-serif text-4xl font-bold tracking-normal text-[#202829] md:text-5xl">
               {title}
             </h1>
-            <div className="mt-4 flex flex-wrap items-center gap-3 font-label text-[0.72rem] font-medium uppercase tracking-[0.18em] text-[#5a6061]">
-              <span>Last updated: {formatRelativeTime(data.generatedAt)}</span>
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-[0.72rem] font-medium text-[#5a6061]">
+              <span>最近更新：{formatRelativeTime(data.generatedAt)}</span>
               <span className="h-1 w-1 rounded-full bg-[#adb3b4]" />
-              <span>{products.length} groups</span>
+              <span>{products.length} 个商品</span>
               <span className="h-1 w-1 rounded-full bg-[#adb3b4]" />
               <span>主价格为最低价，缺货会明显标注</span>
             </div>
+            {activeFilters.length ? (
+              <div className="mt-3 flex flex-wrap gap-2 md:hidden">
+                {activeFilters.map((filter) => (
+                  <span key={filter} className="rounded-full bg-[#e4e9ea] px-3 py-1 text-xs font-medium text-[#2d3435]">
+                    {filter}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("open-submission-floater"))}
+              className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#2d3435] px-4 text-sm font-semibold text-[#f8f8f8] shadow-[0_14px_40px_rgba(45,52,53,0.16)] md:hidden"
+            >
+              <Plus size={16} />
+              提交渠道
+            </button>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -188,7 +210,7 @@ export function PriceExplorer({ data }: { data: DashboardData }) {
               className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#e4e9ea] px-5 text-sm font-semibold text-[#2d3435] transition hover:bg-[#dde4e5]"
             >
               <Filter size={17} />
-              Filter
+              筛选{activeFilters.length ? ` ${activeFilters.length}` : ""}
             </button>
             <label className="inline-flex h-11 items-center gap-2 rounded-full bg-[#e4e9ea] px-5 text-sm font-semibold text-[#2d3435]">
               <ArrowUpDown size={17} />
@@ -208,6 +230,22 @@ export function PriceExplorer({ data }: { data: DashboardData }) {
 
         {filtersOpen ? (
           <div className="mb-8 grid gap-3 rounded-lg bg-[#f2f4f4] p-4 shadow-[0_18px_50px_rgba(45,52,53,0.04)] sm:grid-cols-2 lg:grid-cols-4">
+            <div className="sm:col-span-2 md:hidden">
+              <FilterSelect
+                label="平台"
+                value={platform}
+                onChange={setPlatform}
+                options={["全部", ...platformOptions]}
+              />
+            </div>
+            <div className="sm:col-span-2 md:hidden">
+              <FilterSelect
+                label="商品类型"
+                value={productType}
+                onChange={setProductType}
+                options={["全部", ...productTypeOptions].map((item) => [item, productTypeLabels[item] || item] as [string, string])}
+              />
+            </div>
             <FilterSelect
               label="库存"
               value={stock}
@@ -481,6 +519,43 @@ function pricePanelClass(tone: ProductGroup["lowestPriceTone"]): string {
     muted: "bg-[#f2f4f4] text-[#5a6061]",
     danger: "bg-[#fbe9e7] text-[#8f2f24] ring-1 ring-[#e9b7b0]",
   }[tone];
+}
+
+function productSortPenalty(product: ProductGroup): number {
+  let penalty = 0;
+  const text = `${product.displayName} ${product.platform} ${product.productType} ${product.spec}`.toLowerCase();
+
+  if (product.platform === "其他" || product.productType === "其他" || text.includes("其他商品")) {
+    penalty += 200;
+  }
+
+  if ((product.lowestPrice ?? Number.MAX_SAFE_INTEGER) < 0.1) {
+    penalty += 100;
+  }
+
+  return penalty;
+}
+
+function buildActiveFilters({
+  platform,
+  productType,
+  stock,
+  minPrice,
+  maxPrice,
+}: {
+  platform: string;
+  productType: string;
+  stock: string;
+  minPrice: string;
+  maxPrice: string;
+}): string[] {
+  const filters: string[] = [];
+  if (platform !== "全部") filters.push(platform);
+  if (productType !== "全部") filters.push(productTypeLabels[productType] || productType);
+  if (stock === "available") filters.push("有货");
+  if (stock === "out_of_stock") filters.push("缺货");
+  if (minPrice || maxPrice) filters.push(`¥${minPrice || "0"}-${maxPrice || "不限"}`);
+  return filters;
 }
 
 function buildTitle(platform: string, productType: string): string {

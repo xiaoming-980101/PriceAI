@@ -20,6 +20,14 @@ export function SubmissionFloater() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  useEffect(() => {
+    function onOpen() {
+      setOpen(true);
+    }
+    window.addEventListener("open-submission-floater", onOpen);
+    return () => window.removeEventListener("open-submission-floater", onOpen);
+  }, []);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatus("submitting");
@@ -65,7 +73,7 @@ export function SubmissionFloater() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-[#2d3435] px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_55px_rgba(45,52,53,0.25)] transition hover:bg-[#1f2526]"
+        className="fixed bottom-6 right-6 z-40 hidden h-12 items-center justify-center gap-2 rounded-full bg-[#2d3435] px-5 text-sm font-semibold text-white shadow-[0_20px_55px_rgba(45,52,53,0.25)] transition hover:bg-[#1f2526] sm:inline-flex"
       >
         <Plus size={16} />
         提交渠道
@@ -73,7 +81,7 @@ export function SubmissionFloater() {
 
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#202829]/30 px-4"
           onClick={close}
         >
           <div
