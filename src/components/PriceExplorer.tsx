@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import { AppLogo } from "@/components/AppLogo";
 import { BrandIcon } from "@/components/BrandIcon";
 import { collectOfferFlags, platformOptions, productTypeOptions } from "@/lib/catalog";
 import type { DashboardData, ProductGroup } from "@/lib/types";
@@ -115,8 +116,8 @@ export function PriceExplorer({ data }: { data: DashboardData }) {
     <div className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
       <header className="sticky top-0 z-30 bg-[#f9f9f9]/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-5 px-5 py-4 sm:px-8">
-          <Link href="/" className="font-serif text-3xl font-bold tracking-normal text-[#4c4f50]">
-            PriceAI
+          <Link href="/" aria-label="PriceAI 首页" className="shrink-0">
+            <AppLogo />
           </Link>
           <div className="hidden items-center gap-3 lg:flex">
             <Metric label="标准商品" value={data.products.length.toString()} icon={<PackageCheck size={15} />} />

@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AppLogo } from "@/components/AppLogo";
 import { BrandIcon } from "@/components/BrandIcon";
 import { getProductGroup } from "@/lib/data";
 import type { RawOffer } from "@/lib/types";
@@ -41,8 +42,8 @@ export default async function ProductDetail({
             <ArrowLeft size={17} />
             返回首页
           </Link>
-          <Link href="/" className="font-serif text-2xl font-bold tracking-normal text-[#4c4f50]">
-            PriceAI
+          <Link href="/" aria-label="PriceAI 首页" className="shrink-0">
+            <AppLogo compact />
           </Link>
         </div>
       </header>
