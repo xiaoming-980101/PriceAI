@@ -1,4 +1,4 @@
-import { runPriceCollection } from "../../../../../scripts/collect-prices.mjs";
+import { loadTargets, runPriceCollection } from "../../../../../scripts/collect-prices.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,10 +18,28 @@ async function runCronCollection(request: Request) {
 
   const startedAt = new Date().toISOString();
   const url = new URL(request.url);
-  const source = url.searchParams.get("source") || undefined;
+  const source = url.searchParams.get("source") || url.searchParams.get("sourceId") || undefined;
   const endpoint = process.env.CRON_PUBLIC_BASE_URL || url.origin;
 
   try {
+    if (url.searchParams.get("list") === "1") {
+      const targets = await loadTargets();
+
+      return Response.json({
+        ok: true,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        targetCount: targets.length,
+        supportedCount: targets.filter((target) => target.kind).length,
+        targets: targets.map((target) => ({
+          sourceId: target.sourceId,
+          sourceName: target.sourceName,
+          sourceUrl: target.sourceUrl,
+          kind: target.kind,
+        })),
+      });
+    }
+
     const result = await runPriceCollection({
       all: !source,
       source,

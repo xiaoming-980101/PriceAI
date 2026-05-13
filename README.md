@@ -65,17 +65,29 @@ npm run collect:prices -- --source aisou-pro --post
 - `--post`：把采集结果写入本地后台和 Supabase。
 - `--endpoint`：默认 `http://localhost:3000`。
 
-部署后由项目内置接口执行定时采集：
+部署后由 GitHub Actions 定时触发受保护接口。工作流会先读取可自动采集渠道列表，再逐个渠道触发采集，避免把全量采集压进一次 Vercel 函数调用导致超时。
 
 ```bash
 GET /api/cron/collect-prices
 Authorization: Bearer your-cron-secret
 ```
 
-Vercel 部署会读取 `vercel.json`。当前按 Hobby 账号限制配置为每天触发一次 `/api/cron/collect-prices`；如果升级到 Vercel Pro，可以把 `vercel.json` 改回每小时。云服务器也可以用系统 cron 调用同一个接口：
+GitHub 仓库需要配置两个 Actions secrets：
+
+- `COLLECT_PRICES_URL`：生产接口地址，例如 `https://your-domain.com/api/cron/collect-prices`。
+- `CRON_SECRET`：和 Vercel 环境变量 `CRON_SECRET` 保持一致。
+
+接口支持查看当前可采集渠道：
 
 ```bash
-0 * * * * curl -fsS -H "Authorization: Bearer your-cron-secret" https://your-domain.com/api/cron/collect-prices
+curl -H "Authorization: Bearer your-cron-secret" \
+  "https://your-domain.com/api/cron/collect-prices?list=1"
+```
+
+云服务器也可以用系统 cron 分渠道调用同一个接口：
+
+```bash
+0 * * * * curl -fsS -X POST -H "Authorization: Bearer your-cron-secret" "https://your-domain.com/api/cron/collect-prices?source=aisou-pro"
 ```
 
 本地调试可以用后台密码触发单个渠道：

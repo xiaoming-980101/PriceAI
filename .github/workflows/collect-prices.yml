@@ -13,25 +13,98 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
-      - name: Trigger collect-prices endpoint
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Collect prices source by source
         env:
           ENDPOINT: ${{ secrets.COLLECT_PRICES_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          if [ -z "$ENDPOINT" ] || [ -z "$CRON_SECRET" ]; then
-            echo "缺少 COLLECT_PRICES_URL 或 CRON_SECRET secret"
-            exit 1
-          fi
-          response=$(curl -sS -w "\n%{http_code}" -X POST \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$ENDPOINT")
-          body=$(printf '%s' "$response" | sed '$d')
-          status=$(printf '%s' "$response" | tail -n1)
-          echo "HTTP $status"
-          echo "$body" | head -c 4000
-          echo
-          if [ "$status" != "200" ]; then
-            exit 1
-          fi
+          node <<'NODE'
+          const endpoint = process.env.ENDPOINT;
+          const secret = process.env.CRON_SECRET;
+
+          if (!endpoint || !secret) {
+            throw new Error("缺少 COLLECT_PRICES_URL 或 CRON_SECRET secret");
+          }
+
+          const headers = { authorization: `Bearer ${secret}` };
+
+          function withParams(params) {
+            const url = new URL(endpoint);
+            for (const [key, value] of Object.entries(params)) {
+              url.searchParams.set(key, value);
+            }
+            return url;
+          }
+
+          async function readResponse(response) {
+            const text = await response.text();
+            try {
+              return { text, json: JSON.parse(text) };
+            } catch {
+              return { text, json: null };
+            }
+          }
+
+          const listResponse = await fetch(withParams({ list: "1" }), { headers });
+          const { text: listText, json: listPayload } = await readResponse(listResponse);
+          if (!listResponse.ok || !listPayload?.ok) {
+            throw new Error(`读取渠道列表失败：HTTP ${listResponse.status} ${listPayload?.message || listText.slice(0, 500)}`);
+          }
+
+          const targets = (listPayload.targets || []).filter((target) => target.kind);
+          if (!targets.length) {
+            throw new Error("没有可自动采集的渠道。");
+          }
+
+          let infrastructureFailures = 0;
+          let collectorFailures = 0;
+          let successSources = 0;
+          let totalOffers = 0;
+
+          console.log(`准备采集 ${targets.length} 个渠道。`);
+
+          for (const [index, target] of targets.entries()) {
+            const response = await fetch(withParams({ source: target.sourceId }), {
+              method: "POST",
+              headers,
+            });
+            const { text, json } = await readResponse(response);
+            const elapsedSummary = json?.summary?.[0];
+            const offerCount = Number(json?.offerCount || 0);
+            const failureCount = Number(json?.failureCount || 0);
+            totalOffers += offerCount;
+
+            const label = `[${index + 1}/${targets.length}] ${target.sourceName} (${target.kind})`;
+            if (!response.ok || !json?.ok) {
+              infrastructureFailures += 1;
+              console.error(`${label} 调度失败：HTTP ${response.status} ${json?.message || text.slice(0, 500)}`);
+              continue;
+            }
+
+            if (failureCount > 0) {
+              collectorFailures += failureCount;
+              console.warn(`${label} 采集失败：${elapsedSummary?.message || "已写入后台采集日志"}`);
+              continue;
+            }
+
+            successSources += Number(json?.successCount || 1);
+            console.log(`${label} 成功，报价 ${offerCount} 条。`);
+          }
+
+          console.log(`完成：成功渠道 ${successSources} 个，采集失败渠道 ${collectorFailures} 个，调度失败 ${infrastructureFailures} 个，报价 ${totalOffers} 条。`);
+
+          if (infrastructureFailures > 0) {
+            throw new Error("存在接口调度失败，需要检查 Vercel 或密钥配置。");
+          }
+
+          if (successSources === 0) {
+            throw new Error("本轮没有任何渠道采集成功。");
+          }
+          NODE
