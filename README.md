@@ -65,7 +65,7 @@ npm run collect:prices -- --source aisou-pro --post
 - `--post`：把采集结果写入本地后台和 Supabase。
 - `--endpoint`：默认 `http://localhost:3000`。
 
-部署后由 GitHub Actions 定时触发受保护接口。工作流会先读取可自动采集渠道列表，再逐个渠道触发采集，避免把全量采集压进一次 Vercel 函数调用导致超时。
+部署后由 GitHub Actions 定时执行采集脚本，Vercel 只负责接收入库结果。这样可以避免把全量采集压进一次 Vercel 函数调用导致超时。
 
 ```bash
 GET /api/cron/collect-prices
@@ -76,8 +76,10 @@ GitHub 仓库需要配置两个 Actions secrets：
 
 - `COLLECT_PRICES_URL`：生产接口地址，例如 `https://your-domain.com/api/cron/collect-prices`。
 - `CRON_SECRET`：和 Vercel 环境变量 `CRON_SECRET` 保持一致。
+- `NEXT_PUBLIC_SUPABASE_URL`：Supabase 项目 URL。
+- `SUPABASE_SERVICE_ROLE_KEY`：Supabase service role key，仅用于 GitHub runner 读取来源并写入采集结果。
 
-接口支持查看当前可采集渠道：
+受保护接口仍支持查看当前可采集渠道，便于调试：
 
 ```bash
 curl -H "Authorization: Bearer your-cron-secret" \

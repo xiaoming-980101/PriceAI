@@ -21,3 +21,13 @@ export function requireAdminPassword(value: string | null): void {
     throw new Error("未授权，请检查后台密码。");
   }
 }
+
+export function requireAdminOrCronPassword(value: string | null): void {
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (value && adminPassword && value === adminPassword) return;
+  if (value && cronSecret && value === cronSecret) return;
+
+  throw new Error("未授权，请检查后台密码或定时采集密钥。");
+}

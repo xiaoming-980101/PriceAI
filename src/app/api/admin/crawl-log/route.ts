@@ -5,7 +5,7 @@ import {
   upsertRawOffers,
   upsertSource,
 } from "@/lib/admin";
-import { requireAdminPassword } from "@/lib/env";
+import { requireAdminOrCronPassword } from "@/lib/env";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { stableId } from "@/lib/utils";
 import { z } from "zod";
@@ -37,7 +37,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    requireAdminPassword(getAdminPasswordFromRequest(request));
+    requireAdminOrCronPassword(getAdminPasswordFromRequest(request));
 
     const supabase = getSupabaseServerClient();
     if (!supabase) throw new Error("Supabase 尚未配置，无法保存采集结果。");
