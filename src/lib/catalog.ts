@@ -61,7 +61,7 @@ export const canonicalCatalog: CanonicalProduct[] = [
     platform: "ChatGPT",
     productType: "订阅/会员",
     spec: "Team / Business",
-    summary: "Team、Business、T5倍、团队号、母号、邀请或自动拉。",
+    summary: "Team、Business、团队号、母号、邀请或自动拉。",
     aliases: ["team", "business", "t5", "t5倍", "母号", "自动拉", "直拉", "邀请", "团队号"],
   },
   {
