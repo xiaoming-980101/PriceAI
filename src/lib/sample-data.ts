@@ -14,6 +14,16 @@ export const seedSources: Source[] = [
     updatedAt: now,
   },
   {
+    id: "ai666-gmail-wholesale",
+    name: "T佬的gmail批发渠道",
+    baseUrl: "https://ai666.dnxb.cc",
+    entryUrl: "https://ai666.dnxb.cc/",
+    collectionMethod: "http",
+    enabled: true,
+    notes: "公开商品接口，可自动采集 Gmail 批发价格与库存。",
+    updatedAt: now,
+  },
+  {
     id: "aisou-pro",
     name: "Aisou智充",
     baseUrl: "https://aisou.pro",

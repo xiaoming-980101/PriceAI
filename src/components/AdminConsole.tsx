@@ -6,8 +6,10 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardList,
+  Copy,
   Clock,
   Database,
+  Trash2,
   FileInput,
   History,
   Inbox,
@@ -70,7 +72,7 @@ type AdminTab = "review" | "todo" | "history" | "collect" | "sources" | "manual"
 
 type RowFeedback = {
   id: string;
-  type: "success" | "error";
+  type: "success" | "error" | "info";
   text: string;
 };
 
@@ -97,6 +99,9 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
   const [rowFeedback, setRowFeedback] = useState<RowFeedback | null>(null);
   const [historySubmissions, setHistorySubmissions] = useState<ChannelSubmission[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [sourcePatches, setSourcePatches] = useState<Record<string, Partial<Source>>>({});
+  const [deletedSourceIds, setDeletedSourceIds] = useState<Set<string>>(new Set());
+  const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
 
   const reviewSubmissions = useMemo(
@@ -107,9 +112,16 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     () => submissions.filter(isCollectorTodo),
     [submissions],
   );
+  const sources = useMemo(
+    () =>
+      (data.sources || [])
+        .filter((source) => !deletedSourceIds.has(source.id))
+        .map((source) => ({ ...source, ...(sourcePatches[source.id] || {}) })),
+    [data.sources, deletedSourceIds, sourcePatches],
+  );
   const sourceById = useMemo(
-    () => new Map(data.sources.map((s) => [s.id, s])),
-    [data.sources],
+    () => new Map(sources.map((s) => [s.id, s])),
+    [sources],
   );
 
   const filteredReview = useMemo(() => {
@@ -164,19 +176,19 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     }
   }, [rowFeedback]);
 
-  const showRowFeedback = useCallback((id: string, type: "success" | "error", text: string) => {
+  const showRowFeedback = useCallback((id: string, type: RowFeedback["type"], text: string) => {
     setRowFeedback({ id, type, text });
   }, []);
 
   const summary = useMemo(
     () => [
-      { label: "渠道源", value: data.sources.length, icon: <Store key="s" size={15} /> },
+      { label: "渠道源", value: sources.length, icon: <Store key="s" size={15} /> },
       { label: "标准商品", value: data.products.length, icon: <Database key="d" size={15} /> },
       { label: "报价", value: data.rawOffers.length, icon: <FileInput key="f" size={15} /> },
       { label: "待审核", value: reviewSubmissions.length, icon: <Inbox key="i" size={15} /> },
       { label: "采集待办", value: collectorTodoSubmissions.length, icon: <TerminalSquare key="t" size={15} /> },
     ],
-    [collectorTodoSubmissions.length, data, reviewSubmissions.length],
+    [collectorTodoSubmissions.length, data.products.length, data.rawOffers.length, reviewSubmissions.length, sources.length],
   );
   const offerCountBySource = useMemo(() => {
     const map = new Map<string, number>();
@@ -186,7 +198,11 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     }
     return map;
   }, [data.rawOffers]);
-  const sourceGroups = useMemo(() => groupSources(data.sources), [data.sources]);
+  const sourceGroups = useMemo(() => groupSources(sources), [sources]);
+  const selectedSources = useMemo(
+    () => sources.filter((source) => selectedSourceIds.has(source.id)),
+    [selectedSourceIds, sources],
+  );
   const failedRunCount = useMemo(
     () => data.crawlRuns.filter((r) => r.status === "failed").length,
     [data.crawlRuns],
@@ -197,11 +213,11 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
       { id: "todo", label: "待办", count: collectorTodoSubmissions.length, icon: <ClipboardList size={15} /> },
       { id: "history", label: "历史", count: null, icon: <History size={15} /> },
       { id: "collect", label: "采集", count: failedRunCount || null, icon: <RefreshCcw size={15} /> },
-      { id: "sources", label: "渠道", count: data.sources.length, icon: <Store size={15} /> },
+      { id: "sources", label: "渠道", count: sources.length, icon: <Store size={15} /> },
       { id: "manual", label: "维护", count: null, icon: <Plus size={15} /> },
       { id: "logs", label: "日志", count: data.crawlRuns.length, icon: <Clock size={15} /> },
     ],
-    [collectorTodoSubmissions.length, data.crawlRuns.length, data.sources.length, failedRunCount, reviewSubmissions.length],
+    [collectorTodoSubmissions.length, data.crawlRuns.length, failedRunCount, reviewSubmissions.length, sources.length],
   );
 
   /* ─── Keyboard shortcuts ─── */
@@ -310,23 +326,35 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     }
   }
 
+  async function runSourceCollection(source: Source): Promise<{ ok: boolean; offers?: number; message?: string }> {
+    const response = await fetch(`/api/cron/collect-prices?source=${encodeURIComponent(source.id)}`, {
+      method: "POST",
+      headers: { "x-admin-password": password },
+    });
+    const json = await response.json().catch(() => ({ ok: false, message: response.statusText }));
+    const summary = Array.isArray(json.summary) ? json.summary[0] : null;
+
+    if (response.ok && json.ok && summary?.status === "success") {
+      return { ok: true, offers: summary.offers || 0 };
+    }
+
+    return {
+      ok: false,
+      message: summary?.message || json.message || `HTTP ${response.status}`,
+    };
+  }
+
   async function collectSource(source: Source) {
     setLoadingAction(`collect-source-${source.id}`);
-    showRowFeedback(source.id, "success", `正在重试采集「${source.name}」...`);
+    showRowFeedback(source.id, "info", `正在重采「${source.name}」...`);
 
     try {
-      const response = await fetch(`/api/cron/collect-prices?source=${encodeURIComponent(source.id)}`, {
-        method: "POST",
-        headers: { "x-admin-password": password },
-      });
-      const json = await response.json().catch(() => ({ ok: false, message: response.statusText }));
-      const summary = Array.isArray(json.summary) ? json.summary[0] : null;
-
-      if (response.ok && json.ok && summary?.status === "success") {
-        showRowFeedback(source.id, "success", `重试成功：采集到 ${summary.offers || 0} 条报价。`);
+      const result = await runSourceCollection(source);
+      if (result.ok) {
+        showRowFeedback(source.id, "success", `重采成功：采集到 ${result.offers || 0} 条报价。`);
         router.refresh();
       } else {
-        showRowFeedback(source.id, "error", summary?.message || json.message || "重试失败。");
+        showRowFeedback(source.id, "error", result.message || "重采失败。");
         router.refresh();
       }
     } catch (error) {
@@ -334,6 +362,40 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     } finally {
       setLoadingAction(null);
     }
+  }
+
+  async function batchCollectSelectedSources() {
+    const targets = selectedSources.filter(
+      (source) => source.enabled && resolvedCollectionMethod(source) === "http" && !sourceNeedsCollector(source),
+    );
+    if (!targets.length) {
+      setGlobalMessage({ type: "error", text: "没有可自动重采的已选渠道。" });
+      return;
+    }
+
+    setLoadingAction("batch-collect-sources");
+    setGlobalMessage({ type: "info", text: `正在重采 ${targets.length} 个渠道...` });
+
+    let success = 0;
+    let totalOffers = 0;
+    const failures: string[] = [];
+
+    for (const source of targets) {
+      const result = await runSourceCollection(source);
+      if (result.ok) {
+        success++;
+        totalOffers += result.offers || 0;
+      } else {
+        failures.push(`${source.name}: ${result.message || "失败"}`);
+      }
+    }
+
+    setLoadingAction(null);
+    setGlobalMessage({
+      type: failures.length ? "info" : "success",
+      text: `批量重采完成：${success}/${targets.length} 个成功，共 ${totalOffers} 条报价。${failures.length ? `失败 ${failures.length} 个。` : ""}`,
+    });
+    router.refresh();
   }
 
   async function copyBrowserCommand(source: Source) {
@@ -354,6 +416,121 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     } catch {
       showRowFeedback(source.id, "error", context);
     }
+  }
+
+  async function copySelectedBrowserCommands() {
+    if (!selectedSources.length) return;
+    const commands = selectedSources
+      .map((source) => `# ${source.name}\n${buildSourceCollectCommand(source)}`)
+      .join("\n\n");
+    try {
+      await navigator.clipboard.writeText(commands);
+      setGlobalMessage({ type: "success", text: `已复制 ${selectedSources.length} 个渠道的采集命令。` });
+    } catch {
+      setGlobalMessage({ type: "error", text: commands });
+    }
+  }
+
+  async function copySelectedCollectorContexts() {
+    if (!selectedSources.length) return;
+    const context = selectedSources
+      .map((source) => buildSourceCollectorContext(source))
+      .join("\n\n---\n\n");
+    try {
+      await navigator.clipboard.writeText(context);
+      setGlobalMessage({ type: "success", text: `已复制 ${selectedSources.length} 个渠道的采集器上下文。` });
+    } catch {
+      setGlobalMessage({ type: "error", text: context });
+    }
+  }
+
+  async function toggleSourceEnabled(source: Source, enabled = !source.enabled) {
+    setLoadingAction(`toggle-source-${source.id}`);
+    const result = await requestWithMethod("/api/admin/sources", "PATCH", password, {
+      id: source.id,
+      enabled,
+    });
+    setLoadingAction(null);
+
+    if (result.ok && result.source) {
+      setSourcePatches((prev) => ({ ...prev, [source.id]: result.source as Source }));
+      showRowFeedback(source.id, "success", enabled ? "渠道已启用。" : "渠道已停用。");
+    } else {
+      showRowFeedback(source.id, "error", result.message || "更新渠道失败。");
+    }
+  }
+
+  async function batchToggleSelectedSources(enabled: boolean) {
+    if (!selectedSources.length) return;
+    setLoadingAction(enabled ? "batch-enable-sources" : "batch-disable-sources");
+    let success = 0;
+    const updates: Record<string, Source> = {};
+
+    for (const source of selectedSources) {
+      const result = await requestWithMethod("/api/admin/sources", "PATCH", password, {
+        id: source.id,
+        enabled,
+      });
+      if (result.ok && result.source) {
+        success++;
+        updates[source.id] = result.source as Source;
+      }
+    }
+
+    setSourcePatches((prev) => ({ ...prev, ...updates }));
+    setLoadingAction(null);
+    setGlobalMessage({
+      type: success === selectedSources.length ? "success" : "info",
+      text: `${enabled ? "启用" : "停用"}完成：${success}/${selectedSources.length} 个渠道成功。`,
+    });
+    router.refresh();
+  }
+
+  async function deleteSourceRow(source: Source) {
+    const confirmed = window.confirm(`确定删除「${source.name}」这个渠道源吗？历史报价会保留。`);
+    if (!confirmed) return;
+
+    setLoadingAction(`delete-source-${source.id}`);
+    const result = await requestWithMethod("/api/admin/sources", "DELETE", password, {
+      id: source.id,
+      deleteOffers: false,
+    });
+    setLoadingAction(null);
+
+    if (result.ok) {
+      setDeletedSourceIds((prev) => new Set([...prev, source.id]));
+      setSelectedSourceIds((prev) => { const next = new Set(prev); next.delete(source.id); return next; });
+      setGlobalMessage({ type: "success", text: `已删除渠道源「${source.name}」。` });
+      router.refresh();
+    } else {
+      showRowFeedback(source.id, "error", result.message || "删除渠道失败。");
+    }
+  }
+
+  async function batchDeleteSelectedSources() {
+    if (!selectedSources.length) return;
+    const confirmed = window.confirm(`确定删除 ${selectedSources.length} 个渠道源吗？历史报价会保留。`);
+    if (!confirmed) return;
+
+    setLoadingAction("batch-delete-sources");
+    let success = 0;
+
+    for (const source of selectedSources) {
+      const result = await requestWithMethod("/api/admin/sources", "DELETE", password, {
+        id: source.id,
+        deleteOffers: false,
+      });
+      if (result.ok) success++;
+    }
+
+    setDeletedSourceIds((prev) => new Set([...prev, ...selectedSources.map((source) => source.id)]));
+    setSelectedSourceIds(new Set());
+    setLoadingAction(null);
+    setGlobalMessage({
+      type: success === selectedSources.length ? "success" : "info",
+      text: `批量删除完成：${success}/${selectedSources.length} 个渠道成功。`,
+    });
+    router.refresh();
   }
 
   async function submitSource(event: FormEvent<HTMLFormElement>) {
@@ -475,7 +652,7 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
 
   async function probeSubmission(submission: ChannelSubmission) {
     setLoadingAction(`probe-${submission.id}`);
-    showRowFeedback(submission.id, "info" as "success", "正在试采集，通常需要 10-30 秒...");
+    showRowFeedback(submission.id, "info", "正在试采集，通常需要 10-30 秒...");
     const result = await request("/api/admin/submissions/probe", password, {
       id: submission.id,
     });
@@ -579,6 +756,23 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(probeSuccessIds));
+    }
+  };
+
+  const toggleSourceSelect = (id: string) => {
+    setSelectedSourceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllSources = () => {
+    if (selectedSourceIds.size === sources.length && sources.every((source) => selectedSourceIds.has(source.id))) {
+      setSelectedSourceIds(new Set());
+    } else {
+      setSelectedSourceIds(new Set(sources.map((source) => source.id)));
     }
   };
 
@@ -978,14 +1172,83 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
             {activeTab === "sources" && (
               <div role="tabpanel" id="tabpanel-sources">
                 <Panel title="总渠道源" icon={<Store size={17} />}>
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={toggleAllSources}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4]"
+                    >
+                      <Check size={14} />
+                      {selectedSourceIds.size ? "取消全选" : "全选渠道"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={batchCollectSelectedSources}
+                      disabled={!selectedSourceIds.size || loadingAction === "batch-collect-sources"}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#2d3435] px-3 text-xs font-medium text-white transition-colors hover:bg-[#202829] disabled:opacity-50"
+                    >
+                      {loadingAction === "batch-collect-sources" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+                      批量重采
+                    </button>
+                    <button
+                      type="button"
+                      onClick={copySelectedBrowserCommands}
+                      disabled={!selectedSourceIds.size}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4] disabled:opacity-50"
+                    >
+                      <TerminalSquare size={14} />
+                      复制采集命令
+                    </button>
+                    <button
+                      type="button"
+                      onClick={copySelectedCollectorContexts}
+                      disabled={!selectedSourceIds.size}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4] disabled:opacity-50"
+                    >
+                      <Copy size={14} />
+                      复制上下文
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => batchToggleSelectedSources(false)}
+                      disabled={!selectedSourceIds.size || loadingAction === "batch-disable-sources"}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4] disabled:opacity-50"
+                    >
+                      停用
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => batchToggleSelectedSources(true)}
+                      disabled={!selectedSourceIds.size || loadingAction === "batch-enable-sources"}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4] disabled:opacity-50"
+                    >
+                      启用
+                    </button>
+                    <button
+                      type="button"
+                      onClick={batchDeleteSelectedSources}
+                      disabled={!selectedSourceIds.size || loadingAction === "batch-delete-sources"}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#9b3328]/20 bg-white px-3 text-xs font-medium text-[#9b3328] transition-colors hover:bg-[#fbe9e7] disabled:opacity-50"
+                    >
+                      <Trash2 size={14} />
+                      删除
+                    </button>
+                    {selectedSourceIds.size > 0 && (
+                      <span className="text-xs text-[#adb3b4]">已选 {selectedSourceIds.size} 个</span>
+                    )}
+                  </div>
                   <SourceTable
                     groups={sourceGroups}
                     offerCountBySource={offerCountBySource}
                     loadingAction={loadingAction}
                     feedback={rowFeedback}
+                    selectedIds={selectedSourceIds}
+                    onToggleSelect={toggleSourceSelect}
                     onRetry={collectSource}
                     onCopyBrowserCommand={copyBrowserCommand}
                     onCopyCollectorContext={copySourceCollectorContext}
+                    onToggleEnabled={toggleSourceEnabled}
+                    onDeleteSource={deleteSourceRow}
                   />
                 </Panel>
               </div>
@@ -1222,11 +1485,7 @@ function SubmissionCard({
 
       {/* Row feedback */}
       {feedback && (
-        <div className={`mx-4 mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
-          feedback.type === "success"
-            ? "bg-[#e8f3ec] text-[#2f7a4b]"
-            : "bg-[#fbe9e7] text-[#9b3328]"
-        }`}>
+        <div className={`mx-4 mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${rowFeedbackClass(feedback.type)}`}>
           {feedback.type === "success" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
           {feedback.text}
         </div>
@@ -1613,21 +1872,30 @@ function SourceTable({
   offerCountBySource,
   loadingAction,
   feedback,
+  selectedIds,
+  onToggleSelect,
   onRetry,
   onCopyBrowserCommand,
   onCopyCollectorContext,
+  onToggleEnabled,
+  onDeleteSource,
 }: {
   groups: Array<{ label: string; sources: Source[] }>;
   offerCountBySource: Map<string, number>;
   loadingAction: string | null;
   feedback: RowFeedback | null;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
   onRetry: (source: Source) => void;
   onCopyBrowserCommand: (source: Source) => void;
   onCopyCollectorContext: (source: Source) => void;
+  onToggleEnabled: (source: Source, enabled?: boolean) => void;
+  onDeleteSource: (source: Source) => void;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-[#adb3b4]/20">
-      <div className="hidden grid-cols-[1fr_70px_110px_110px_150px_180px] gap-3 border-b border-[#adb3b4]/20 bg-[#f2f4f4] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-[#5a6061] md:grid">
+      <div className="hidden grid-cols-[28px_1fr_70px_110px_110px_150px_240px] gap-3 border-b border-[#adb3b4]/20 bg-[#f2f4f4] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-[#5a6061] md:grid">
+        <span />
         <span>来源</span>
         <span>报价</span>
         <span>采集方式</span>
@@ -1646,11 +1914,17 @@ function SourceTable({
                 key={source.id}
                 source={source}
                 offerCount={offerCountBySource.get(source.id) || 0}
-                loading={loadingAction === `collect-source-${source.id}`}
+                loading={loadingAction === `collect-source-${source.id}` || loadingAction === "batch-collect-sources"}
+                toggleLoading={loadingAction === `toggle-source-${source.id}`}
+                deleteLoading={loadingAction === `delete-source-${source.id}`}
                 feedback={feedback?.id === source.id ? feedback : null}
+                selected={selectedIds.has(source.id)}
+                onToggleSelect={onToggleSelect}
                 onRetry={onRetry}
                 onCopyBrowserCommand={onCopyBrowserCommand}
                 onCopyCollectorContext={onCopyCollectorContext}
+                onToggleEnabled={onToggleEnabled}
+                onDeleteSource={onDeleteSource}
               />
             ))}
           </div>
@@ -1664,27 +1938,54 @@ function SourceTableRow({
   source,
   offerCount,
   loading,
+  toggleLoading,
+  deleteLoading,
   feedback,
+  selected,
+  onToggleSelect,
   onRetry,
   onCopyBrowserCommand,
   onCopyCollectorContext,
+  onToggleEnabled,
+  onDeleteSource,
 }: {
   source: Source;
   offerCount: number;
   loading: boolean;
+  toggleLoading: boolean;
+  deleteLoading: boolean;
   feedback: RowFeedback | null;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
   onRetry: (source: Source) => void;
   onCopyBrowserCommand: (source: Source) => void;
   onCopyCollectorContext: (source: Source) => void;
+  onToggleEnabled: (source: Source, enabled?: boolean) => void;
+  onDeleteSource: (source: Source) => void;
 }) {
+  const displayMethod = resolvedCollectionMethod(source);
   const needsBrowser = sourceNeedsBrowser(source);
   const needsCollector = sourceNeedsCollector(source);
-  const canHttpRetry = source.enabled && source.collectionMethod === "http" && !needsCollector;
+  const canHttpRetry = source.enabled && displayMethod === "http" && !needsCollector;
   const hasIssue = sourceHasIssue(source);
 
   return (
-    <div className="bg-white px-3 py-3">
-      <div className="grid gap-2 md:grid-cols-[1fr_70px_110px_110px_150px_180px] md:items-center">
+    <div className={`px-3 py-3 transition-colors ${selected ? "bg-[#e8f3ec]/30" : "bg-white"}`}>
+      <div className="grid gap-2 md:grid-cols-[28px_1fr_70px_110px_110px_150px_240px] md:items-center">
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={selected}
+          aria-label={`选择 ${source.name}`}
+          onClick={() => onToggleSelect(source.id)}
+          className={`flex h-5 w-5 items-center justify-center rounded border transition-colors ${
+            selected
+              ? "border-[#2f7a4b] bg-[#2f7a4b] text-white"
+              : "border-[#adb3b4]/40 hover:border-[#2d3435]"
+          }`}
+        >
+          {selected && <Check size={12} strokeWidth={3} />}
+        </button>
         <div className="min-w-0">
           <p className="font-medium text-[#2d3435]">{source.name}</p>
           <a
@@ -1701,7 +2002,7 @@ function SourceTableRow({
           <span className="mr-1 text-xs text-[#adb3b4] md:hidden">报价</span>
           {offerCount}
         </span>
-        <span className="text-sm text-[#5a6061]">{collectionMethodLabel(source.collectionMethod)}</span>
+        <span className="text-sm text-[#5a6061]">{collectionMethodLabel(displayMethod)}</span>
         <span className={sourceHealthClass(source)}>{sourceHealthLabel(source)}</span>
         <span className="text-xs leading-5 text-[#adb3b4]">
           {source.lastSuccessAt ? `确认 ${formatRelativeTime(source.lastSuccessAt)}` : source.lastCheckedAt ? "未确认成功" : "未采集"}
@@ -1748,12 +2049,28 @@ function SourceTableRow({
               </button>
             </>
           ) : null}
+          <button
+            type="button"
+            disabled={toggleLoading}
+            onClick={() => onToggleEnabled(source)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4] disabled:opacity-60"
+          >
+            {toggleLoading ? <Loader2 size={14} className="animate-spin" /> : null}
+            {source.enabled ? "停用" : "启用"}
+          </button>
+          <button
+            type="button"
+            disabled={deleteLoading}
+            onClick={() => onDeleteSource(source)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#9b3328]/20 bg-white px-3 text-xs font-medium text-[#9b3328] transition-colors hover:bg-[#fbe9e7] disabled:opacity-60"
+          >
+            {deleteLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            删除
+          </button>
         </div>
       </div>
       {feedback ? (
-        <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${
-          feedback.type === "success" ? "bg-[#e8f3ec] text-[#2f7a4b]" : "bg-[#fbe9e7] text-[#9b3328]"
-        }`}>
+        <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${rowFeedbackClass(feedback.type)}`}>
           {feedback.text}
         </div>
       ) : null}
@@ -1870,6 +2187,24 @@ async function request(path: string, password: string, body: unknown) {
   return response.json().catch(() => ({ ok: false, message: response.statusText }));
 }
 
+async function requestWithMethod(path: string, method: string, password: string, body: unknown) {
+  const response = await fetch(path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-password": password,
+    },
+    body: JSON.stringify(body),
+  });
+  return response.json().catch(() => ({ ok: false, message: response.statusText }));
+}
+
+function rowFeedbackClass(value: RowFeedback["type"]): string {
+  if (value === "success") return "bg-[#e8f3ec] text-[#2f7a4b]";
+  if (value === "info") return "bg-[#eef3f8] text-[#47657a]";
+  return "bg-[#fbe9e7] text-[#9b3328]";
+}
+
 function safeDomain(url: string): string | null {
   try {
     return new URL(url).host;
@@ -1927,19 +2262,57 @@ function sourceHealthClass(source: Source): string {
   return `${base} bg-[#e8f3ec] text-[#2f7a4b]`;
 }
 
+const knownAutoCollectorHosts = new Set([
+  "ai666.dnxb.cc",
+  "aifk.opensora.de",
+  "aisou.pro",
+  "bei-bei.shop",
+  "burstpro-ai.online",
+  "caowo.store",
+  "card.kxandyou.com",
+  "faka.redeemgpt.com",
+  "feifei.shop",
+  "makerich.club",
+  "pay.ldxp.cn",
+  "pay.qxvx.cn",
+  "shop.aitonse.com",
+  "shop.auto-subscribe.com",
+  "talkai.cyou",
+  "ultra.makelove.cloud",
+  "upgrade.xiaoheiwan.com",
+  "yh-mo.xyz",
+  "zzshu.com",
+]);
+
+function sourceHost(source: Source): string {
+  const host = safeDomain(source.entryUrl || source.baseUrl || "") || "";
+  return host.replace(/^www\./, "").toLowerCase();
+}
+
+function sourceHasKnownAutoCollector(source: Source): boolean {
+  return knownAutoCollectorHosts.has(sourceHost(source));
+}
+
+function resolvedCollectionMethod(source: Source): CollectionMethod {
+  if (source.collectionMethod === "aibijia_json") return "aibijia_json";
+  if (sourceHasKnownAutoCollector(source)) return "http";
+  return source.collectionMethod;
+}
+
 function sourceNeedsBrowser(source: Source): boolean {
   const text = `${source.collectionMethod} ${source.lastError || ""} ${source.notes || ""}`.toLowerCase();
   return (
-    source.collectionMethod === "browser" ||
     text.includes("浏览器") ||
     text.includes("captcha") ||
     text.includes("waf") ||
     text.includes("验证") ||
-    text.includes("风控")
+    text.includes("风控") ||
+    (!sourceHasKnownAutoCollector(source) && source.collectionMethod === "browser")
   );
 }
 
 function sourceNeedsCollector(source: Source): boolean {
+  if (sourceHasKnownAutoCollector(source)) return false;
   const text = `${source.collectionMethod} ${source.lastError || ""} ${source.notes || ""}`.toLowerCase();
   return (
     source.collectionMethod === "manual" ||
@@ -1966,6 +2339,11 @@ function buildBrowserCollectCommand(source: Source): string {
   return `npm run collect:browser -- --url \"${url}\" --name \"${name}\" --password <后台密码> --post`;
 }
 
+function buildSourceCollectCommand(source: Source): string {
+  if (sourceNeedsBrowser(source)) return buildBrowserCollectCommand(source);
+  return `npm run collect:prices -- --source ${source.id} --post`;
+}
+
 function buildSourceCollectorContext(source: Source): string {
   return [
     "请为 PriceAI 新增或修复来源采集器：",
@@ -1973,7 +2351,7 @@ function buildSourceCollectorContext(source: Source): string {
     `- 来源名称：${source.name}`,
     `- 入口链接：${source.entryUrl}`,
     `- 主域名：${source.baseUrl || "未记录"}`,
-    `- 当前采集方式：${source.collectionMethod}`,
+    `- 当前采集方式：${collectionMethodLabel(resolvedCollectionMethod(source))}`,
     `- 最近错误：${source.lastError || "未记录"}`,
     `- 现有报价数需要在后台渠道页确认`,
     "- 期望输出字段：sourceTitle, price, status, url, stockCount",
@@ -2091,6 +2469,7 @@ function offerStatusMeta(meta: Record<string, unknown>, key: string): OfferStatu
 function classifySourceGroup(source: Source): string {
   const text = `${source.id} ${source.name} ${source.baseUrl || ""} ${source.entryUrl} ${source.notes || ""}`.toLowerCase();
   if (source.id === "aibijia" || source.collectionMethod === "aibijia_json") return "数据入口";
+  if (text.includes("ai666.dnxb.cc") || text.includes("gmail批发")) return "自有配置";
   if (text.includes("ldxp") || text.includes("pay.ldxp.cn")) return "LDXP 系";
   if (
     text.includes("auto-subscribe") ||

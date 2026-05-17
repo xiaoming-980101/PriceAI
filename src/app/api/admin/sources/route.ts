@@ -1,8 +1,8 @@
-import { getAdminPasswordFromRequest, upsertSource } from "@/lib/admin";
+import { deleteSource, getAdminPasswordFromRequest, updateSourceState, upsertSource } from "@/lib/admin";
 import { requireAdminPassword } from "@/lib/env";
 import { z } from "zod";
 
-const schema = z.object({
+const createSchema = z.object({
   name: z.string().min(1),
   entryUrl: z.string().url(),
   baseUrl: z.string().url().nullable().optional(),
@@ -11,16 +11,58 @@ const schema = z.object({
   notes: z.string().nullable().optional(),
 });
 
+const patchSchema = z.object({
+  id: z.string().min(1),
+  enabled: z.boolean().optional(),
+  collectionMethod: z.enum(["aibijia_json", "browser", "http", "manual"]).optional(),
+  notes: z.string().nullable().optional(),
+});
+
+const deleteSchema = z.object({
+  id: z.string().min(1),
+  deleteOffers: z.boolean().default(false),
+});
+
 export async function POST(request: Request) {
   try {
     requireAdminPassword(getAdminPasswordFromRequest(request));
-    const payload = schema.parse(await request.json());
+    const payload = createSchema.parse(await request.json());
     const source = await upsertSource(payload);
 
     return Response.json({ ok: true, source });
   } catch (error) {
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "保存来源失败。" },
+      { status: error instanceof z.ZodError ? 400 : 500 },
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    requireAdminPassword(getAdminPasswordFromRequest(request));
+    const payload = patchSchema.parse(await request.json());
+    const source = await updateSourceState(payload);
+
+    return Response.json({ ok: true, source });
+  } catch (error) {
+    return Response.json(
+      { ok: false, message: error instanceof Error ? error.message : "更新来源失败。" },
+      { status: error instanceof z.ZodError ? 400 : 500 },
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    requireAdminPassword(getAdminPasswordFromRequest(request));
+    const payload = deleteSchema.parse(await request.json());
+    const result = await deleteSource(payload);
+
+    return Response.json({ ok: true, ...result });
+  } catch (error) {
+    return Response.json(
+      { ok: false, message: error instanceof Error ? error.message : "删除来源失败。" },
       { status: error instanceof z.ZodError ? 400 : 500 },
     );
   }

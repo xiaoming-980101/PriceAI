@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 const env = readEnvFile(".env.local");
 
 const KAMI_HOSTS = new Set([
+  "ai666.dnxb.cc",
   "aisou.pro",
   "caowo.store",
   "faka.redeemgpt.com",
@@ -282,7 +283,7 @@ async function collectKamiLike(target) {
           price,
           status,
           stockCount,
-          url: `${base}/?commodity=${encodeURIComponent(String(item.id))}`,
+          url: kamiCommodityUrl(target, item.id),
           tags: compact([
             categoryName,
             item.delivery_way === 0 ? "自动发货" : null,
@@ -597,6 +598,7 @@ async function discoverShopTokens(target) {
 
 async function loadTargets() {
   const builtinSources = [
+    { id: "ai666-gmail-wholesale", name: "T佬的gmail批发渠道", entry_url: "https://ai666.dnxb.cc/", collection_method: "http" },
     { id: "aisou-pro", name: "Aisou智充", entry_url: "https://aisou.pro/", collection_method: "http" },
     { id: "caowo-store", name: "GPT专卖-cw", entry_url: "https://caowo.store/", collection_method: "http" },
     { id: "auto-subscribe", name: "Auto Subscribe", entry_url: "https://shop.auto-subscribe.com/", collection_method: "http" },
@@ -668,6 +670,13 @@ function buildTarget(source, rawOffers) {
     kind,
     rawOffers,
   };
+}
+
+function kamiCommodityUrl(target, id) {
+  const base = target.baseUrl;
+  const host = normalizeHostname(base || target.sourceUrl);
+  if (host === "ai666.dnxb.cc") return `${base}/item/${encodeURIComponent(String(id))}`;
+  return `${base}/?commodity=${encodeURIComponent(String(id))}`;
 }
 
 function makeOffer(target, input) {
@@ -940,6 +949,7 @@ function sourceNameFromUrl(value) {
   try {
     const url = new URL(value);
     const token = shopTokenFromUrl(value);
+    if (url.hostname === "ai666.dnxb.cc") return "T佬的gmail批发渠道";
     if (token && url.hostname === "pay.ldxp.cn") return `LDXP / ${token}`;
     if (token && url.hostname === "pay.qxvx.cn") return `QXVX / ${token}`;
     return url.hostname.replace(/^www\./, "");

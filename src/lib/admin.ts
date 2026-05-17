@@ -78,6 +78,57 @@ export async function upsertSource(input: {
   return source;
 }
 
+export async function updateSourceState(input: {
+  id: string;
+  enabled?: boolean;
+  collectionMethod?: CollectionMethod;
+  notes?: string | null;
+}): Promise<Source> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase 尚未配置，无法更新来源。");
+
+  const row: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (typeof input.enabled === "boolean") row.enabled = input.enabled;
+  if (input.collectionMethod) row.collection_method = input.collectionMethod;
+  if (input.notes !== undefined) row.notes = input.notes;
+
+  const { data, error } = await supabase
+    .from("sources")
+    .update(row)
+    .eq("id", input.id)
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("来源不存在。");
+  return mapSourceRow(data);
+}
+
+export async function deleteSource(input: {
+  id: string;
+  deleteOffers?: boolean;
+}): Promise<{ deletedOfferCount: number }> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase 尚未配置，无法删除来源。");
+
+  let deletedOfferCount = 0;
+  if (input.deleteOffers) {
+    const { count, error: offerError } = await supabase
+      .from("raw_offers")
+      .delete({ count: "exact" })
+      .eq("source_id", input.id);
+    if (offerError) throw offerError;
+    deletedOfferCount = count || 0;
+  }
+
+  const { error } = await supabase.from("sources").delete().eq("id", input.id);
+  if (error) throw error;
+
+  return { deletedOfferCount };
+}
+
 export async function upsertRawOffer(input: OfferInput & { sourceId?: string | null }): Promise<RawOffer> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase 尚未配置，无法保存报价。");
@@ -504,6 +555,7 @@ async function ensurePublicHost(hostname: string): Promise<void> {
 const MAX_FETCH_BYTES = 256 * 1024;
 const FETCH_TIMEOUT_MS = 5000;
 const KAMI_HOSTS = new Set([
+  "ai666.dnxb.cc",
   "aisou.pro",
   "caowo.store",
   "faka.redeemgpt.com",
@@ -648,6 +700,7 @@ function inferCollectorKind(host: string): string {
 }
 
 function inferSubmittedSourceName(host: string, parsedTitle: string | null, shopToken: string | null): string {
+  if (host === "ai666.dnxb.cc") return "T佬的gmail批发渠道";
   if (host === "pay.ldxp.cn" && shopToken) return `LDXP / ${shopToken}`;
   if (host === "pay.qxvx.cn" && shopToken) return `QXVX / ${shopToken}`;
   if (host === "shop.auto-subscribe.com") return "Auto Subscribe";
@@ -660,6 +713,7 @@ function inferSubmittedSourceName(host: string, parsedTitle: string | null, shop
 }
 
 function inferSubmittedSourceId(host: string, sourceName: string, shopToken: string | null): string {
+  if (host === "ai666.dnxb.cc") return "ai666-gmail-wholesale";
   if (host === "pay.ldxp.cn") return `ldxp-${slugify(shopToken || sourceName) || stableId(host, sourceName)}`;
   if (host === "pay.qxvx.cn") return `qxvx-${slugify(shopToken || sourceName) || stableId(host, sourceName)}`;
   if (host === "shop.auto-subscribe.com") return "auto-subscribe";
