@@ -1,12 +1,7 @@
-import {
-  ArrowLeft,
-  Clock3,
-  Layers3,
-} from "lucide-react";
-import Link from "next/link";
+import { Clock3, Layers3 } from "lucide-react";
 import { notFound } from "next/navigation";
-import { AppLogo } from "@/components/AppLogo";
 import { BrandIcon } from "@/components/BrandIcon";
+import { ProductDetailHeader } from "@/components/ProductDetailHeader";
 import { ProductOffersPanel } from "@/components/ProductOffersPanel";
 import { getPublicProductSummary } from "@/lib/data";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
@@ -24,34 +19,19 @@ const productTypeLabels: Record<string, string> = {
   其他: "其他",
 };
 
-type DetailSearchParams = Record<string, string | string[] | undefined>;
-
 export default async function ProductDetail({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<DetailSearchParams>;
 }) {
-  const [{ id }, queryParams] = await Promise.all([params, searchParams]);
-  const returnHref = buildReturnHref(firstParam(queryParams.back));
+  const { id } = await params;
   const product = await getPublicProductSummary(id);
 
   if (!product) notFound();
 
   return (
     <main className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
-      <header className="sticky top-0 z-30 bg-[#f9f9f9]/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1300px] items-center justify-between px-5 py-4 sm:px-8">
-          <Link href={returnHref} className="inline-flex items-center gap-2 text-sm font-semibold text-[#5a6061] hover:text-[#2d3435]">
-            <ArrowLeft size={17} />
-            返回首页
-          </Link>
-          <Link href={returnHref} aria-label="PriceAI 首页" className="shrink-0">
-            <AppLogo compact />
-          </Link>
-        </div>
-      </header>
+      <ProductDetailHeader />
 
       <div className="mx-auto max-w-[1300px] px-5 py-8 sm:px-8 lg:py-12">
         <section className="rounded-lg bg-[#f2f4f4] p-6 shadow-[0_20px_60px_rgba(45,52,53,0.04)] lg:p-8">
@@ -98,26 +78,6 @@ export default async function ProductDetail({
       </div>
     </main>
   );
-}
-
-function buildReturnHref(back: string | undefined): string {
-  if (!back) return "/";
-
-  const source = new URLSearchParams(back.replace(/^\?/, ""));
-  const safe = new URLSearchParams();
-  const allowedKeys = ["q", "platform", "type", "stock", "sort", "min", "max", "view", "scope"];
-
-  allowedKeys.forEach((key) => {
-    const value = source.get(key);
-    if (value) safe.set(key, value);
-  });
-
-  const query = safe.toString();
-  return query ? `/?${query}` : "/";
-}
-
-function firstParam(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
