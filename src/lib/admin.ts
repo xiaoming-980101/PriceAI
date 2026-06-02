@@ -331,7 +331,7 @@ export async function recordSourceCollectionResult(input: {
   await clearOfferCollectionFailure(input.sourceId);
 
   if (input.status === "success" && input.fullSnapshot && input.seenOfferIds?.length) {
-    await markMissingOffersOutOfStock(input.sourceId, input.seenOfferIds, input.checkedAt);
+    await hideMissingOffersAsDelisted(input.sourceId, input.seenOfferIds, input.checkedAt);
   }
 }
 
@@ -389,7 +389,7 @@ async function clearOfferCollectionFailure(sourceId: string) {
   if (error) throw error;
 }
 
-async function markMissingOffersOutOfStock(sourceId: string, seenOfferIds: string[], checkedAt: string) {
+async function hideMissingOffersAsDelisted(sourceId: string, seenOfferIds: string[], checkedAt: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) return;
 
@@ -410,13 +410,14 @@ async function markMissingOffersOutOfStock(sourceId: string, seenOfferIds: strin
     const { error: updateError } = await supabase
       .from("raw_offers")
       .update({
+        hidden: true,
         status: "out_of_stock",
         source_status: "out_of_stock",
         effective_status: "unavailable",
         freshness_status: "fresh",
         verified_at: checkedAt,
         last_failed_at: null,
-        failure_reason: null,
+        failure_reason: "完整采集未再返回该商品，疑似已下架；如源站后续重新返回会自动恢复展示。",
         updated_at: checkedAt,
       })
       .in("id", ids);

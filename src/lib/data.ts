@@ -1,6 +1,5 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
 import { listSubmissions } from "./admin";
 import { buildProductGroups, canonicalCatalog, resolveOfferProduct } from "./catalog";
 import { isSupabaseConfigured } from "./env";
@@ -18,6 +17,7 @@ import type {
 } from "./types";
 
 const PUBLIC_OFFER_LIMIT = 1200;
+const SUPABASE_PAGE_SIZE = 1000;
 
 type OfferListFilters = {
   platform?: string | null;
@@ -42,23 +42,18 @@ async function readDashboardData(): Promise<DashboardData> {
   }
 
   try {
-    const [sourcesResult, offersResult, productsResult] = await Promise.all([
+    const [sourcesResult, offerRows, productsResult] = await Promise.all([
       supabase.from("sources").select("*").order("name"),
-      supabase
-        .from("raw_offers")
-        .select("*")
-        .eq("hidden", false)
-        .order("captured_at", { ascending: false })
-        .limit(2000),
+      listVisibleRawOfferRows(),
       supabase.from("canonical_products").select("*").eq("is_active", true),
     ]);
 
-    if (sourcesResult.error || offersResult.error || productsResult.error) {
-      throw sourcesResult.error || offersResult.error || productsResult.error;
+    if (sourcesResult.error || productsResult.error) {
+      throw sourcesResult.error || productsResult.error;
     }
 
     const sources = (sourcesResult.data || []).map(mapSource);
-    const offers = (offersResult.data || []).map(mapRawOffer);
+    const offers = offerRows.map(mapRawOffer);
     const products = (productsResult.data || []).map(mapCanonicalProduct);
 
     return buildDashboard(offers, sources, products.length ? products : canonicalCatalog, true);
@@ -68,12 +63,32 @@ async function readDashboardData(): Promise<DashboardData> {
   }
 }
 
-const getCachedDashboardData = unstable_cache(readDashboardData, ["priceai-dashboard-data"], {
-  revalidate: 300,
-});
+async function listVisibleRawOfferRows(): Promise<Record<string, unknown>[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+
+  const rows: Record<string, unknown>[] = [];
+
+  for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("raw_offers")
+      .select("*")
+      .eq("hidden", false)
+      .order("captured_at", { ascending: false })
+      .range(from, to);
+
+    if (error) throw error;
+
+    rows.push(...(data || []));
+    if (!data || data.length < SUPABASE_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
 
 export async function getExplorerData(): Promise<ExplorerData> {
-  const dashboard = await getCachedDashboardData();
+  const dashboard = await readDashboardData();
 
   return {
     generatedAt: dashboard.generatedAt,
@@ -126,7 +141,7 @@ export async function getProductGroup(id: string) {
 }
 
 export async function getPublicProductGroup(id: string) {
-  const dashboard = await getCachedDashboardData();
+  const dashboard = await readDashboardData();
   return dashboard.products.find((product) => product.id === id || product.slug === id) || null;
 }
 
@@ -196,7 +211,7 @@ export async function listPublicProductOffers(id: string) {
 }
 
 export async function listPublicOffers(filters: OfferListFilters = {}) {
-  const dashboard = await getCachedDashboardData();
+  const dashboard = await readDashboardData();
   const products = dashboard.products.map(toExplorerProductSummary);
   const normalizedQuery = (filters.query || "").trim().toLowerCase();
   const limit = Math.min(Math.max(filters.limit || PUBLIC_OFFER_LIMIT, 1), PUBLIC_OFFER_LIMIT);
