@@ -21,6 +21,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { AppLogo } from "@/components/AppLogo";
 import { BrandIcon } from "@/components/BrandIcon";
+import { FeedbackLink } from "@/components/FeedbackLink";
 import {
   collectOfferFlags,
   isAvailable,
@@ -238,11 +239,14 @@ export function PriceExplorer({
           <Link href="/" aria-label="PriceAI 首页" className="shrink-0">
             <AppLogo />
           </Link>
-          <div className="hidden items-center gap-3 lg:flex">
-            <Metric label="标准商品" value={data.products.length.toString()} icon={<PackageCheck size={15} />} />
-            <Metric label="报价" value={data.offerTotal.toString()} icon={<Database size={15} />} />
-            <Metric label="有货" value={totalAvailable.toString()} icon={<CheckCircle2 size={15} />} />
-            <Metric label="缺货" value={totalOutOfStock.toString()} icon={<Store size={15} />} />
+          <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-3 lg:flex">
+              <Metric label="标准商品" value={data.products.length.toString()} icon={<PackageCheck size={15} />} />
+              <Metric label="报价" value={data.offerTotal.toString()} icon={<Database size={15} />} />
+              <Metric label="有货" value={totalAvailable.toString()} icon={<CheckCircle2 size={15} />} />
+              <Metric label="缺货" value={totalOutOfStock.toString()} icon={<Store size={15} />} />
+            </div>
+            <FeedbackLink compact />
           </div>
         </div>
       </header>

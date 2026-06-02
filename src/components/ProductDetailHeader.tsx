@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppLogo } from "@/components/AppLogo";
+import { FeedbackLink } from "@/components/FeedbackLink";
 
 export function ProductDetailHeader() {
   const [returnHref, setReturnHref] = useState("/");
@@ -21,9 +22,12 @@ export function ProductDetailHeader() {
           <ArrowLeft size={17} />
           返回首页
         </Link>
-        <Link href={returnHref} aria-label="PriceAI 首页" className="shrink-0">
-          <AppLogo compact />
-        </Link>
+        <div className="flex items-center gap-3">
+          <FeedbackLink compact />
+          <Link href={returnHref} aria-label="PriceAI 首页" className="shrink-0">
+            <AppLogo compact />
+          </Link>
+        </div>
       </div>
     </header>
   );
