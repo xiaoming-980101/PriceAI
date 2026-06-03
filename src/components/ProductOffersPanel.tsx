@@ -302,7 +302,7 @@ function OfferListItem({ offer }: { offer: RawOffer }) {
 }
 
 function TableHead({ children }: { children: React.ReactNode }) {
-  return <th className="sticky top-16 z-10 bg-[#f2f4f4] px-5 py-3 font-semibold shadow-[0_1px_0_#dfe4e5]">{children}</th>;
+  return <th className="px-5 py-3 font-semibold">{children}</th>;
 }
 
 function OfferStatusBadge({ available }: { available: boolean }) {

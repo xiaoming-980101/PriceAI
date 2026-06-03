@@ -414,38 +414,40 @@ export function PriceExplorer({
 
   return (
     <div className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
-      <header className="sticky top-0 z-40 bg-[#f9f9f9]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-5 px-5 py-4 sm:px-8">
-          <Link href="/" aria-label="PriceAI 首页" className="shrink-0">
-            <AppLogo />
-          </Link>
-          <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-3 lg:flex">
-              <Metric label="标准商品" value={metricValue(explorerData.products.length, dataLoading)} icon={<PackageCheck size={15} />} />
-              <Metric label="报价" value={metricValue(explorerData.offerTotal, dataLoading)} icon={<Database size={15} />} />
-              <Metric label="有货" value={metricValue(totalAvailable, dataLoading)} icon={<CheckCircle2 size={15} />} />
-              <Metric label="缺货" value={metricValue(totalOutOfStock, dataLoading)} icon={<Store size={15} />} />
+      <div className="sticky top-0 z-40 bg-[#f9f9f9]/95 shadow-[0_10px_24px_rgba(45,52,53,0.035)] backdrop-blur-xl">
+        <header>
+          <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-5 px-5 py-4 sm:px-8">
+            <Link href="/" aria-label="PriceAI 首页" className="shrink-0">
+              <AppLogo />
+            </Link>
+            <div className="flex items-center gap-3">
+              <div className="hidden items-center gap-3 lg:flex">
+                <Metric label="标准商品" value={metricValue(explorerData.products.length, dataLoading)} icon={<PackageCheck size={15} />} />
+                <Metric label="报价" value={metricValue(explorerData.offerTotal, dataLoading)} icon={<Database size={15} />} />
+                <Metric label="有货" value={metricValue(totalAvailable, dataLoading)} icon={<CheckCircle2 size={15} />} />
+                <Metric label="缺货" value={metricValue(totalOutOfStock, dataLoading)} icon={<Store size={15} />} />
+              </div>
+              <FeedbackLink compact />
             </div>
-            <FeedbackLink compact />
           </div>
-        </div>
-      </header>
+        </header>
 
-      <section className="sticky top-[68px] z-30 hidden border-y border-[#dfe4e5] bg-[#f9f9f9]/95 px-5 py-2 shadow-[0_10px_24px_rgba(45,52,53,0.035)] backdrop-blur-xl sm:px-8 md:block">
-        <div className="mx-auto max-w-[1500px]">
-          <div className="flex gap-2 overflow-x-auto py-1">
-            {["全部", ...platformOptions].map((item) => (
-              <TabPill
-                key={item}
-                active={platform === item}
-                icon={platformIcon(item)}
-                label={item}
-                onClick={() => changePlatform(item)}
-              />
-            ))}
+        <section className="hidden border-y border-[#dfe4e5] px-5 py-2 sm:px-8 md:block">
+          <div className="mx-auto max-w-[1500px]">
+            <div className="flex gap-2 overflow-x-auto py-1">
+              {["全部", ...platformOptions].map((item) => (
+                <TabPill
+                  key={item}
+                  active={platform === item}
+                  icon={platformIcon(item)}
+                  label={item}
+                  onClick={() => changePlatform(item)}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <main className="mx-auto max-w-[1500px] px-5 py-10 sm:px-8 lg:py-12">
         {!dataLoading && !explorerData.configured ? (
