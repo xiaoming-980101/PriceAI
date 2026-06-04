@@ -88,6 +88,15 @@ type RowFeedback = {
   text: string;
 };
 
+type SourceGroup = {
+  key: string;
+  label: string;
+  sources: Source[];
+  normalCount: number;
+  abnormalCount: number;
+  disabledCount: number;
+};
+
 const statusOptions: Array<[OfferStatus, string]> = [
   ["in_stock", "有货"],
   ["out_of_stock", "缺货"],
@@ -134,6 +143,7 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
   const [sourcePatches, setSourcePatches] = useState<Record<string, Partial<Source>>>({});
   const [deletedSourceIds, setDeletedSourceIds] = useState<Set<string>>(new Set());
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(new Set());
+  const [collapsedSourceGroups, setCollapsedSourceGroups] = useState<Set<string>>(new Set());
   const [offerSearchQuery, setOfferSearchQuery] = useState("");
   const [visibleOfferLimit, setVisibleOfferLimit] = useState(OFFER_EMERGENCY_PAGE_SIZE);
   const [hiddenOfferLimit, setHiddenOfferLimit] = useState(OFFER_EMERGENCY_PAGE_SIZE);
@@ -279,6 +289,10 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
   const selectedSources = useMemo(
     () => sources.filter((source) => selectedSourceIds.has(source.id)),
     [selectedSourceIds, sources],
+  );
+  const selectedTodoSubmissions = useMemo(
+    () => filteredTodo.filter((submission) => selectedIds.has(submission.id)),
+    [filteredTodo, selectedIds],
   );
   const failedRunCount = useMemo(
     () => data.crawlRuns.filter((r) => r.status === "failed").length,
@@ -1111,6 +1125,34 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     });
   }
 
+  async function batchRemoveTodo() {
+    const items = selectedTodoSubmissions;
+    if (!items.length) return;
+    if (!window.confirm(`确认从采集器待办移除选中的 ${items.length} 条吗？`)) return;
+
+    setLoadingAction("batch-remove-todo");
+    let successCount = 0;
+
+    for (const item of items) {
+      const result = await request("/api/admin/submissions/reject", password, {
+        id: item.id,
+        reviewerNote: "批量从采集器待办移除。",
+      });
+      if (result.ok || isAlreadyHandled(result.message)) {
+        successCount++;
+        setSubmissions((prev) => prev.filter((submission) => submission.id !== item.id));
+        setProbeResults((prev) => omitKey(prev, item.id));
+      }
+    }
+
+    setLoadingAction(null);
+    setSelectedIds(new Set());
+    setGlobalMessage({
+      type: successCount === items.length ? "success" : "info",
+      text: `待办移除完成：${successCount}/${items.length} 条成功。`,
+    });
+  }
+
   /* ─── Render ─── */
 
   const toggleSelect = (id: string) => {
@@ -1139,6 +1181,15 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     }
   };
 
+  const selectAllTodo = () => {
+    const todoIds = filteredTodo.map((submission) => submission.id);
+    if (todoIds.length > 0 && todoIds.every((id) => selectedIds.has(id))) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(todoIds));
+    }
+  };
+
   const copyAllTodoContexts = () => {
     if (!filteredTodo.length) return;
     const text = filteredTodo.map(buildCollectorContext).join("\n\n---\n\n");
@@ -1161,6 +1212,15 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     } else {
       setSelectedSourceIds(new Set(sources.map((source) => source.id)));
     }
+  };
+
+  const toggleSourceGroup = (label: string) => {
+    setCollapsedSourceGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
   };
 
   return (
@@ -1421,6 +1481,27 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
                   {filteredTodo.length > 0 && (
                     <button
                       type="button"
+                      onClick={selectAllTodo}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#2d3435] transition-colors hover:bg-[#f2f4f4]"
+                    >
+                      <Check size={14} />
+                      {filteredTodo.every((submission) => selectedIds.has(submission.id)) ? "取消当前" : `全选当前 (${filteredTodo.length})`}
+                    </button>
+                  )}
+                  {selectedTodoSubmissions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={batchRemoveTodo}
+                      disabled={loadingAction === "batch-remove-todo"}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#9b3328]/25 bg-white px-3 text-xs font-medium text-[#9b3328] transition-colors hover:bg-[#fbe9e7] disabled:opacity-60"
+                    >
+                      {loadingAction === "batch-remove-todo" ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      移除选中 ({selectedTodoSubmissions.length})
+                    </button>
+                  )}
+                  {filteredTodo.length > 0 && (
+                    <button
+                      type="button"
                       onClick={copyAllTodoContexts}
                       className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 text-xs font-medium text-[#7a541b] transition-colors hover:bg-[#fff7e8]"
                     >
@@ -1440,6 +1521,20 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
                       return (
                         <div key={submission.id} className="rounded-lg border border-amber-200/60 bg-white p-4 transition-colors hover:border-amber-300">
                           <div className="flex items-start justify-between gap-3">
+                            <button
+                              type="button"
+                              role="checkbox"
+                              aria-checked={selectedIds.has(submission.id)}
+                              aria-label={`选择 ${submission.name || submission.parsedTitle || domain || submission.url}`}
+                              onClick={() => toggleSelect(submission.id)}
+                              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                selectedIds.has(submission.id)
+                                  ? "border-[#2f7a4b] bg-[#2f7a4b] text-white"
+                                  : "border-[#adb3b4]/40 hover:border-[#2d3435]"
+                              }`}
+                            >
+                              {selectedIds.has(submission.id) && <Check size={12} strokeWidth={3} />}
+                            </button>
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-baseline gap-2">
                                 <a
@@ -1759,11 +1854,13 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
                   </div>
                   <SourceTable
                     groups={sourceGroups}
+                    collapsedGroups={collapsedSourceGroups}
                     offerCountBySource={offerCountBySource}
                     sourceStatsById={sourceStatsById}
                     loadingAction={loadingAction}
                     feedback={rowFeedback}
                     selectedIds={selectedSourceIds}
+                    onToggleGroup={toggleSourceGroup}
                     onToggleSelect={toggleSourceSelect}
                     onRetry={collectSource}
                     onCopyBrowserCommand={copyBrowserCommand}
@@ -2821,11 +2918,13 @@ function UrlLine({ label, href, tone = "muted" }: { label: string; href: string;
 
 function SourceTable({
   groups,
+  collapsedGroups,
   offerCountBySource,
   sourceStatsById,
   loadingAction,
   feedback,
   selectedIds,
+  onToggleGroup,
   onToggleSelect,
   onRetry,
   onCopyBrowserCommand,
@@ -2834,12 +2933,14 @@ function SourceTable({
   onToggleOffersVisibility,
   onDeleteSource,
 }: {
-  groups: Array<{ label: string; sources: Source[] }>;
+  groups: SourceGroup[];
+  collapsedGroups: Set<string>;
   offerCountBySource: Map<string, number>;
   sourceStatsById: Map<string, SourceOfferStats>;
   loadingAction: string | null;
   feedback: RowFeedback | null;
   selectedIds: Set<string>;
+  onToggleGroup: (label: string) => void;
   onToggleSelect: (id: string) => void;
   onRetry: (source: Source) => void;
   onCopyBrowserCommand: (source: Source) => void;
@@ -2860,35 +2961,62 @@ function SourceTable({
         <span>操作</span>
       </div>
       <div className="divide-y divide-[#adb3b4]/15">
-        {groups.map((group) => (
-          <div key={group.label}>
-            <div className="bg-[#f2f4f4] px-3 py-2 text-xs font-semibold text-[#5a6061]">
-              {group.label} · {group.sources.length} 个
+        {groups.map((group) => {
+          const collapsed = collapsedGroups.has(group.key);
+          return (
+            <div key={group.key}>
+              <button
+                type="button"
+                onClick={() => onToggleGroup(group.key)}
+                aria-expanded={!collapsed}
+                className="flex w-full items-center justify-between gap-3 bg-[#f2f4f4] px-3 py-2 text-left text-xs font-semibold text-[#5a6061] transition-colors hover:bg-[#ebeeef]"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <ChevronDown
+                    size={14}
+                    className={`shrink-0 transition-transform ${collapsed ? "-rotate-90" : ""}`}
+                  />
+                  <span className="truncate">{group.label}</span>
+                  <span className="shrink-0 text-[#adb3b4]">· {group.sources.length} 个</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span className="rounded-full bg-[#e8f3ec] px-2 py-0.5 text-[#2f7a4b]">正常 {group.normalCount}</span>
+                  {group.abnormalCount > 0 && (
+                    <span className="rounded-full bg-[#fbe9e7] px-2 py-0.5 text-[#9b3328]">异常 {group.abnormalCount}</span>
+                  )}
+                  {group.disabledCount > 0 && (
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[#5a6061]">停用 {group.disabledCount}</span>
+                  )}
+                </span>
+              </button>
+              {!collapsed && group.sources.map((source) => (
+                <SourceTableRow
+                  key={source.id}
+                  source={source}
+                  offerCount={offerCountBySource.get(source.id) || 0}
+                  stats={sourceStatsById.get(source.id)}
+                  loading={loadingAction === `collect-source-${source.id}` || loadingAction === "batch-collect-sources"}
+                  toggleLoading={loadingAction === `toggle-source-${source.id}`}
+                  hideLoading={loadingAction === `hide-source-offers-${source.id}`}
+                  restoreLoading={loadingAction === `restore-source-offers-${source.id}`}
+                  deleteLoading={loadingAction === `delete-source-${source.id}`}
+                  feedback={feedback?.id === source.id ? feedback : null}
+                  selected={selectedIds.has(source.id)}
+                  onToggleSelect={onToggleSelect}
+                  onRetry={onRetry}
+                  onCopyBrowserCommand={onCopyBrowserCommand}
+                  onCopyCollectorContext={onCopyCollectorContext}
+                  onToggleEnabled={onToggleEnabled}
+                  onToggleOffersVisibility={onToggleOffersVisibility}
+                  onDeleteSource={onDeleteSource}
+                />
+              ))}
             </div>
-            {group.sources.map((source) => (
-              <SourceTableRow
-                key={source.id}
-                source={source}
-                offerCount={offerCountBySource.get(source.id) || 0}
-                stats={sourceStatsById.get(source.id)}
-                loading={loadingAction === `collect-source-${source.id}` || loadingAction === "batch-collect-sources"}
-                toggleLoading={loadingAction === `toggle-source-${source.id}`}
-                hideLoading={loadingAction === `hide-source-offers-${source.id}`}
-                restoreLoading={loadingAction === `restore-source-offers-${source.id}`}
-                deleteLoading={loadingAction === `delete-source-${source.id}`}
-                feedback={feedback?.id === source.id ? feedback : null}
-                selected={selectedIds.has(source.id)}
-                onToggleSelect={onToggleSelect}
-                onRetry={onRetry}
-                onCopyBrowserCommand={onCopyBrowserCommand}
-                onCopyCollectorContext={onCopyCollectorContext}
-                onToggleEnabled={onToggleEnabled}
-                onToggleOffersVisibility={onToggleOffersVisibility}
-                onDeleteSource={onDeleteSource}
-              />
-            ))}
-          </div>
-        ))}
+          );
+        })}
+        {!groups.length && (
+          <div className="px-3 py-10 text-center text-sm text-[#adb3b4]">暂无渠道源。</div>
+        )}
       </div>
     </div>
   );
@@ -3424,19 +3552,13 @@ function crawlStatusClass(value: CrawlRun["status"]): string {
 
 function sourceHealthLabel(source: Source): string {
   if (!source.enabled) return "停用";
-  if (source.healthStatus === "healthy") return "正常";
-  if (source.healthStatus === "partial") return "部分成功";
-  if (source.healthStatus === "retrying") return `重试 ${source.consecutiveFailures || 1}`;
-  if (source.healthStatus === "failing") return `异常 ${source.consecutiveFailures || 0}`;
-  return "启用";
+  return sourceHasIssue(source) ? "异常" : "正常";
 }
 
 function sourceHealthClass(source: Source): string {
   const base = "w-fit rounded-full px-2 py-0.5 text-xs font-medium";
   if (!source.enabled) return `${base} bg-[#f2f4f4] text-[#5a6061]`;
-  if (source.healthStatus === "healthy") return `${base} bg-[#e8f3ec] text-[#2f7a4b]`;
-  if (source.healthStatus === "partial" || source.healthStatus === "retrying") return `${base} bg-[#fff7e8] text-[#7a541b]`;
-  if (source.healthStatus === "failing") return `${base} bg-[#fbe9e7] text-[#9b3328]`;
+  if (sourceHasIssue(source)) return `${base} bg-[#fbe9e7] text-[#9b3328]`;
   return `${base} bg-[#e8f3ec] text-[#2f7a4b]`;
 }
 
@@ -3680,35 +3802,64 @@ function offerStatusMeta(meta: Record<string, unknown>, key: string): OfferStatu
   return value === "out_of_stock" ? "out_of_stock" : "in_stock";
 }
 
-function classifySourceGroup(source: Source): string {
-  const text = `${source.id} ${source.name} ${source.baseUrl || ""} ${source.entryUrl} ${source.notes || ""}`.toLowerCase();
-  if (source.collectionMethod === "public_json") return "数据入口";
-  if (text.includes("ai666.dnxb.cc") || text.includes("gmail批发")) return "自有配置";
-  if (text.includes("ldxp") || text.includes("pay.ldxp.cn")) return "LDXP 系";
-  if (
-    text.includes("auto-subscribe") ||
-    text.includes("burstpro") ||
-    text.includes("aitonse") ||
-    text.includes("makelove") ||
-    text.includes("kxandyou")
-  ) return "Auto Subscribe 系";
-  if (source.collectionMethod === "http") return "HTTP 优先";
-  return "自有配置";
+function sourceCollectorGroup(source: Source): { key: string; label: string } {
+  if (source.collectionMethod === "public_json") {
+    return { key: "public_json", label: "公开 JSON" };
+  }
+
+  const collector = resolvedCollectorKind(source);
+  if (collector) {
+    return { key: `collector:${collector}`, label: collectorKindLabel(collector) };
+  }
+
+  if (source.collectionMethod === "browser") {
+    return { key: "collector:browser", label: collectorKindLabel("browser") };
+  }
+
+  return { key: "collector:auto", label: collectorKindLabel("auto") };
 }
 
-function groupSources(sources: Source[]) {
-  const order = ["数据入口", "LDXP 系", "Auto Subscribe 系", "HTTP 优先", "独立渠道", "自有配置"];
-  const groups = new Map<string, Source[]>();
+function sourceSortKey(source: Source): string {
+  return `${source.name} ${sourceHost(source)} ${source.id}`;
+}
+
+function compareSourcesForOps(a: Source, b: Source): number {
+  const issueDelta = Number(sourceHasIssue(b)) - Number(sourceHasIssue(a));
+  if (issueDelta) return issueDelta;
+
+  const enabledDelta = Number(b.enabled) - Number(a.enabled);
+  if (enabledDelta) return enabledDelta;
+
+  return sourceSortKey(a).localeCompare(sourceSortKey(b), "zh-CN");
+}
+
+function groupSources(sources: Source[]): SourceGroup[] {
+  const groups = new Map<string, SourceGroup>();
   for (const source of sources) {
-    const label = classifySourceGroup(source);
-    const items = groups.get(label) || [];
-    items.push(source);
-    groups.set(label, items);
-  }
-  return order
-    .map((label) => ({
+    const { key, label } = sourceCollectorGroup(source);
+    const group = groups.get(key) || {
+      key,
       label,
-      sources: (groups.get(label) || []).sort((a, b) => a.name.localeCompare(b.name, "zh-CN")),
+      sources: [],
+      normalCount: 0,
+      abnormalCount: 0,
+      disabledCount: 0,
+    };
+    group.sources.push(source);
+    if (!source.enabled) group.disabledCount += 1;
+    else if (sourceHasIssue(source)) group.abnormalCount += 1;
+    else group.normalCount += 1;
+    groups.set(key, group);
+  }
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      sources: [...group.sources].sort(compareSourcesForOps),
     }))
-    .filter((group) => group.sources.length);
+    .sort((a, b) => {
+      const issueDelta = b.abnormalCount - a.abnormalCount;
+      if (issueDelta) return issueDelta;
+      return a.label.localeCompare(b.label, "zh-CN");
+    });
 }
