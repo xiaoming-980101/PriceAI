@@ -15,19 +15,19 @@ import { createPortal } from "react-dom";
 
 const githubUrl = "https://github.com/physics-dimension/PriceAI";
 
-type FeedbackType = "feature" | "data" | "ux" | "channel" | "bug" | "other";
+type FeedbackType = "feature" | "data" | "bug" | "ux" | "other";
 
 const feedbackTypes: Array<{ value: FeedbackType; label: string }> = [
   { value: "feature", label: "功能建议" },
   { value: "data", label: "数据问题" },
-  { value: "ux", label: "页面体验" },
-  { value: "channel", label: "新渠道建议" },
   { value: "bug", label: "Bug / 报错" },
+  { value: "ux", label: "页面体验" },
   { value: "other", label: "其他" },
 ];
 
 export function FeedbackLink({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
+  const labelClassName = compact ? "inline" : undefined;
 
   return (
     <>
@@ -35,10 +35,10 @@ export function FeedbackLink({ compact = false }: { compact?: boolean }) {
         type="button"
         onClick={() => setOpen(true)}
         className="inline-flex shrink-0 items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-semibold text-[#2d3435] shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:-translate-y-0.5 hover:bg-[#f5f7f7] hover:text-[#202829]"
-        aria-label="提交站内反馈"
+        aria-label="提交意见反馈"
       >
         <MessageCircle size={16} />
-        <span className={compact ? "hidden sm:inline" : undefined}>反馈</span>
+        <span className={labelClassName}>意见反馈</span>
       </button>
       {open ? <FeedbackDialog onClose={() => setOpen(false)} /> : null}
     </>
@@ -137,7 +137,7 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#adb3b4]/20 px-5 py-4">
             <div className="min-w-0">
               <h2 id={titleId} className="text-base font-bold text-[#202829]">
-                提交反馈
+                意见反馈
               </h2>
               <p className="mt-1 text-sm leading-6 text-[#5a6061]">
                 功能建议、页面体验、数据问题都可以发到这里。

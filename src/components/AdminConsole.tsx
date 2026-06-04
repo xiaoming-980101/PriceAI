@@ -3480,7 +3480,7 @@ function siteFeedbackTypeLabel(value: SiteFeedback["type"]): string {
     feature: "功能建议",
     data: "数据问题",
     ux: "页面体验",
-    channel: "新渠道建议",
+    channel: "渠道建议（旧）",
     bug: "Bug / 报错",
     other: "其他",
   };
