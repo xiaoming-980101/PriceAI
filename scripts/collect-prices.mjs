@@ -58,6 +58,7 @@ const GENERIC_HTML_HOSTS = new Set([
 
 const PRICE_VALUE_PATTERN = String.raw`(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)`;
 const CURRENCY_PRICE_RE = new RegExp(String.raw`[¥￥]\s*${PRICE_VALUE_PATTERN}`);
+const DEFAULT_COOLDOWN_MINUTES = 25;
 
 export async function runPriceCollection(options = {}) {
   const targets = await loadTargets();
@@ -72,6 +73,23 @@ export async function runPriceCollection(options = {}) {
 
   for (const target of selectedTargets) {
     const startedAt = Date.now();
+    const cooldown = cooldownSkipReason(target, options);
+    if (cooldown) {
+      logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
+      logger?.log(`Skipped: ${cooldown.message}`);
+      summary.push({
+        sourceId: target.sourceId,
+        source: target.sourceName,
+        kind: target.kind,
+        status: "skipped",
+        offers: 0,
+        attempts: 0,
+        ms: Date.now() - startedAt,
+        message: cooldown.message,
+      });
+      continue;
+    }
+
     logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
 
     try {
@@ -132,7 +150,8 @@ export async function runPriceCollection(options = {}) {
     summary,
     targetCount: selectedTargets.length,
     successCount: summary.filter((item) => item.status === "success").length,
-    failureCount: summary.filter((item) => item.status !== "success").length,
+    failureCount: summary.filter((item) => item.status !== "success" && item.status !== "skipped").length,
+    skippedCount: summary.filter((item) => item.status === "skipped").length,
     offerCount: summary.reduce((sum, item) => sum + item.offers, 0),
     finishedAt: new Date().toISOString(),
   };
@@ -847,7 +866,7 @@ async function loadTargets() {
   const supabase = getSupabaseClient();
   if (supabase) {
     const [sourcesResult, offersResult] = await Promise.all([
-      supabase.from("sources").select("id,name,base_url,entry_url,collection_method,collector_kind,enabled,notes").eq("enabled", true),
+      supabase.from("sources").select("id,name,base_url,entry_url,collection_method,collector_kind,enabled,notes,last_success_at").eq("enabled", true),
       supabase.from("raw_offers").select("source_id,source_name,source_store_name,source_title,url").limit(5000),
     ]);
 
@@ -899,6 +918,7 @@ function buildTarget(source, rawOffers) {
     baseUrl,
     kind: runnableKind,
     configuredKind: configuredKind || null,
+    lastSuccessAt: source.last_success_at || null,
     rawOffers,
   };
 }
@@ -1113,6 +1133,45 @@ function selectTargets(targets, options) {
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(query)),
   );
+}
+
+function cooldownSkipReason(target, options = {}) {
+  if (!shouldUseCollectionCooldown(options)) return null;
+
+  const lastSuccessMs = target.lastSuccessAt ? new Date(target.lastSuccessAt).getTime() : NaN;
+  if (!Number.isFinite(lastSuccessMs)) return null;
+
+  const cooldownMinutes = cooldownMinutesFor(options);
+  const cooldownMs = cooldownMinutes * 60 * 1000;
+  const ageMs = Date.now() - lastSuccessMs;
+  if (ageMs < 0 || ageMs >= cooldownMs) return null;
+
+  const remainingMinutes = Math.max(1, Math.ceil((cooldownMs - ageMs) / 60_000));
+  return {
+    message: `最近 ${cooldownMinutes} 分钟内已成功采集，跳过本轮；约 ${remainingMinutes} 分钟后可再次自动采集。`,
+  };
+}
+
+function shouldUseCollectionCooldown(options = {}) {
+  if (truthyFlag(options.force) || truthyFlag(options["no-cooldown"])) return false;
+  if (options.source || options.id || options.name) return false;
+  return truthyFlag(options.all) || !options.source;
+}
+
+function cooldownMinutesFor(options = {}) {
+  const raw =
+    options.cooldownMinutes ||
+    options["cooldown-minutes"] ||
+    process.env.PRICEAI_COLLECTOR_COOLDOWN_MINUTES ||
+    env.PRICEAI_COLLECTOR_COOLDOWN_MINUTES ||
+    DEFAULT_COOLDOWN_MINUTES;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return DEFAULT_COOLDOWN_MINUTES;
+  return Math.max(1, Math.min(Math.trunc(value), 24 * 60));
+}
+
+function truthyFlag(value) {
+  return value === true || value === "true" || value === "1" || value === "yes";
 }
 
 function inferCollectorKind(host, text = "") {
