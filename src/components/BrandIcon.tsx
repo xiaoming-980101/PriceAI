@@ -11,14 +11,27 @@ const iconByPlatform: Record<string, string> = {
   邮箱: "/brand-icons/gmail.svg",
 };
 
+const iconByProductId: Record<string, string> = {
+  "gmail-account": "/brand-icons/gmail.svg",
+  "google-phone-verification": "/brand-icons/googlegemini.svg",
+  "paypal-phone-verification": "/brand-icons/paypal.svg",
+  "openai-phone-verification": "/brand-icons/chatgpt.svg",
+  "cursor-account": "/brand-icons/cursor.svg",
+  "windsurf-account": "/brand-icons/windsurf.svg",
+  "perplexity-account": "/brand-icons/perplexity.svg",
+  "suno-account": "/brand-icons/suno.svg",
+};
+
 export function BrandIcon({
   platform,
+  productId,
   className = "h-[18px] w-[18px]",
 }: {
   platform: string;
+  productId?: string;
   className?: string;
 }) {
-  const src = iconByPlatform[platform];
+  const src = productId ? iconByProductId[productId] || iconByPlatform[platform] : iconByPlatform[platform];
 
   if (src) {
     return (

@@ -3,12 +3,12 @@
 import {
   CheckCircle2,
   ExternalLink,
-  GitFork,
   Loader2,
   MessageCircle,
   Send,
   X,
 } from "lucide-react";
+import Image from "next/image";
 import type { FormEvent } from "react";
 import { useEffect, useId, useState } from "react";
 
@@ -50,11 +50,18 @@ export function GitHubLink({ compact = false }: { compact?: boolean }) {
       href={githubUrl}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex shrink-0 items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-semibold text-[#2d3435] shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:-translate-y-0.5 hover:bg-[#f5f7f7] hover:text-[#202829]"
+      className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-sm font-semibold text-[#2d3435] shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:-translate-y-0.5 hover:bg-[#f5f7f7] hover:text-[#202829]"
       aria-label="打开 PriceAI GitHub 仓库"
     >
-      <GitFork size={16} />
-      <span className={compact ? "hidden sm:inline" : undefined}>开源</span>
+      <Image
+        src="/brand-icons/github.svg"
+        alt=""
+        aria-hidden="true"
+        width={20}
+        height={20}
+        className="h-5 w-5 shrink-0 object-contain"
+      />
+      <span className={compact ? "hidden sm:inline" : undefined}>GitHub 开源</span>
       <ExternalLink size={14} className="hidden sm:block" />
     </a>
   );

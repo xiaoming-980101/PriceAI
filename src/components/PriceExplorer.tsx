@@ -13,16 +13,13 @@ import {
   ExternalLink,
   Filter,
   GraduationCap,
-  KeyRound,
   LayoutGrid,
   Layers3,
   Mail,
-  Music2,
   PackageCheck,
   PhoneCall,
   Plus,
   Search,
-  Sparkles,
   Store,
   Table2,
   Terminal,
@@ -1758,9 +1755,22 @@ function platformIcon(platform: string): ReactNode {
 function productIcon(product: Pick<CanonicalProduct, "id" | "platform" | "productType" | "displayName">): ReactNode {
   const className = "h-[18px] w-[18px]";
   const text = `${product.id} ${product.displayName}`.toLowerCase();
+  const brandedProductIds = new Set([
+    "gmail-account",
+    "google-phone-verification",
+    "paypal-phone-verification",
+    "openai-phone-verification",
+    "cursor-account",
+    "windsurf-account",
+    "perplexity-account",
+    "suno-account",
+  ]);
+
+  if (brandedProductIds.has(product.id)) {
+    return <BrandIcon platform={product.platform} productId={product.id} className={className} />;
+  }
 
   if (product.platform === "接码") {
-    if (text.includes("paypal")) return <KeyRound className={`${className} text-[#5a6061]`} />;
     if (text.includes("google") || text.includes("gemini")) return <PhoneCall className={`${className} text-[#5a6061]`} />;
     if (text.includes("openai") || text.includes("chatgpt")) return <Bot className={`${className} text-[#5a6061]`} />;
     return <PhoneCall className={`${className} text-[#5a6061]`} />;
@@ -1775,11 +1785,7 @@ function productIcon(product: Pick<CanonicalProduct, "id" | "platform" | "produc
   if (product.productType === "虚拟卡") return <CreditCard className={`${className} text-[#5a6061]`} />;
 
   if (product.productType === "工具账号") {
-    if (text.includes("cursor")) return <Code2 className={`${className} text-[#5a6061]`} />;
     if (text.includes("kiro")) return <Terminal className={`${className} text-[#5a6061]`} />;
-    if (text.includes("windsurf")) return <Sparkles className={`${className} text-[#5a6061]`} />;
-    if (text.includes("perplexity")) return <Bot className={`${className} text-[#5a6061]`} />;
-    if (text.includes("suno")) return <Music2 className={`${className} text-[#5a6061]`} />;
     return <Code2 className={`${className} text-[#5a6061]`} />;
   }
 
