@@ -57,7 +57,8 @@ export async function POST(request: Request) {
       ...offer,
       sourceId: offer.sourceId || payload.sourceId || source.id,
     }));
-    const successCount = await upsertRawOffers(offers, { collectionMethod: payload.mode });
+    const upsertResult = await upsertRawOffers(offers, { collectionMethod: payload.mode });
+    const successCount = upsertResult.receivedCount;
     const finishedAt = new Date().toISOString();
     const seenOfferIds = seenOfferIdsFromDetails(payload.details) || offers.map(rawOfferInputId);
     const fullSnapshot = fullSnapshotFromDetails(payload.details, payload.status);
@@ -81,14 +82,28 @@ export async function POST(request: Request) {
       finished_at: finishedAt,
       success_count: successCount,
       failure_count: Math.max(0, payload.offers.length - successCount),
-      message: payload.message || `采集到 ${successCount} 条报价。`,
-      details: payload.details || {},
+      message: payload.message || `采集到 ${successCount} 条报价，写入 ${upsertResult.writtenCount} 条。`,
+      details: {
+        ...(payload.details || {}),
+        writeStats: {
+          receivedCount: upsertResult.receivedCount,
+          writtenCount: upsertResult.writtenCount,
+          unchangedCount: upsertResult.unchangedCount,
+        },
+      },
     });
 
     if (error) throw error;
-    clearPublicDataCache();
+    if (payload.status !== "success" || upsertResult.writtenCount > 0 || fullSnapshot) {
+      clearPublicDataCache();
+    }
 
-    return Response.json({ ok: true, successCount });
+    return Response.json({
+      ok: true,
+      successCount,
+      writtenCount: upsertResult.writtenCount,
+      unchangedCount: upsertResult.unchangedCount,
+    });
   } catch (error) {
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "记录采集结果失败。" },

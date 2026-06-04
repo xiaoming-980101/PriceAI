@@ -27,6 +27,12 @@ export const ADMIN_SOURCE_HIDE_REASON_PREFIX = "管理员手动下架渠道";
 export const ADMIN_OFFER_HIDE_REASON_PREFIX = "管理员手动下架报价";
 export const ADMIN_MANUAL_HIDE_REASON_PREFIX = "管理员手动下架";
 
+export type RawOfferUpsertResult = {
+  receivedCount: number;
+  writtenCount: number;
+  unchangedCount: number;
+};
+
 type SubmissionProbeResult = {
   sourceId?: string;
   sourceName?: string;
@@ -304,7 +310,7 @@ export async function upsertRawOffer(input: OfferInput & { sourceId?: string | n
 export async function upsertRawOffers(
   offers: OfferInput[],
   options: { collectionMethod?: CollectionMethod } = {},
-): Promise<number> {
+): Promise<RawOfferUpsertResult> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase 尚未配置，无法保存报价。");
 
@@ -361,7 +367,7 @@ export async function upsertRawOffers(
     );
   }
 
-  if (!rows.length) return 0;
+  if (!rows.length) return { receivedCount: 0, writtenCount: 0, unchangedCount: 0 };
 
   const manualHiddenById = await getManualHiddenOffersById(rows.map((row) => String(row.id)));
   for (const row of rows) {
@@ -372,10 +378,75 @@ export async function upsertRawOffers(
     row.last_failed_at = existing.lastFailedAt;
   }
 
-  const { error } = await supabase.from("raw_offers").upsert(rows);
+  const existingById = await getExistingOfferRowsById(rows.map((row) => String(row.id)));
+  const changedRows = rows.filter((row) => !isRawOfferRowUnchanged(row, existingById.get(String(row.id))));
+
+  if (!changedRows.length) {
+    return {
+      receivedCount: rows.length,
+      writtenCount: 0,
+      unchangedCount: rows.length,
+    };
+  }
+
+  const { error } = await supabase.from("raw_offers").upsert(changedRows);
   if (error) throw error;
 
-  return rows.length;
+  return {
+    receivedCount: rows.length,
+    writtenCount: changedRows.length,
+    unchangedCount: rows.length - changedRows.length,
+  };
+}
+
+async function getExistingOfferRowsById(ids: string[]): Promise<Map<string, Record<string, unknown>>> {
+  const supabase = getSupabaseServerClient();
+  const output = new Map<string, Record<string, unknown>>();
+  if (!supabase || !ids.length) return output;
+
+  for (const idChunk of chunks(Array.from(new Set(ids)), 100)) {
+    const { data, error } = await supabase
+      .from("raw_offers")
+      .select("id,source_id,source_name,source_store_name,source_title,price,currency,status,url,tags,stock_count,hidden,canonical_product_id,category_slug,last_failed_at,failure_reason")
+      .in("id", idChunk);
+
+    if (error) throw error;
+    for (const row of data || []) output.set(String(row.id), row as Record<string, unknown>);
+  }
+
+  return output;
+}
+
+function isRawOfferRowUnchanged(next: Record<string, unknown>, existing?: Record<string, unknown>): boolean {
+  if (!existing) return false;
+
+  const keys = [
+    "source_id",
+    "source_name",
+    "source_store_name",
+    "source_title",
+    "price",
+    "currency",
+    "status",
+    "url",
+    "tags",
+    "stock_count",
+    "hidden",
+    "canonical_product_id",
+    "category_slug",
+    "last_failed_at",
+    "failure_reason",
+  ];
+
+  return keys.every((key) => comparableValue(next[key]) === comparableValue(existing[key]));
+}
+
+function comparableValue(value: unknown): string {
+  if (Array.isArray(value)) return JSON.stringify(value.map(String).sort());
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
 }
 
 async function getManualHiddenOffer(id: string): Promise<{ lastFailedAt?: string | null; failureReason?: string | null } | null> {
@@ -559,6 +630,7 @@ async function clearOfferCollectionFailure(sourceId: string) {
       failure_reason: null,
     })
     .eq("source_id", sourceId)
+    .or("last_failed_at.not.is.null,failure_reason.not.is.null")
     .or(`failure_reason.is.null,failure_reason.not.ilike.${ADMIN_MANUAL_HIDE_REASON_PREFIX}%`);
 
   if (error) throw error;
@@ -1822,9 +1894,10 @@ export async function approveSubmission(
     throw new Error("请先试采集成功；或手动指定一个已支持采集器后再通过。");
   }
 
-  const importedOfferCount = importedOffers.length
+  const importedOfferResult = importedOffers.length
     ? await upsertRawOffers(importedOffers, { collectionMethod: source.collectionMethod === "manual" ? "http" : source.collectionMethod })
-    : 0;
+    : { receivedCount: 0, writtenCount: 0, unchangedCount: 0 };
+  const importedOfferCount = importedOfferResult.receivedCount;
 
   const reviewedAt = new Date().toISOString();
   if (importedOfferCount) {
@@ -1838,12 +1911,17 @@ export async function approveSubmission(
       finished_at: reviewedAt,
       success_count: importedOfferCount,
       failure_count: 0,
-      message: `审核通过时从试采集结果入库 ${importedOfferCount} 条报价。`,
+      message: `审核通过时从试采集结果读取 ${importedOfferCount} 条报价，写入 ${importedOfferResult.writtenCount} 条。`,
       details: {
         review_action: "submission_approve",
         submission_id: submission.id,
         matched_existing_source: Boolean(existingSource),
         collector: selectedCollectorKind || null,
+        writeStats: {
+          receivedCount: importedOfferResult.receivedCount,
+          writtenCount: importedOfferResult.writtenCount,
+          unchangedCount: importedOfferResult.unchangedCount,
+        },
       },
     });
     if (logError) throw logError;

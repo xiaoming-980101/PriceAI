@@ -59,11 +59,13 @@ const GENERIC_HTML_HOSTS = new Set([
 const PRICE_VALUE_PATTERN = String.raw`(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)`;
 const CURRENCY_PRICE_RE = new RegExp(String.raw`[¥￥]\s*${PRICE_VALUE_PATTERN}`);
 const DEFAULT_COOLDOWN_MINUTES = 25;
+const DEFAULT_LOCK_SECONDS = 10 * 60;
 
 export async function runPriceCollection(options = {}) {
   const targets = await loadTargets();
   const selectedTargets = selectTargets(targets, options);
   const logger = options.silent ? null : console;
+  const lockOwner = collectionLockOwner(options);
 
   if (!selectedTargets.length) {
     throw new Error("No matching supported sources. Use --list to inspect available collectors.");
@@ -90,6 +92,23 @@ export async function runPriceCollection(options = {}) {
       continue;
     }
 
+    const lock = await acquireCollectionLock(target, lockOwner, options);
+    if (!lock.acquired) {
+      logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
+      logger?.log(`Skipped: ${lock.message}`);
+      summary.push({
+        sourceId: target.sourceId,
+        source: target.sourceName,
+        kind: target.kind,
+        status: "skipped",
+        offers: 0,
+        attempts: 0,
+        ms: Date.now() - startedAt,
+        message: lock.message,
+      });
+      continue;
+    }
+
     logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
 
     try {
@@ -107,7 +126,12 @@ export async function runPriceCollection(options = {}) {
           attempts: collection.attempts,
           maxAttempts: collection.maxAttempts,
         });
-        logger?.log(`Posted ${posted.successCount} offers.`);
+        logger?.log(
+          `Posted ${posted.successCount} offers` +
+            (posted.writtenCount !== undefined
+              ? `, wrote ${posted.writtenCount}, unchanged ${posted.unchangedCount || 0}.`
+              : "."),
+        );
       }
 
       summary.push({
@@ -143,6 +167,8 @@ export async function runPriceCollection(options = {}) {
         ms: Date.now() - startedAt,
         message,
       });
+    } finally {
+      await releaseCollectionLock(target, lockOwner, logger);
     }
   }
 
@@ -997,6 +1023,8 @@ async function postCrawlLogBatched(target, offers, status, message, options = {}
   }
 
   let successCount = 0;
+  let writtenCount = 0;
+  let unchangedCount = 0;
   const batches = chunks(offers, postBatchSizeFor(options));
   const seenOfferIds = offerIdsForSnapshot(offers);
 
@@ -1019,9 +1047,11 @@ async function postCrawlLogBatched(target, offers, status, message, options = {}
       },
     );
     successCount += Number(posted.successCount || 0);
+    writtenCount += Number(posted.writtenCount || 0);
+    unchangedCount += Number(posted.unchangedCount || 0);
   }
 
-  return { ok: true, successCount };
+  return { ok: true, successCount, writtenCount, unchangedCount };
 }
 
 function postBatchSizeFor(options = {}) {
@@ -1172,6 +1202,55 @@ function cooldownMinutesFor(options = {}) {
 
 function truthyFlag(value) {
   return value === true || value === "true" || value === "1" || value === "yes";
+}
+
+function collectionLockOwner(options = {}) {
+  const node = collectorNodeDetails(options);
+  return `${node.id || "unknown-node"}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function acquireCollectionLock(target, owner, options = {}) {
+  if (truthyFlag(options["no-lock"])) return { acquired: true };
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return { acquired: true };
+
+  const { data, error } = await supabase.rpc("acquire_source_collection_lock", {
+    p_source_id: target.sourceId,
+    p_owner: owner,
+    p_lock_seconds: lockSecondsFor(options),
+  });
+
+  if (error) throw error;
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (row?.acquired) return { acquired: true };
+
+  const lockOwner = row?.lock_owner ? String(row.lock_owner) : "其他节点";
+  const lockUntil = row?.lock_until ? String(row.lock_until) : null;
+  return {
+    acquired: false,
+    message: lockUntil
+      ? `已有采集节点 ${lockOwner} 正在处理，锁定到 ${lockUntil}。`
+      : `已有采集节点 ${lockOwner} 正在处理。`,
+  };
+}
+
+async function releaseCollectionLock(target, owner, logger) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+
+  const { error } = await supabase.rpc("release_source_collection_lock", {
+    p_source_id: target.sourceId,
+    p_owner: owner,
+  });
+  if (error) logger?.error(`Failed to release lock: ${errorMessage(error)}`);
+}
+
+function lockSecondsFor(options = {}) {
+  const value = Number(options.lockSeconds || options["lock-seconds"] || DEFAULT_LOCK_SECONDS);
+  if (!Number.isFinite(value)) return DEFAULT_LOCK_SECONDS;
+  return Math.max(60, Math.min(Math.trunc(value), 3600));
 }
 
 function inferCollectorKind(host, text = "") {
