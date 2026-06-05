@@ -15,6 +15,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { ApiModelIcon } from "@/components/ApiModelIcon";
+import { CategoryTabBar, type CategoryTabItem } from "@/components/CategoryTabBar";
 import {
   apiProviderTypeLabels,
   formatApiPrice,
@@ -60,6 +61,21 @@ export function ApiModelsExplorer({ dataset }: { dataset: ApiModelDataset }) {
   const [submitMessage, setSubmitMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const familyOptions = useMemo(() => getApiModelFamilyOptions(dataset), [dataset]);
+  const familyTabs = useMemo<CategoryTabItem[]>(
+    () => [
+      {
+        id: "all",
+        label: "全部",
+        icon: <Layers3 size={17} className="text-[#5a6061]" />,
+      },
+      ...familyOptions.map((option) => ({
+        id: option.id,
+        label: option.label,
+        icon: <ApiModelIcon family={option.label} className="h-[18px] w-[18px]" />,
+      })),
+    ],
+    [familyOptions],
+  );
   const allModelCount = useMemo(() => getApiModelSummaries("all", dataset).length, [dataset]);
   const normalizedQuery = query.trim().toLowerCase();
   const modelSummaries = useMemo(
@@ -151,22 +167,10 @@ export function ApiModelsExplorer({ dataset }: { dataset: ApiModelDataset }) {
   }
 
   return (
-    <main className="mx-auto max-w-[1500px] px-5 py-6 sm:px-8 md:py-8 lg:py-10">
-      <section className="mb-5 border-y border-[#dfe4e5] py-2 md:-mt-2">
-        <div className="flex gap-2 overflow-x-auto py-1">
-          <FilterPill active={family === "all"} icon={<Layers3 size={17} />} label="全部" onClick={() => setFamily("all")} />
-          {familyOptions.map((option) => (
-            <FilterPill
-              key={option.id}
-              active={family === option.id}
-              icon={<ApiModelIcon family={option.label} className="h-5 w-5" />}
-              label={option.label}
-              onClick={() => setFamily(option.id)}
-            />
-          ))}
-        </div>
-      </section>
+    <>
+      <CategoryTabBar items={familyTabs} value={family} onChange={(value) => setFamily(value)} />
 
+      <main className="mx-auto max-w-[1500px] px-5 py-6 sm:px-8 md:py-10 lg:py-12">
       <div className="mb-6 space-y-4 md:mb-8 md:space-y-5">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
           <div className="min-w-0">
@@ -193,40 +197,74 @@ export function ApiModelsExplorer({ dataset }: { dataset: ApiModelDataset }) {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 rounded-lg bg-[#f2f4f4] p-3 shadow-[0_18px_50px_rgba(45,52,53,0.04)] ring-1 ring-[#adb3b4]/10 md:flex-row md:flex-wrap md:items-center">
-          <div className="inline-flex h-11 shrink-0 items-center rounded-full bg-[#e4e9ea] p-1">
-            <ViewToggleButton
-              active={scopeMode === "models"}
-              icon={<PackageCheck size={16} />}
-              label="标准模型"
-              onClick={() => setScopeMode("models")}
-            />
-            <ViewToggleButton
-              active={scopeMode === "offers"}
-              icon={<Database size={16} />}
-              label="全部报价"
-              onClick={() => setScopeMode("offers")}
-            />
-            <ViewToggleButton
-              active={scopeMode === "providers"}
-              icon={<Layers3 size={16} />}
-              label="来源渠道"
-              onClick={() => setScopeMode("providers")}
-            />
+        <div className="space-y-3 rounded-lg bg-[#f2f4f4] p-3 shadow-[0_18px_50px_rgba(45,52,53,0.04)] ring-1 ring-[#adb3b4]/10">
+          <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
+            <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-4 shadow-[0_16px_45px_rgba(45,52,53,0.05)] ring-1 ring-[#adb3b4]/15 md:min-w-[300px] md:max-w-[430px]">
+              <Search size={16} className="shrink-0 text-[#5a6061]" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchPlaceholder(scopeMode)}
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#9aa2a3]"
+              />
+            </label>
+
+            <div className="inline-flex h-11 shrink-0 items-center rounded-full bg-[#e4e9ea] p-1">
+              <ViewToggleButton
+                active={scopeMode === "models"}
+                icon={<PackageCheck size={16} />}
+                label="标准模型"
+                onClick={() => setScopeMode("models")}
+              />
+              <ViewToggleButton
+                active={scopeMode === "offers"}
+                icon={<Database size={16} />}
+                label="全部报价"
+                onClick={() => setScopeMode("offers")}
+              />
+              <ViewToggleButton
+                active={scopeMode === "providers"}
+                icon={<Layers3 size={16} />}
+                label="来源渠道"
+                onClick={() => setScopeMode("providers")}
+              />
+            </div>
+
+            <div className="inline-flex h-11 shrink-0 items-center rounded-full bg-[#e4e9ea] p-1">
+              {(["CNY", "USD"] as ApiCurrency[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setCurrency(item)}
+                  className={`h-9 rounded-full px-3.5 text-sm font-semibold transition ${
+                    currency === item ? "bg-white text-[#202829] shadow-[0_8px_24px_rgba(45,52,53,0.08)]" : "text-[#5a6061] hover:text-[#202829]"
+                  }`}
+                >
+                  {item === "CNY" ? "人民币" : "美元"}
+                </button>
+              ))}
+            </div>
+
+            <div className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-[#e4e9ea] px-4 text-sm font-semibold text-[#2d3435]">
+              <ArrowUpDown size={17} />
+              {scopeMode === "models" ? "模型家族优先" : scopeMode === "offers" ? "模型与价格优先" : "官方/套餐优先"}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSubmitOpen(true);
+                setSubmitMessage(null);
+              }}
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#2d3435] px-5 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526]"
+            >
+              <Send size={16} />
+              提交 API 渠道
+            </button>
           </div>
 
-          <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-4 shadow-[0_16px_45px_rgba(45,52,53,0.05)] ring-1 ring-[#adb3b4]/15 md:min-w-[300px] md:max-w-[430px]">
-            <Search size={16} className="shrink-0 text-[#5a6061]" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={searchPlaceholder(scopeMode)}
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#9aa2a3]"
-            />
-          </label>
-
           {scopeMode !== "models" ? (
-            <div className="flex min-w-0 gap-2 overflow-x-auto md:max-w-[420px]">
+            <div className="flex gap-2 overflow-x-auto border-t border-[#dfe4e5] pt-3">
               {typeFilters.map((item) => (
                 <button
                   key={item}
@@ -244,37 +282,6 @@ export function ApiModelsExplorer({ dataset }: { dataset: ApiModelDataset }) {
               ))}
             </div>
           ) : null}
-
-          <div className="inline-flex h-11 shrink-0 items-center rounded-full bg-[#e4e9ea] p-1">
-            {(["CNY", "USD"] as ApiCurrency[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setCurrency(item)}
-                className={`h-9 rounded-full px-3.5 text-sm font-semibold transition ${
-                  currency === item ? "bg-white text-[#202829] shadow-[0_8px_24px_rgba(45,52,53,0.08)]" : "text-[#5a6061] hover:text-[#202829]"
-                }`}
-              >
-                {item === "CNY" ? "人民币" : "美元"}
-              </button>
-            ))}
-          </div>
-          <div className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-[#e4e9ea] px-4 text-sm font-semibold text-[#2d3435]">
-            <ArrowUpDown size={17} />
-            {scopeMode === "models" ? "模型家族优先" : scopeMode === "offers" ? "模型与价格优先" : "官方/套餐优先"}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSubmitOpen(true);
-              setSubmitMessage(null);
-            }}
-            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#2d3435] px-5 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526]"
-          >
-            <Send size={16} />
-            提交 API 渠道
-          </button>
         </div>
       </div>
 
@@ -418,6 +425,7 @@ export function ApiModelsExplorer({ dataset }: { dataset: ApiModelDataset }) {
         免责声明：PriceAI 只整理公开文档和公开页面中的 API 渠道信息，不售卖 API，不承诺可用性，不替任何渠道提供 SLA。免费和低价渠道可能存在限流、排队、模型下线、地区限制或条款变化。
       </p>
     </main>
+    </>
   );
 }
 
@@ -657,33 +665,6 @@ function ApiProviderSummaryTable({ summaries, currency }: { summaries: ApiProvid
         </table>
       </div>
     </section>
-  );
-}
-
-function FilterPill({
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 text-sm transition ${
-        active
-          ? "bg-[#dde4e5] font-semibold text-[#2d3435]"
-          : "bg-transparent text-[#5a6061] hover:bg-[#ebeeef] hover:text-[#2d3435]"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }
 

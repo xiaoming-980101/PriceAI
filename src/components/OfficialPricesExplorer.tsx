@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Database,
   ExternalLink,
-  Info,
   Layers3,
   PackageCheck,
   Search,
@@ -13,6 +12,7 @@ import {
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { BrandIcon } from "@/components/BrandIcon";
+import { CategoryTabBar, type CategoryTabItem } from "@/components/CategoryTabBar";
 import {
   buildOfficialPriceOfferRows,
   buildOfficialPricePlanSummaries,
@@ -51,10 +51,28 @@ export function OfficialPricesExplorer({ dataset }: { dataset: OfficialPricesDat
   const title = buildTitle(dataset, platform, scopeMode);
   const totalPlanCount = useMemo(() => buildOfficialPricePlanSummaries(dataset, "all").length, [dataset]);
   const totalOfferCount = useMemo(() => buildOfficialPriceOfferRows(dataset, "all").length, [dataset]);
+  const platformTabs = useMemo<CategoryTabItem[]>(
+    () => [
+      {
+        id: "all",
+        label: "全部",
+        icon: <Layers3 size={17} className="text-[#5a6061]" />,
+      },
+      ...dataset.apps.map((app) => ({
+        id: app.slug,
+        label: app.displayName,
+        icon: <BrandIcon platform={app.displayName} className="h-[18px] w-[18px]" />,
+      })),
+    ],
+    [dataset.apps],
+  );
 
   return (
-    <main className="mx-auto max-w-[1500px] px-5 py-6 sm:px-8 md:py-10 lg:py-12">
-      <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
+    <>
+      <CategoryTabBar items={platformTabs} value={platform} onChange={(value) => setPlatform(value as PlatformFilter)} />
+
+      <main className="mx-auto max-w-[1500px] px-5 py-6 sm:px-8 md:py-10 lg:py-12">
+      <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
         <div className="min-w-0">
           <h1 className="font-serif text-2xl font-semibold tracking-normal text-[#202829] md:text-4xl">
             {title}
@@ -73,41 +91,24 @@ export function OfficialPricesExplorer({ dataset }: { dataset: OfficialPricesDat
           </div>
         </div>
 
-        <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-2">
-            <Metric label="标准套餐" value={`${totalPlanCount}`} />
-            <Metric label="地区报价" value={`${totalOfferCount}`} />
-            <Metric label="平台" value={`${dataset.apps.length}`} />
-          </div>
-          <div className="rounded-lg bg-[#fff7e8] p-4 text-sm leading-6 text-[#7a541b] ring-1 ring-[#efdfbd]">
-            <div className="flex items-start gap-2">
-              <Info size={17} className="mt-0.5 shrink-0" />
-              <p>本页只展示公开页面中已确认的可用价格。未匹配、解析失败或待复核的地区不会补价格，后续可在后台查看采集日志。</p>
-            </div>
-          </div>
+        <div className="grid grid-cols-3 gap-2 xl:w-[420px]">
+          <Metric label="标准套餐" value={`${totalPlanCount}`} />
+          <Metric label="地区报价" value={`${totalOfferCount}`} />
+          <Metric label="平台" value={`${dataset.apps.length}`} />
         </div>
       </div>
 
       <section className="mb-6 space-y-4">
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          <PlatformPill
-            active={platform === "all"}
-            icon={<Layers3 size={17} />}
-            label="全部"
-            onClick={() => setPlatform("all")}
-          />
-          {dataset.apps.map((app) => (
-            <PlatformPill
-              key={app.slug}
-              active={platform === app.slug}
-              icon={<BrandIcon platform={app.displayName} className="h-[17px] w-[17px]" />}
-              label={app.displayName}
-              onClick={() => setPlatform(app.slug)}
+        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
+          <label className="flex h-11 min-w-0 items-center gap-2 rounded-full bg-white px-4 shadow-[0_16px_45px_rgba(45,52,53,0.05)] ring-1 ring-[#adb3b4]/15 md:w-[380px]">
+            <Search size={16} className="shrink-0 text-[#5a6061]" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={scopeMode === "products" ? "搜索套餐、平台、最低地区" : "搜索套餐、地区或币种"}
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#9aa2a3]"
             />
-          ))}
-        </div>
-
-        <div className="flex gap-2 overflow-x-auto pb-1">
+          </label>
           <div className="inline-flex h-11 shrink-0 items-center rounded-full bg-[#e4e9ea] p-1">
             <ViewToggleButton
               active={scopeMode === "products"}
@@ -122,18 +123,6 @@ export function OfficialPricesExplorer({ dataset }: { dataset: OfficialPricesDat
               onClick={() => setScopeMode("offers")}
             />
           </div>
-        </div>
-
-        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
-          <label className="flex h-11 min-w-0 items-center gap-2 rounded-full bg-white px-4 shadow-[0_16px_45px_rgba(45,52,53,0.05)] ring-1 ring-[#adb3b4]/15 md:w-[380px]">
-            <Search size={16} className="shrink-0 text-[#5a6061]" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={scopeMode === "products" ? "搜索套餐、平台、最低地区" : "搜索套餐、地区或币种"}
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#9aa2a3]"
-            />
-          </label>
           <div className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-[#e4e9ea] px-4 text-sm font-semibold text-[#2d3435]">
             <ArrowUpDown size={17} />
             {scopeMode === "products" ? "最低地区价优先" : "折算人民币从低到高"}
@@ -157,6 +146,7 @@ export function OfficialPricesExplorer({ dataset }: { dataset: OfficialPricesDat
         免责声明：PriceAI 仅整理公开页面可见价格，不参与交易，不保证任何地区一定可开通。人民币估算价不包含税费、支付渠道汇率、银行手续费、礼品卡溢价或地区政策差异。
       </p>
     </main>
+    </>
   );
 }
 
@@ -290,33 +280,6 @@ function OfficialOfferTable({ rows }: { rows: OfficialPriceOfferRow[] }) {
         </table>
       </div>
     </section>
-  );
-}
-
-function PlatformPill({
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 text-sm transition ${
-        active
-          ? "bg-[#dde4e5] font-semibold text-[#2d3435]"
-          : "bg-transparent text-[#5a6061] hover:bg-[#ebeeef] hover:text-[#2d3435]"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }
 

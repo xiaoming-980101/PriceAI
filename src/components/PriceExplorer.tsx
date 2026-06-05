@@ -28,6 +28,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandIcon } from "@/components/BrandIcon";
+import { CategoryTabBar, CategoryTabStrip, type CategoryTabItem } from "@/components/CategoryTabBar";
 import { OfferActions, OfferFeedbackDialog } from "@/components/ProductOffersPanel";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
@@ -156,6 +157,14 @@ export function PriceExplorer({
   const offerLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const prefetchedDetailHrefsRef = useRef<Set<string>>(new Set());
   const isDesktopViewport = useMediaQuery("(min-width: 768px)");
+  const platformTabs = useMemo<CategoryTabItem[]>(
+    () => ["全部", ...platformOptions].map((item) => ({
+      id: item,
+      label: item,
+      icon: platformIcon(item),
+    })),
+    [],
+  );
 
   useEffect(() => {
     if (!restoreStateFromUrl || typeof window === "undefined") return;
@@ -510,21 +519,12 @@ export function PriceExplorer({
       <div className="sticky top-0 z-40 bg-[#f9f9f9]/95 shadow-[0_10px_24px_rgba(45,52,53,0.035)] backdrop-blur-xl">
         <SiteHeader />
 
-        <section className="hidden border-y border-[#dfe4e5] px-5 py-2 sm:px-8 md:block">
-          <div className="mx-auto max-w-[1500px]">
-            <div className="flex gap-2 overflow-x-auto py-1">
-              {["全部", ...platformOptions].map((item) => (
-                <TabPill
-                  key={item}
-                  active={platform === item}
-                  icon={platformIcon(item)}
-                  label={item}
-                  onClick={() => changePlatform(item)}
-                />
-              ))}
-            </div>
-          </div>
-        </section>
+        <CategoryTabBar
+          className="hidden md:block"
+          items={platformTabs}
+          value={platform}
+          onChange={changePlatform}
+        />
       </div>
 
       <main className="mx-auto max-w-[1500px] px-5 py-6 sm:px-8 md:py-10 lg:py-12">
@@ -579,17 +579,12 @@ export function PriceExplorer({
               />
             </label>
             <div className="-mx-5 overflow-x-auto px-5">
-              <div className="flex w-max gap-2 pb-1">
-                {["全部", ...platformOptions].map((item) => (
-                  <TabPill
-                    key={item}
-                    active={platform === item}
-                    icon={platformIcon(item)}
-                    label={item}
-                    onClick={() => changePlatform(item)}
-                  />
-                ))}
-              </div>
+              <CategoryTabStrip
+                className="w-max pb-1"
+                items={platformTabs}
+                value={platform}
+                onChange={changePlatform}
+              />
             </div>
             <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
               <div className="inline-flex h-11 min-w-0 items-center rounded-full bg-[#e4e9ea] p-1">
@@ -1390,33 +1385,6 @@ function ViewToggleButton({
         active
           ? "bg-white text-[#202829] shadow-[0_8px_24px_rgba(45,52,53,0.08)]"
           : "text-[#5a6061] hover:text-[#202829]"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function TabPill({
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 text-sm transition ${
-        active
-          ? "bg-[#dde4e5] font-semibold text-[#2d3435]"
-          : "bg-transparent text-[#5a6061] hover:bg-[#ebeeef] hover:text-[#2d3435]"
       }`}
     >
       {icon}
