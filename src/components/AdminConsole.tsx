@@ -66,6 +66,9 @@ type OfferMaintenanceListState = {
   query: string;
 };
 type OfficialAdminData = AdminSummary["officialPrices"];
+type OfficialAdminApp = OfficialAdminData["apps"][number];
+type OfficialAdminPlan = OfficialAdminData["plans"][number];
+type OfficialAdminRegion = OfficialAdminData["regions"][number];
 type OfficialAdminPrice = OfficialAdminData["currentPrices"][number];
 type OfficialAdminRun = OfficialAdminData["collectRuns"][number];
 type ApiModelAdminData = AdminSummary["apiModels"];
@@ -174,6 +177,10 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
   const [siteFeedback, setSiteFeedback] = useState<SiteFeedback[]>(data.pendingSiteFeedback || []);
   const [probeResults, setProbeResults] = useState<Record<string, ProbeResult>>({});
   const [officialProbeResult, setOfficialProbeResult] = useState<OfficialProbeResult | null>(null);
+  const [officialAppPatches, setOfficialAppPatches] = useState<Record<string, Partial<OfficialAdminApp>>>({});
+  const [officialPlanPatches, setOfficialPlanPatches] = useState<Record<string, Partial<OfficialAdminPlan>>>({});
+  const [officialRegionPatches, setOfficialRegionPatches] = useState<Record<string, Partial<OfficialAdminRegion>>>({});
+  const [officialPricePatches, setOfficialPricePatches] = useState<Record<string, Partial<OfficialAdminPrice>>>({});
   const [apiProviderPatches, setApiProviderPatches] = useState<Record<string, Partial<ApiModelAdminProvider>>>({});
   const [apiOfferPatches, setApiOfferPatches] = useState<Record<string, Partial<ApiModelAdminOffer>>>({});
   const [apiProviderSubmissions, setApiProviderSubmissions] = useState<ApiProviderSubmission[]>(data.apiModels.providerSubmissions || []);
@@ -261,7 +268,28 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     }),
     [apiOfferPatches, apiProviderPatches, apiProviderSubmissions, data.apiModels],
   );
-
+  const officialPrices = useMemo(
+    (): OfficialAdminData => ({
+      ...data.officialPrices,
+      apps: (data.officialPrices.apps || []).map((app) => ({
+        ...app,
+        ...(officialAppPatches[app.id] || {}),
+      })),
+      plans: (data.officialPrices.plans || []).map((plan) => ({
+        ...plan,
+        ...(officialPlanPatches[plan.id] || {}),
+      })),
+      regions: (data.officialPrices.regions || []).map((region) => ({
+        ...region,
+        ...(officialRegionPatches[region.id] || {}),
+      })),
+      currentPrices: (data.officialPrices.currentPrices || []).map((price) => ({
+        ...price,
+        ...(officialPricePatches[price.id] || {}),
+      })),
+    }),
+    [data.officialPrices, officialAppPatches, officialPlanPatches, officialPricePatches, officialRegionPatches],
+  );
   const filteredReview = useMemo(() => {
     if (!searchQuery.trim()) return reviewSubmissions;
     const q = searchQuery.toLowerCase();
@@ -394,13 +422,13 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
       { label: "渠道源", value: sources.length, icon: <Store key="s" size={15} /> },
       { label: "标准商品", value: data.products.length, icon: <Database key="d" size={15} /> },
       { label: "报价", value: data.rawOfferTotal, icon: <FileInput key="f" size={15} /> },
-      { label: "官方价", value: data.officialPrices.currentPrices.length, icon: <Database key="op" size={15} /> },
+      { label: "官方价", value: officialPrices.currentPrices.length, icon: <Database key="op" size={15} /> },
       { label: "API 模型", value: apiModels.offers.length, icon: <TerminalSquare key="api" size={15} /> },
       { label: "待审核", value: reviewSubmissions.length, icon: <Inbox key="i" size={15} /> },
       { label: "反馈", value: siteFeedback.length + offerFeedback.length, icon: <Flag key="fb" size={15} /> },
       { label: "采集待办", value: collectorTodoSubmissions.length, icon: <TerminalSquare key="t" size={15} /> },
     ],
-    [apiModels.offers.length, collectorTodoSubmissions.length, data.officialPrices.currentPrices.length, data.products.length, data.rawOfferTotal, offerFeedback.length, reviewSubmissions.length, siteFeedback.length, sources.length],
+    [apiModels.offers.length, collectorTodoSubmissions.length, data.products.length, data.rawOfferTotal, offerFeedback.length, officialPrices.currentPrices.length, reviewSubmissions.length, siteFeedback.length, sources.length],
   );
   const sourceStatsById = useMemo(
     () => new Map((data.sourceOfferStats || []).map((stats) => [stats.sourceId, stats])),
@@ -438,13 +466,13 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
       { id: "feedback", label: "反馈", count: siteFeedback.length + offerFeedback.length, icon: <Flag size={15} /> },
       { id: "history", label: "历史", count: null, icon: <History size={15} /> },
       { id: "collect", label: "采集", count: failedRunCount || null, icon: <RefreshCcw size={15} /> },
-      { id: "official", label: "官方价", count: data.officialPrices.currentPrices.length || null, icon: <Database size={15} /> },
+      { id: "official", label: "官方价", count: officialPrices.currentPrices.length || null, icon: <Database size={15} /> },
       { id: "apiModels", label: "API 模型", count: apiModels.offers.length || null, icon: <TerminalSquare size={15} /> },
       { id: "sources", label: "渠道", count: sources.length, icon: <Store size={15} /> },
       { id: "manual", label: "维护", count: null, icon: <Plus size={15} /> },
       { id: "logs", label: "日志", count: data.crawlRuns.length, icon: <Clock size={15} /> },
     ],
-    [apiModels.offers.length, collectorTodoSubmissions.length, data.crawlRuns.length, data.officialPrices.currentPrices.length, failedRunCount, offerFeedback.length, reviewSubmissions.length, siteFeedback.length, sources.length],
+    [apiModels.offers.length, collectorTodoSubmissions.length, data.crawlRuns.length, failedRunCount, offerFeedback.length, officialPrices.currentPrices.length, reviewSubmissions.length, siteFeedback.length, sources.length],
   );
 
   /* ─── Keyboard shortcuts ─── */
@@ -583,6 +611,87 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     void navigator.clipboard.writeText(command);
     setGlobalMessage({ type: "success", text: "已复制 API 模型 dry-run 导入命令。" });
   };
+
+  async function toggleOfficialAppEnabled(app: OfficialAdminApp, enabled: boolean) {
+    setLoadingAction(`official-app-${app.id}`);
+    const result = await requestWithMethod("/api/admin/official-prices", "PATCH", password, {
+      target: "app",
+      id: app.id,
+      enabled,
+    });
+    setLoadingAction(null);
+
+    if (result.ok) {
+      setOfficialAppPatches((prev) => ({ ...prev, [app.id]: { enabled } }));
+      setGlobalMessage({ type: "success", text: enabled ? `已启用官方应用「${app.displayName}」。` : `已停用官方应用「${app.displayName}」。` });
+      router.refresh();
+    } else {
+      setGlobalMessage({ type: "error", text: result.message || "更新官方应用失败。" });
+    }
+  }
+
+  async function toggleOfficialPlanEnabled(plan: OfficialAdminPlan, enabled: boolean) {
+    setLoadingAction(`official-plan-${plan.id}`);
+    const result = await requestWithMethod("/api/admin/official-prices", "PATCH", password, {
+      target: "plan",
+      id: plan.id,
+      enabled,
+    });
+    setLoadingAction(null);
+
+    if (result.ok) {
+      setOfficialPlanPatches((prev) => ({ ...prev, [plan.id]: { enabled } }));
+      setGlobalMessage({ type: "success", text: enabled ? `已启用官方计划「${plan.label}」。` : `已停用官方计划「${plan.label}」。` });
+      router.refresh();
+    } else {
+      setGlobalMessage({ type: "error", text: result.message || "更新官方计划失败。" });
+    }
+  }
+
+  async function toggleOfficialRegionEnabled(region: OfficialAdminRegion, enabled: boolean) {
+    setLoadingAction(`official-region-${region.id}`);
+    const result = await requestWithMethod("/api/admin/official-prices", "PATCH", password, {
+      target: "region",
+      id: region.id,
+      enabled,
+    });
+    setLoadingAction(null);
+
+    if (result.ok) {
+      setOfficialRegionPatches((prev) => ({ ...prev, [region.id]: { enabled } }));
+      setGlobalMessage({ type: "success", text: enabled ? `已启用官方地区「${region.countryLabel}」。` : `已停用官方地区「${region.countryLabel}」。` });
+      router.refresh();
+    } else {
+      setGlobalMessage({ type: "error", text: result.message || "更新官方地区失败。" });
+    }
+  }
+
+  async function updateOfficialPriceStatus(price: OfficialAdminPrice, status: OfficialAdminPrice["status"]) {
+    const actionKey = `official-price-${price.id}-${status}`;
+    setLoadingAction(actionKey);
+    const result = await requestWithMethod("/api/admin/official-prices", "PATCH", password, {
+      target: "price",
+      id: price.id,
+      status,
+      failureReason: officialManualStatusReason(status),
+    });
+    setLoadingAction(null);
+
+    if (result.ok) {
+      setOfficialPricePatches((prev) => ({
+        ...prev,
+        [price.id]: {
+          status,
+          failureReason: status === "available" ? null : officialManualStatusReason(status),
+          lastCheckedAt: new Date().toISOString(),
+        },
+      }));
+      setGlobalMessage({ type: "success", text: `已将官方地区价标记为「${officialPriceStatusLabel(status)}」。` });
+      router.refresh();
+    } else {
+      setGlobalMessage({ type: "error", text: result.message || "更新官方地区价状态失败。" });
+    }
+  }
 
   async function toggleApiProviderEnabled(provider: ApiModelAdminProvider, enabled: boolean) {
     setLoadingAction(`api-provider-${provider.id}`);
@@ -2016,12 +2125,16 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
             {activeTab === "official" && (
               <div role="tabpanel" id="tabpanel-official">
                 <OfficialPricesAdminPanel
-                  data={data.officialPrices}
+                  data={officialPrices}
                   loadingAction={loadingAction}
                   probeResult={officialProbeResult}
                   onProbe={probeOfficialPrices}
                   onEnqueueCollection={enqueueOfficialPriceCollection}
                   onCopyCommand={copyOfficialCollectorCommand}
+                  onToggleAppEnabled={toggleOfficialAppEnabled}
+                  onTogglePlanEnabled={toggleOfficialPlanEnabled}
+                  onToggleRegionEnabled={toggleOfficialRegionEnabled}
+                  onUpdatePriceStatus={updateOfficialPriceStatus}
                 />
               </div>
             )}
@@ -3484,6 +3597,10 @@ function OfficialPricesAdminPanel({
   onProbe,
   onEnqueueCollection,
   onCopyCommand,
+  onToggleAppEnabled,
+  onTogglePlanEnabled,
+  onToggleRegionEnabled,
+  onUpdatePriceStatus,
 }: {
   data: OfficialAdminData;
   loadingAction: string | null;
@@ -3491,11 +3608,19 @@ function OfficialPricesAdminPanel({
   onProbe: () => void;
   onEnqueueCollection: () => void;
   onCopyCommand: () => void;
+  onToggleAppEnabled: (app: OfficialAdminApp, enabled: boolean) => void;
+  onTogglePlanEnabled: (plan: OfficialAdminPlan, enabled: boolean) => void;
+  onToggleRegionEnabled: (region: OfficialAdminRegion, enabled: boolean) => void;
+  onUpdatePriceStatus: (price: OfficialAdminPrice, status: OfficialAdminPrice["status"]) => void;
 }) {
   const latestPrices = data.currentPrices.slice(0, 80);
   const latestRuns = data.collectRuns.slice(0, 8);
   const unmatchedItems = data.unmatchedItems.slice(0, 8);
   const failedCount = data.currentPrices.filter((price) => price.status !== "available" && price.status !== "stale").length;
+  const disabledAppCount = data.apps.filter((app) => !app.enabled).length;
+  const disabledPlanCount = data.plans.filter((plan) => !plan.enabled).length;
+  const disabledRegionCount = data.regions.filter((region) => !region.enabled).length;
+  const canMutate = data.source === "supabase";
 
   return (
     <div className="space-y-5">
@@ -3509,9 +3634,9 @@ function OfficialPricesAdminPanel({
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <OfficialMetric label="数据源" value={data.source === "supabase" ? "Supabase" : "静态样本"} />
-          <OfficialMetric label="平台" value={String(data.apps.length)} />
-          <OfficialMetric label="计划" value={String(data.plans.length)} />
-          <OfficialMetric label="地区" value={String(data.regions.length)} />
+          <OfficialMetric label="平台" value={String(data.apps.length)} tone={disabledAppCount ? "warn" : "default"} />
+          <OfficialMetric label="计划" value={String(data.plans.length)} tone={disabledPlanCount ? "warn" : "default"} />
+          <OfficialMetric label="地区" value={String(data.regions.length)} tone={disabledRegionCount ? "warn" : "default"} />
           <OfficialMetric label="当前价" value={String(data.currentPrices.length)} tone={failedCount ? "warn" : "default"} />
           <OfficialMetric label="最近更新" value={formatRelativeTime(data.generatedAt)} />
         </div>
@@ -3570,10 +3695,54 @@ function OfficialPricesAdminPanel({
         ) : null}
       </Panel>
 
+      <div className="grid gap-5 lg:grid-cols-3">
+        <Panel title="应用管理" icon={<Database size={17} />}>
+          <OfficialConfigList
+            emptyText="暂无官方应用配置。"
+            items={data.apps.slice(0, 12)}
+            getKey={(app) => app.id}
+            renderTitle={(app) => app.displayName}
+            renderMeta={(app) => `${app.provider} · App Store ${app.appStoreId}`}
+            getEnabled={(app) => app.enabled}
+            getLoading={(app) => loadingAction === `official-app-${app.id}`}
+            canMutate={canMutate}
+            onToggle={(app) => onToggleAppEnabled(app, !app.enabled)}
+          />
+        </Panel>
+
+        <Panel title="计划管理" icon={<ClipboardList size={17} />}>
+          <OfficialConfigList
+            emptyText="暂无官方计划配置。"
+            items={data.plans.slice(0, 18)}
+            getKey={(plan) => plan.id}
+            renderTitle={(plan) => plan.label}
+            renderMeta={(plan) => `${plan.appSlug} · ${officialBillingPeriodLabel(plan.billingPeriod)}`}
+            getEnabled={(plan) => plan.enabled}
+            getLoading={(plan) => loadingAction === `official-plan-${plan.id}`}
+            canMutate={canMutate}
+            onToggle={(plan) => onTogglePlanEnabled(plan, !plan.enabled)}
+          />
+        </Panel>
+
+        <Panel title="地区管理" icon={<Store size={17} />}>
+          <OfficialConfigList
+            emptyText="暂无官方地区配置。"
+            items={data.regions.slice(0, 18)}
+            getKey={(region) => region.id}
+            renderTitle={(region) => `${region.countryLabel} · ${region.countryCode}`}
+            renderMeta={(region) => `${region.storefrontCode} · ${region.currencyCode}`}
+            getEnabled={(region) => region.enabled}
+            getLoading={(region) => loadingAction === `official-region-${region.id}`}
+            canMutate={canMutate}
+            onToggle={(region) => onToggleRegionEnabled(region, !region.enabled)}
+          />
+        </Panel>
+      </div>
+
       <Panel title="当前官方地区价" icon={<ClipboardList size={17} />}>
         {latestPrices.length ? (
           <div className="overflow-x-auto rounded-lg border border-[#adb3b4]/20">
-            <table className="min-w-[980px] w-full divide-y divide-[#adb3b4]/15 text-left text-sm">
+            <table className="min-w-[1120px] w-full divide-y divide-[#adb3b4]/15 text-left text-sm">
               <thead className="bg-[#f2f4f4] text-xs font-semibold text-[#5a6061]">
                 <tr>
                   <th className="px-4 py-3">平台 / 计划</th>
@@ -3583,54 +3752,94 @@ function OfficialPricesAdminPanel({
                   <th className="px-4 py-3">状态</th>
                   <th className="px-4 py-3">更新时间</th>
                   <th className="px-4 py-3">来源</th>
+                  <th className="px-4 py-3">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#adb3b4]/15 bg-white">
-                {latestPrices.map((price) => (
-                  <tr key={price.id} className="align-top">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-[#2d3435]">{price.appName}</div>
-                      <div className="mt-1 text-xs text-[#5a6061]">
-                        {price.planLabel} · {officialBillingPeriodLabel(price.billingPeriod)}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-[#2d3435]">{price.countryLabel}</div>
-                      <div className="mt-1 text-xs text-[#adb3b4]">{price.countryCode}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-[#2d3435]">{price.priceText || "未解析"}</div>
-                      <div className="mt-1 text-xs text-[#adb3b4]">{price.currencyCode || "未知币种"}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-[#2d3435]">{formatCurrency(price.cnyPrice, "CNY")}</div>
-                      <div className="mt-1 text-xs text-[#adb3b4]">FX {price.fxDate || "未记录"}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${officialPriceStatusClass(price.status)}`}>
-                        {officialPriceStatusLabel(price.status)}
-                      </span>
-                      {price.failureReason ? <p className="mt-1 max-w-60 break-words text-xs leading-5 text-[#9b3328]">{price.failureReason}</p> : null}
-                    </td>
-                    <td className="px-4 py-3 text-[#5a6061]">
-                      <div>{formatRelativeTime(price.lastCheckedAt || price.lastSuccessAt)}</div>
-                      {price.lastSuccessAt && price.lastCheckedAt !== price.lastSuccessAt ? (
-                        <div className="mt-1 text-xs text-[#adb3b4]">成功 {formatRelativeTime(price.lastSuccessAt)}</div>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3">
-                      <a
-                        href={price.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-[#47657a] transition-colors hover:text-[#2d3435]"
-                      >
-                        App Store
-                        <ExternalLink size={12} />
-                      </a>
-                    </td>
-                  </tr>
-                ))}
+                {latestPrices.map((price) => {
+                  const reviewLoading = loadingAction === `official-price-${price.id}-needs_review`;
+                  const missingLoading = loadingAction === `official-price-${price.id}-missing`;
+                  const restoreLoading = loadingAction === `official-price-${price.id}-available`;
+
+                  return (
+                    <tr key={price.id} className="align-top">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-[#2d3435]">{price.appName}</div>
+                        <div className="mt-1 text-xs text-[#5a6061]">
+                          {price.planLabel} · {officialBillingPeriodLabel(price.billingPeriod)}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-[#2d3435]">{price.countryLabel}</div>
+                        <div className="mt-1 text-xs text-[#adb3b4]">{price.countryCode}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-[#2d3435]">{price.priceText || "未解析"}</div>
+                        <div className="mt-1 text-xs text-[#adb3b4]">{price.currencyCode || "未知币种"}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-[#2d3435]">{formatCurrency(price.cnyPrice, "CNY")}</div>
+                        <div className="mt-1 text-xs text-[#adb3b4]">FX {price.fxDate || "未记录"}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${officialPriceStatusClass(price.status)}`}>
+                          {officialPriceStatusLabel(price.status)}
+                        </span>
+                        {price.failureReason ? <p className="mt-1 max-w-60 break-words text-xs leading-5 text-[#9b3328]">{price.failureReason}</p> : null}
+                      </td>
+                      <td className="px-4 py-3 text-[#5a6061]">
+                        <div>{formatRelativeTime(price.lastCheckedAt || price.lastSuccessAt)}</div>
+                        {price.lastSuccessAt && price.lastCheckedAt !== price.lastSuccessAt ? (
+                          <div className="mt-1 text-xs text-[#adb3b4]">成功 {formatRelativeTime(price.lastSuccessAt)}</div>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        <a
+                          href={price.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-[#47657a] transition-colors hover:text-[#2d3435]"
+                        >
+                          App Store
+                          <ExternalLink size={12} />
+                        </a>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            disabled={!canMutate || reviewLoading || price.status === "needs_review"}
+                            onClick={() => onUpdatePriceStatus(price, "needs_review")}
+                            className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[#47657a]/20 bg-white px-2.5 text-xs font-medium text-[#47657a] transition-colors hover:bg-[#eef3f8] disabled:opacity-50"
+                          >
+                            {reviewLoading ? <Loader2 size={13} className="animate-spin" /> : null}
+                            待复核
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!canMutate || missingLoading || price.status === "missing"}
+                            onClick={() => onUpdatePriceStatus(price, "missing")}
+                            className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[#9b3328]/20 bg-white px-2.5 text-xs font-medium text-[#9b3328] transition-colors hover:bg-[#fbe9e7] disabled:opacity-50"
+                          >
+                            {missingLoading ? <Loader2 size={13} className="animate-spin" /> : null}
+                            缺失
+                          </button>
+                          {price.status !== "available" ? (
+                            <button
+                              type="button"
+                              disabled={!canMutate || restoreLoading}
+                              onClick={() => onUpdatePriceStatus(price, "available")}
+                              className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[#2f7a4b]/20 bg-white px-2.5 text-xs font-medium text-[#2f7a4b] transition-colors hover:bg-[#e8f3ec] disabled:opacity-50"
+                            >
+                              {restoreLoading ? <Loader2 size={13} className="animate-spin" /> : null}
+                              恢复
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -4195,6 +4404,64 @@ function OfficialMetric({
   );
 }
 
+function OfficialConfigList<T>({
+  items,
+  emptyText,
+  getKey,
+  renderTitle,
+  renderMeta,
+  getEnabled,
+  getLoading,
+  canMutate,
+  onToggle,
+}: {
+  items: T[];
+  emptyText: string;
+  getKey: (item: T) => string;
+  renderTitle: (item: T) => string;
+  renderMeta: (item: T) => string;
+  getEnabled: (item: T) => boolean;
+  getLoading: (item: T) => boolean;
+  canMutate: boolean;
+  onToggle: (item: T) => void;
+}) {
+  if (!items.length) {
+    return <div className="rounded-lg border border-dashed border-[#adb3b4]/30 px-3 py-8 text-center text-sm text-[#adb3b4]">{emptyText}</div>;
+  }
+
+  return (
+    <div className="divide-y divide-[#adb3b4]/15 rounded-lg border border-[#adb3b4]/20">
+      {items.map((item) => {
+        const enabled = getEnabled(item);
+        const loading = getLoading(item);
+
+        return (
+          <div key={getKey(item)} className="flex items-start justify-between gap-3 px-3 py-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="truncate text-sm font-medium text-[#2d3435]">{renderTitle(item)}</span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${enabled ? "bg-[#e8f3ec] text-[#2f7a4b]" : "bg-[#fbe9e7] text-[#9b3328]"}`}>
+                  {enabled ? "启用" : "停用"}
+                </span>
+              </div>
+              <p className="mt-1 break-words text-xs leading-5 text-[#adb3b4]">{renderMeta(item)}</p>
+            </div>
+            <button
+              type="button"
+              disabled={!canMutate || loading}
+              onClick={() => onToggle(item)}
+              className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4] disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={13} className="animate-spin" /> : null}
+              {enabled ? "停用" : "启用"}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function CollectionJobsPanel({ jobs }: { jobs: CollectionJob[] }) {
   return (
     <Panel title="采集任务队列" icon={<ClipboardList size={17} />}>
@@ -4601,6 +4868,14 @@ function officialPriceStatusClass(value: OfficialAdminPrice["status"]): string {
   if (value === "stale") return "bg-[#fff7e8] text-[#7a541b]";
   if (value === "needs_review") return "bg-[#eef3f8] text-[#47657a]";
   return "bg-[#fbe9e7] text-[#9b3328]";
+}
+
+function officialManualStatusReason(status: OfficialAdminPrice["status"]): string {
+  if (status === "missing") return "管理员标记为该地区/计划未提供。";
+  if (status === "needs_review") return "管理员标记为需要复核。";
+  if (status === "parse_failed") return "管理员标记为解析失败。";
+  if (status === "stale") return "管理员标记为保留历史价格。";
+  return "";
 }
 
 function officialRunStatusLabel(value: string): string {
