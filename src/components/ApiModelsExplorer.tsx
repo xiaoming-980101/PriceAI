@@ -9,6 +9,7 @@ import {
   PackageCheck,
   Search,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { ApiModelIcon } from "@/components/ApiModelIcon";
@@ -20,10 +21,12 @@ import {
   apiProviders,
   formatApiPrice,
   formatPlanPrice,
+  getApiModelOffers,
   getApiModelFamilyOptions,
   getApiModelSummaries,
   getApiProviderSummaries,
   type ApiCurrency,
+  type ApiModelOfferWithRelations,
   type ApiModelScope,
   type ApiModelSummary,
   type ApiProviderSummary,
@@ -32,7 +35,7 @@ import {
 
 const typeFilters = ["all", "official", "subscription", "router", "free"] as const;
 type TypeFilter = (typeof typeFilters)[number];
-type ScopeMode = "models" | "providers";
+type ScopeMode = "models" | "offers" | "providers";
 type FamilyFilter = "all" | string;
 
 const typeFilterLabels: Record<TypeFilter, string> = {
@@ -54,8 +57,14 @@ export function ApiModelsExplorer() {
   const modelSummaries = useMemo(
     () =>
       getApiModelSummaries(family)
-        .filter((summary) => matchesModelSummary(summary, normalizedQuery))
-        .filter((summary) => matchesModelSummaryType(summary, typeFilter)),
+        .filter((summary) => matchesModelSummary(summary, normalizedQuery)),
+    [family, normalizedQuery],
+  );
+  const offerRows = useMemo(
+    () =>
+      getApiModelOffers(family)
+        .filter((offer) => matchesOffer(offer, normalizedQuery))
+        .filter((offer) => typeFilter === "all" || offer.provider.type === typeFilter),
     [family, normalizedQuery, typeFilter],
   );
   const providerSummaries = useMemo(
@@ -68,7 +77,12 @@ export function ApiModelsExplorer() {
 
   const freeProviderIds = new Set(apiProviders.filter((provider) => provider.type === "free").map((provider) => provider.id));
   const freeCount = apiModelOffers.filter((offer) => freeProviderIds.has(offer.providerId)).length;
-  const resultCount = scopeMode === "models" ? modelSummaries.length : providerSummaries.length;
+  const resultCount =
+    scopeMode === "models"
+      ? modelSummaries.length
+      : scopeMode === "offers"
+        ? offerRows.length
+        : providerSummaries.length;
 
   return (
     <main className="mx-auto max-w-[1500px] px-5 py-6 sm:px-8 md:py-10 lg:py-12">
@@ -83,7 +97,7 @@ export function ApiModelsExplorer() {
           <div className="mt-4 flex flex-wrap items-center gap-2 text-[0.72rem] font-medium text-[#5a6061]">
             <span>人工维护样本：{apiModelUpdatedAt}</span>
             <span className="h-1 w-1 rounded-full bg-[#adb3b4]" />
-            <span>当前显示：{resultCount} {scopeMode === "models" ? "个标准模型" : "个渠道/套餐"}</span>
+            <span>当前显示：{resultCount} {scopeCountLabel(scopeMode)}</span>
             <span className="hidden h-1 w-1 rounded-full bg-[#adb3b4] md:inline-block" />
             <span className="hidden md:inline">汇率日期：{apiModelFxSummary.date}</span>
           </div>
@@ -127,7 +141,7 @@ export function ApiModelsExplorer() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={scopeMode === "models" ? "搜索 DeepSeek V4、Qwen3.7、Kimi K2.6" : "搜索 OpenCode Go、OpenRouter、官方 API"}
+              placeholder={searchPlaceholder(scopeMode)}
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#9aa2a3]"
             />
           </label>
@@ -135,13 +149,19 @@ export function ApiModelsExplorer() {
             <ViewToggleButton
               active={scopeMode === "models"}
               icon={<PackageCheck size={16} />}
-              label="按模型查"
+              label="标准模型"
               onClick={() => setScopeMode("models")}
             />
             <ViewToggleButton
-              active={scopeMode === "providers"}
+              active={scopeMode === "offers"}
               icon={<Database size={16} />}
-              label="按渠道查"
+              label="全部报价"
+              onClick={() => setScopeMode("offers")}
+            />
+            <ViewToggleButton
+              active={scopeMode === "providers"}
+              icon={<Layers3 size={16} />}
+              label="来源渠道"
               onClick={() => setScopeMode("providers")}
             />
           </div>
@@ -161,27 +181,29 @@ export function ApiModelsExplorer() {
           </div>
           <div className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-[#e4e9ea] px-4 text-sm font-semibold text-[#2d3435]">
             <ArrowUpDown size={17} />
-            {scopeMode === "models" ? "模型家族优先" : "官方/套餐优先"}
+            {scopeMode === "models" ? "模型家族优先" : scopeMode === "offers" ? "模型与价格优先" : "官方/套餐优先"}
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {typeFilters.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setTypeFilter(item)}
-              aria-label={`类型筛选：${typeFilterLabels[item]}`}
-              className={`inline-flex h-9 shrink-0 items-center rounded-full px-3.5 text-xs font-semibold transition ${
-                typeFilter === item
-                  ? "bg-[#2d3435] text-[#f8f8f8] shadow-[0_10px_30px_rgba(45,52,53,0.10)]"
-                  : "bg-white text-[#5a6061] ring-1 ring-[#adb3b4]/15 hover:bg-[#f7f9f9] hover:text-[#202829]"
-              }`}
-            >
-              {typeFilterLabels[item]}
-            </button>
-          ))}
-        </div>
+        {scopeMode !== "models" ? (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {typeFilters.map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setTypeFilter(item)}
+                aria-label={`类型筛选：${typeFilterLabels[item]}`}
+                className={`inline-flex h-9 shrink-0 items-center rounded-full px-3.5 text-xs font-semibold transition ${
+                  typeFilter === item
+                    ? "bg-[#2d3435] text-[#f8f8f8] shadow-[0_10px_30px_rgba(45,52,53,0.10)]"
+                    : "bg-white text-[#5a6061] ring-1 ring-[#adb3b4]/15 hover:bg-[#f7f9f9] hover:text-[#202829]"
+                }`}
+              >
+                {typeFilterLabels[item]}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
       </section>
 
@@ -190,6 +212,12 @@ export function ApiModelsExplorer() {
           <ApiModelSummaryTable summaries={modelSummaries} currency={currency} />
         ) : (
           <EmptyState text="没有符合条件的标准模型" />
+        )
+      ) : scopeMode === "offers" ? (
+        offerRows.length ? (
+          <ApiOfferTable rows={offerRows} currency={currency} />
+        ) : (
+          <EmptyState text="没有符合条件的报价明细" />
         )
       ) : providerSummaries.length ? (
         <ApiProviderSummaryTable summaries={providerSummaries} currency={currency} />
@@ -208,6 +236,97 @@ export function ApiModelsExplorer() {
         免责声明：PriceAI 只整理公开文档和公开页面中的 API 渠道信息，不售卖 API，不承诺可用性，不替任何渠道提供 SLA。免费和低价渠道可能存在限流、排队、模型下线、地区限制或条款变化。
       </p>
     </main>
+  );
+}
+
+function ApiOfferTable({ rows, currency }: { rows: ApiModelOfferWithRelations[]; currency: ApiCurrency }) {
+  return (
+    <section className="overflow-hidden rounded-lg bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15">
+      <div className="overflow-x-auto">
+        <table className="min-w-[1480px] w-full border-collapse text-left text-sm">
+          <thead className="bg-[#f2f4f4] text-[0.68rem] font-semibold text-[#5a6061]">
+            <tr>
+              <TableHead>模型</TableHead>
+              <TableHead>来源渠道</TableHead>
+              <TableHead>类型</TableHead>
+              <TableHead>输入价</TableHead>
+              <TableHead>输出价</TableHead>
+              <TableHead>缓存价</TableHead>
+              <TableHead>套餐/免费额度</TableHead>
+              <TableHead>限制</TableHead>
+              <TableHead>来源</TableHead>
+              <TableHead>更新时间</TableHead>
+              <TableHead>操作</TableHead>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#edf0f1]">
+            {rows.map((offer) => {
+              const sourceHref = offer.pricingUrl ?? offer.provider.pricingUrl ?? offer.provider.url;
+
+              return (
+                <tr key={offer.id} className="align-top transition hover:bg-[#f7f9f9]">
+                  <td className="max-w-[280px] px-5 py-4">
+                    <Link href={`/api-models/${offer.modelId}`} className="group flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] ring-1 ring-[#adb3b4]/15">
+                        <ApiModelIcon family={offer.model.family} className="h-7 w-7" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-[#202829] group-hover:text-[#2f7a4b]">{offer.model.displayName}</span>
+                        <span className="mt-1 block truncate text-xs text-[#5a6061]">{offer.routeModelId ?? offer.model.modelId}</span>
+                      </span>
+                    </Link>
+                  </td>
+                  <td className="max-w-[300px] px-5 py-4">
+                    <Link href={`/api-models/providers/${offer.providerId}`} className="group flex min-w-0 items-center gap-3">
+                      <ApiProviderIcon provider={offer.provider} />
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-[#202829] group-hover:text-[#2f7a4b]">{offer.provider.name}</span>
+                        <span className="mt-1 block truncate text-xs text-[#5a6061]">{offer.provider.billingMode}</span>
+                      </span>
+                    </Link>
+                  </td>
+                  <td className="px-5 py-4">
+                    <TypeChip type={offer.provider.type} />
+                  </td>
+                  <td className="px-5 py-4">
+                    <PriceText value={formatApiPrice(offer.inputPrice, currency)} />
+                  </td>
+                  <td className="px-5 py-4">
+                    <PriceText value={formatApiPrice(offer.outputPrice, currency)} />
+                  </td>
+                  <td className="max-w-[230px] px-5 py-4">
+                    <p className="font-semibold leading-6 text-[#202829]">{offer.cacheReadPrice ? formatApiPrice(offer.cacheReadPrice, currency) : "待确认"}</p>
+                    {offer.cacheWritePrice ? <p className="mt-1 text-xs leading-5 text-[#5a6061]">写入：{formatApiPrice(offer.cacheWritePrice, currency)}</p> : null}
+                  </td>
+                  <td className="max-w-[260px] px-5 py-4 text-sm leading-6 text-[#2d3435]">{offer.freeOrPlan}</td>
+                  <td className="max-w-[280px] px-5 py-4 text-sm leading-6 text-[#5a6061]">{offer.limitSummary}</td>
+                  <td className="px-5 py-4">
+                    <a
+                      href={sourceHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-9 items-center whitespace-nowrap rounded-full bg-[#e4e9ea] px-3 text-xs font-semibold text-[#2d3435] transition hover:bg-[#dde4e5]"
+                    >
+                      {offer.sourceLabel}
+                    </a>
+                  </td>
+                  <td className="px-5 py-4 text-[#5a6061]">{offer.updatedAt}</td>
+                  <td className="px-5 py-4">
+                    <Link
+                      href={`/api-models/${offer.modelId}`}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[#2d3435] px-3 text-xs font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526]"
+                    >
+                      查看
+                      <ChevronRight size={14} />
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -299,7 +418,7 @@ function ApiProviderSummaryTable({ summaries, currency }: { summaries: ApiProvid
               <TableHead>渠道/套餐</TableHead>
               <TableHead>类型</TableHead>
               <TableHead>模型覆盖</TableHead>
-              <TableHead>套餐/额度</TableHead>
+              <TableHead>价格/套餐</TableHead>
               <TableHead>限制</TableHead>
               <TableHead>最近更新</TableHead>
               <TableHead>操作</TableHead>
@@ -314,9 +433,7 @@ function ApiProviderSummaryTable({ summaries, currency }: { summaries: ApiProvid
                 <tr key={summary.id} className="align-top transition hover:bg-[#f7f9f9]">
                   <td className="max-w-[330px] px-5 py-4">
                     <Link href={href} className="group flex min-w-0 items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] text-[#5a6061]">
-                        <Database size={18} />
-                      </span>
+                      <ApiProviderIcon provider={provider} />
                       <span className="min-w-0">
                         <span className="block truncate font-semibold text-[#202829] group-hover:text-[#2f7a4b]">{provider.name}</span>
                         <span className="mt-1 block truncate text-xs text-[#5a6061]">{provider.description}</span>
@@ -440,6 +557,29 @@ function TypeChip({ type }: { type: ApiProviderType }) {
   );
 }
 
+function ApiProviderIcon({ provider }: { provider: { name: string; logoUrl?: string } }) {
+  if (provider.logoUrl) {
+    return (
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] ring-1 ring-[#adb3b4]/15">
+        <Image
+          src={provider.logoUrl}
+          alt=""
+          aria-hidden="true"
+          width={28}
+          height={28}
+          className="h-7 w-7 shrink-0 object-contain"
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] text-[#5a6061] ring-1 ring-[#adb3b4]/15">
+      <Database size={18} />
+    </span>
+  );
+}
+
 function CountBadge({ children, tone }: { children: ReactNode; tone: "good" | "warn" | "neutral" }) {
   const className = {
     good: "bg-[#e8f3ec] text-[#2f7a4b]",
@@ -465,7 +605,28 @@ function TableHead({ children }: { children: ReactNode }) {
 
 function buildTitle(family: ApiModelScope, scopeMode: ScopeMode) {
   const label = family === "all" ? "全模型" : getApiModelFamilyOptions().find((option) => option.id === family)?.label ?? family;
-  return `${label} ${scopeMode === "models" ? "按模型查" : "按渠道查"}`;
+  const suffix = {
+    models: "标准模型",
+    offers: "全部报价",
+    providers: "来源渠道",
+  }[scopeMode];
+  return `${label} ${suffix}`;
+}
+
+function scopeCountLabel(scopeMode: ScopeMode) {
+  return {
+    models: "个标准模型",
+    offers: "条报价明细",
+    providers: "个渠道/套餐",
+  }[scopeMode];
+}
+
+function searchPlaceholder(scopeMode: ScopeMode) {
+  return {
+    models: "搜索 DeepSeek V4、Qwen3.7、Kimi K2.6",
+    offers: "搜索模型、渠道、套餐或限制",
+    providers: "搜索 OpenCode Go、OpenRouter、官方 API",
+  }[scopeMode];
 }
 
 function matchesModelSummary(summary: ApiModelSummary, query: string) {
@@ -488,17 +649,6 @@ function matchesModelSummary(summary: ApiModelSummary, query: string) {
     .includes(query);
 }
 
-function matchesModelSummaryType(summary: ApiModelSummary, typeFilter: TypeFilter) {
-  if (typeFilter === "all") return true;
-
-  return {
-    official: summary.officialCount,
-    subscription: summary.subscriptionCount,
-    router: summary.routerCount,
-    free: summary.freeCount,
-  }[typeFilter] > 0;
-}
-
 function matchesProviderSummary(summary: ApiProviderSummary, query: string) {
   if (!query) return true;
 
@@ -518,4 +668,30 @@ function matchesProviderSummary(summary: ApiProviderSummary, query: string) {
     .join(" ")
     .toLowerCase()
     .includes(query);
+}
+
+function matchesOffer(offer: ApiModelOfferWithRelations, query: string) {
+  if (!query) return true;
+
+  return [
+    offer.model.displayName,
+    offer.model.family,
+    offer.model.modelId,
+    offer.routeModelId,
+    offer.provider.name,
+    offer.provider.description,
+    apiProviderTypeLabels[offer.provider.type],
+    offer.freeOrPlan,
+    offer.limitSummary,
+    offer.limitations,
+    offer.sourceLabel,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(query);
+}
+
+function PriceText({ value }: { value: string }) {
+  return <p className="max-w-[190px] font-semibold leading-6 text-[#202829]">{value}</p>;
 }

@@ -37,6 +37,7 @@ export type ApiProvider = {
   billingMode: ApiBillingMode;
   url: string;
   pricingUrl?: string;
+  logoUrl?: string;
   description: string;
   limitSummary: string;
   limitations: string;
@@ -342,6 +343,7 @@ export const apiProviders: ApiProvider[] = [
     billingMode: "按量计费",
     url: "https://platform.deepseek.com/",
     pricingUrl: "https://api-docs.deepseek.com/quick_start/pricing/",
+    logoUrl: "/brand-icons/deepseek.png",
     description: "DeepSeek 官方 OpenAI/Anthropic 兼容 API，适合作为 DeepSeek V4 的价格基准。",
     limitSummary: "未公开固定 RPM/TPM，以控制台为准。",
     limitations: "价格可能调整，旧模型名 deepseek-chat 与 deepseek-reasoner 有兼容和下线时间说明。",
@@ -355,6 +357,7 @@ export const apiProviders: ApiProvider[] = [
     billingMode: "按量计费",
     url: "https://platform.kimi.com/",
     pricingUrl: "https://platform.kimi.com/docs/pricing/chat",
+    logoUrl: "/brand-icons/kimi.png",
     description: "Moonshot/Kimi 官方开放平台，适合长上下文、多模态和中文 Agent 场景。",
     limitSummary: "未公开固定 RPM/TPM，以开放平台控制台为准。",
     limitations: "首版展示官方模型页与计费说明，具体价格以 Kimi 开放平台实时表格为准。",
@@ -368,6 +371,7 @@ export const apiProviders: ApiProvider[] = [
     billingMode: "按量计费",
     url: "https://platform.minimax.io/",
     pricingUrl: "https://platform.minimax.io/docs/guides/pricing-paygo",
+    logoUrl: "/brand-icons/minimax.png",
     description: "MiniMax 官方开放平台，M3/M2.7/M2.5 支持 Anthropic 与 OpenAI 兼容接口。",
     limitSummary: "未公开固定 RPM/TPM，以控制台为准。",
     limitations: "M3 当前价格含限时折扣和 512K 阈值，M2.7/M2.5 有 standard/highspeed 差异。",
@@ -381,6 +385,7 @@ export const apiProviders: ApiProvider[] = [
     billingMode: "按量计费",
     url: "https://open.bigmodel.cn/",
     pricingUrl: "https://docs.bigmodel.cn/cn/guide/models/text/glm-5",
+    logoUrl: "/brand-icons/glm.png",
     description: "智谱官方开放平台。首版先收录 GLM-5 模型文档，价格页仍需后续补齐。",
     limitSummary: "未公开固定 RPM/TPM，以控制台为准。",
     limitations: "当前只把 GLM-5 作为已确认模型入口展示，不在前台硬填未核准价格。",
@@ -394,6 +399,7 @@ export const apiProviders: ApiProvider[] = [
     billingMode: "订阅套餐",
     url: "https://www.alibabacloud.com/product/modelstudio",
     pricingUrl: "https://www.alibabacloud.com/help/en/model-studio/coding-plan",
+    logoUrl: "/brand-icons/qwen.png",
     description: "阿里云 Model Studio 面向编码工具的月订阅套餐，覆盖 Qwen、Kimi、GLM、MiniMax 等模型。",
     limitSummary: "6,000 req/5h · 45,000 req/week · 90,000 req/month。",
     limitations: "仅用于编码工具；官方明确不适合自动化脚本、自定义后端或非交互批处理 API。",
@@ -407,6 +413,7 @@ export const apiProviders: ApiProvider[] = [
     billingMode: "订阅套餐",
     url: "https://opencode.ai/",
     pricingUrl: "https://dev.opencode.ai/docs/go/",
+    logoUrl: "/brand-icons/opencode.png",
     description: "OpenCode 面向开放编码模型的低价订阅套餐，提供多模型 API endpoint。",
     limitSummary: "$12/5h · $30/week · $60/month 用量窗口。",
     limitations: "请求数取决于模型消耗；有 5 小时、每周、每月额度窗口，不能当作无限 API。",
@@ -420,6 +427,7 @@ export const apiProviders: ApiProvider[] = [
     billingMode: "动态路由",
     url: "https://openrouter.ai/",
     pricingUrl: "https://openrouter.ai/pricing",
+    logoUrl: "/brand-icons/openrouter.png",
     description: "公开模型路由平台，统一 API key 访问多家模型和 provider，价格随模型页变化。",
     limitSummary: "免费 50 req/day；充值后免费模型可到 1,000 req/day。",
     limitations: "免费模型有低限流；付费价格、可用 provider 和路由结果可能随时间变化。",
@@ -433,6 +441,7 @@ export const apiProviders: ApiProvider[] = [
     billingMode: "免费/测试",
     url: "https://build.nvidia.com/explore/discover",
     pricingUrl: "https://www.nvidia.com/en-us/ai-data-science/products/nim-microservices/",
+    logoUrl: "/brand-icons/nvidia.png",
     description: "NVIDIA Hosted API 和 NIM 微服务入口，适合开发、测试、原型和自托管评估。",
     limitSummary: "未公开固定 RPM/TPM，以 API Catalog 为准。",
     limitations: "免费访问主要面向开发测试和原型，模型列表、限速和可用性会变化。",
