@@ -23,6 +23,30 @@ export type ApiModelOffer = {
   notes?: string;
 };
 
+export type ApiModelScope = "all" | string;
+
+export type ApiModelFamilyOption = {
+  id: string;
+  label: string;
+};
+
+export type ApiModelSummary = {
+  id: string;
+  modelFamily: string;
+  displayName: string;
+  offerCount: number;
+  providerCount: number;
+  officialCount: number;
+  freeCount: number;
+  routerCount: number;
+  subscriptionCount: number;
+  representativeModels: string[];
+  compatibility: string[];
+  suitableTools: string[];
+  primaryOffer: ApiModelOffer | null;
+  latestUpdatedAt: string;
+};
+
 export type ApiPriceValue =
   | {
       kind: "numeric";
@@ -320,6 +344,124 @@ export function formatUsdAmount(value: number, currency: ApiCurrency) {
     minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+export function getApiModelFamilyOptions(): ApiModelFamilyOption[] {
+  const seen = new Set<string>();
+
+  return apiModelOffers
+    .map((offer) => offer.modelFamily)
+    .filter((family) => {
+      if (seen.has(family)) return false;
+      seen.add(family);
+      return true;
+    })
+    .sort(compareFamilyLabel)
+    .map((family) => ({
+      id: apiModelFamilyId(family),
+      label: family,
+    }));
+}
+
+export function getApiModelSummaries(scope: ApiModelScope = "all"): ApiModelSummary[] {
+  const groups = new Map<string, ApiModelOffer[]>();
+
+  apiModelOffers.forEach((offer) => {
+    const familyId = apiModelFamilyId(offer.modelFamily);
+    if (scope !== "all" && familyId !== scope) return;
+
+    groups.set(familyId, [...(groups.get(familyId) ?? []), offer]);
+  });
+
+  return Array.from(groups.entries())
+    .map(([id, offers]) => buildApiModelSummary(id, offers))
+    .sort((a, b) => compareFamilyLabel(a.modelFamily, b.modelFamily));
+}
+
+export function getApiModelSummary(id: string) {
+  return getApiModelSummaries(id).find((summary) => summary.id === id) ?? null;
+}
+
+export function getApiModelOffers(scope: ApiModelScope = "all") {
+  return apiModelOffers
+    .filter((offer) => scope === "all" || apiModelFamilyId(offer.modelFamily) === scope)
+    .sort((a, b) => {
+      const familyDelta = compareFamilyLabel(a.modelFamily, b.modelFamily);
+      if (familyDelta !== 0) return familyDelta;
+      const typeDelta = providerTypeRank(a.providerType) - providerTypeRank(b.providerType);
+      if (typeDelta !== 0) return typeDelta;
+      return a.providerName.localeCompare(b.providerName, "zh-CN");
+    });
+}
+
+export function apiModelFamilyId(family: string) {
+  const mapped = apiModelFamilySlugByName[family];
+  if (mapped) return mapped;
+
+  return family
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function buildApiModelSummary(id: string, offers: ApiModelOffer[]): ApiModelSummary {
+  const family = offers[0]?.modelFamily ?? id;
+  const providerNames = new Set(offers.map((offer) => offer.providerName));
+  const primaryOffer = [...offers].sort((a, b) => providerTypeRank(a.providerType) - providerTypeRank(b.providerType))[0] ?? null;
+
+  return {
+    id,
+    modelFamily: family,
+    displayName: `${family} 模型`,
+    offerCount: offers.length,
+    providerCount: providerNames.size,
+    officialCount: offers.filter((offer) => offer.providerType === "official").length,
+    freeCount: offers.filter((offer) => offer.providerType === "free" || offer.compatibility.includes("免费/测试")).length,
+    routerCount: offers.filter((offer) => offer.providerType === "router").length,
+    subscriptionCount: offers.filter((offer) => offer.providerType === "subscription").length,
+    representativeModels: uniqueStrings(offers.map((offer) => offer.modelName)).slice(0, 3),
+    compatibility: uniqueStrings(offers.flatMap((offer) => offer.compatibility)).slice(0, 4),
+    suitableTools: uniqueStrings(offers.flatMap((offer) => offer.suitableTools)).slice(0, 4),
+    primaryOffer,
+    latestUpdatedAt: offers.reduce((latest, offer) => (offer.updatedAt > latest ? offer.updatedAt : latest), ""),
+  };
+}
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function providerTypeRank(type: ApiProviderType) {
+  return {
+    official: 0,
+    router: 1,
+    free: 2,
+    subscription: 3,
+  }[type];
+}
+
+const familyOrder = ["DeepSeek", "Qwen", "Kimi", "GLM", "MiniMax", "多模型"];
+
+const apiModelFamilySlugByName: Record<string, string> = {
+  DeepSeek: "deepseek",
+  Qwen: "qwen",
+  Kimi: "kimi",
+  GLM: "glm",
+  MiniMax: "minimax",
+  多模型: "multi-model",
+};
+
+function compareFamilyLabel(a: string, b: string) {
+  const aIndex = familyOrder.indexOf(a);
+  const bIndex = familyOrder.indexOf(b);
+
+  if (aIndex !== -1 || bIndex !== -1) {
+    if (aIndex === -1) return 1;
+    if (bIndex === -1) return -1;
+    return aIndex - bIndex;
+  }
+
+  return a.localeCompare(b, "zh-CN");
 }
 
 function textPrice(text: string): ApiPriceValue {

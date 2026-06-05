@@ -28,6 +28,28 @@ export type OfficialPriceRow = OfficialPriceRegion & {
   fxDate: string;
 };
 
+export type OfficialPriceScope = "all" | OfficialPriceAppSlug;
+
+export type OfficialPriceOfferRow = OfficialPriceRow & {
+  id: string;
+  app: OfficialPriceApp;
+  plan: OfficialPricePlan;
+};
+
+export type OfficialPricePlanSummary = {
+  id: string;
+  appSlug: OfficialPriceAppSlug;
+  planSlug: string;
+  label: string;
+  platform: string;
+  provider: string;
+  billingPeriod: OfficialPricePlan["billingPeriod"];
+  notes?: string;
+  sampleCount: number;
+  latestFetchedAt: string;
+  lowestRow: OfficialPriceRow | null;
+};
+
 export type OfficialPriceApp = {
   slug: OfficialPriceAppSlug;
   displayName: string;
@@ -187,6 +209,101 @@ export function getOfficialPriceRows(appSlug: OfficialPriceAppSlug, planSlug: st
   return officialPriceRows
     .filter((row) => row.appSlug === appSlug && row.planSlug === planSlug)
     .sort((a, b) => a.cnyPrice - b.cnyPrice);
+}
+
+export function officialPricePlanId(appSlug: OfficialPriceAppSlug, planSlug: string) {
+  return `${appSlug}__${planSlug}`;
+}
+
+export function parseOfficialPricePlanId(id: string) {
+  const [appSlug, ...planSlugParts] = id.split("__");
+  const planSlug = planSlugParts.join("__");
+
+  if (!isOfficialPriceAppSlug(appSlug) || !planSlug) return null;
+
+  return { appSlug, planSlug };
+}
+
+export function getOfficialPriceApp(appSlug: OfficialPriceAppSlug) {
+  return officialPriceApps.find((app) => app.slug === appSlug) ?? null;
+}
+
+export function getOfficialPricePlan(appSlug: OfficialPriceAppSlug, planSlug: string) {
+  return officialPricePlans.find((plan) => plan.appSlug === appSlug && plan.slug === planSlug) ?? null;
+}
+
+export function getOfficialPricePlanSummary(id: string) {
+  const parsed = parseOfficialPricePlanId(id);
+  if (!parsed) return null;
+
+  return getOfficialPricePlanSummaries(parsed.appSlug).find((summary) => summary.id === id) ?? null;
+}
+
+export function getOfficialPricePlanSummaries(scope: OfficialPriceScope = "all"): OfficialPricePlanSummary[] {
+  return officialPricePlans
+    .filter((plan) => scope === "all" || plan.appSlug === scope)
+    .map((plan) => {
+      const app = getOfficialPriceApp(plan.appSlug);
+      const rows = getOfficialPriceRows(plan.appSlug, plan.slug);
+      const latestFetchedAt = rows.reduce((latest, row) => (row.fetchedAt > latest ? row.fetchedAt : latest), "");
+
+      return {
+        id: officialPricePlanId(plan.appSlug, plan.slug),
+        appSlug: plan.appSlug,
+        planSlug: plan.slug,
+        label: plan.label,
+        platform: app?.displayName ?? plan.appSlug,
+        provider: app?.provider ?? "",
+        billingPeriod: plan.billingPeriod,
+        notes: plan.notes,
+        sampleCount: rows.length,
+        latestFetchedAt,
+        lowestRow: rows[0] ?? null,
+      };
+    })
+    .sort((a, b) => {
+      const appDelta = officialPriceApps.findIndex((app) => app.slug === a.appSlug) - officialPriceApps.findIndex((app) => app.slug === b.appSlug);
+      if (appDelta !== 0) return appDelta;
+      return a.label.localeCompare(b.label, "zh-CN");
+    });
+}
+
+export function getOfficialPriceOfferRows(scope: OfficialPriceScope = "all") {
+  return officialPriceRows
+    .filter((row) => scope === "all" || row.appSlug === scope)
+    .map((row): OfficialPriceOfferRow | null => {
+      const app = getOfficialPriceApp(row.appSlug);
+      const plan = getOfficialPricePlan(row.appSlug, row.planSlug);
+      if (!app || !plan) return null;
+
+      return {
+        ...row,
+        id: `${officialPricePlanId(row.appSlug, row.planSlug)}__${row.countryCode}`,
+        app,
+        plan,
+      };
+    })
+    .filter((row): row is OfficialPriceOfferRow => Boolean(row))
+    .sort((a, b) => {
+      const appDelta = officialPriceApps.findIndex((app) => app.slug === a.appSlug) - officialPriceApps.findIndex((app) => app.slug === b.appSlug);
+      if (appDelta !== 0) return appDelta;
+      const planDelta =
+        officialPricePlans.findIndex((plan) => plan.appSlug === a.appSlug && plan.slug === a.planSlug) -
+        officialPricePlans.findIndex((plan) => plan.appSlug === b.appSlug && plan.slug === b.planSlug);
+      if (planDelta !== 0) return planDelta;
+      return a.cnyPrice - b.cnyPrice;
+    });
+}
+
+export function getOfficialPriceRowsById(id: string) {
+  const parsed = parseOfficialPricePlanId(id);
+  if (!parsed) return [];
+
+  return getOfficialPriceRows(parsed.appSlug, parsed.planSlug);
+}
+
+function isOfficialPriceAppSlug(value: string): value is OfficialPriceAppSlug {
+  return officialPriceApps.some((app) => app.slug === value);
 }
 
 function price(
