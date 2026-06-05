@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
+import { collectApiModels } from "./collect-api-models.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -72,6 +73,24 @@ for (const offer of dataset.offers) {
   assert.ok(offer.limitSummary, `${offer.id} limitSummary is required.`);
   assert.ok(offer.limitations, `${offer.id} limitations is required.`);
   assert.ok(offer.sourceLabel, `${offer.id} sourceLabel is required.`);
+}
+
+const collectionSnapshot = await collectApiModels({ all: true, dryRun: true, noFetch: true });
+assert.equal(collectionSnapshot.dryRun, true, "API model collector should support dry-run mode.");
+assert.equal(collectionSnapshot.run.status, "success", "No-fetch API model collection should produce a valid snapshot.");
+assert.equal(collectionSnapshot.run.providerCount, dataset.providers.length, "Collector provider count should match static dataset.");
+assert.equal(collectionSnapshot.run.modelCount, dataset.models.length, "Collector model count should match static dataset.");
+assert.equal(collectionSnapshot.run.offerCount, dataset.offers.length, "Collector offer count should match static dataset.");
+assert.ok(collectionSnapshot.run.urlProbeCount >= dataset.providers.length, "Collector should include source URL probes.");
+
+for (const providerSnapshot of collectionSnapshot.providers) {
+  assert.ok(providerIds.has(providerSnapshot.provider.id), `Collector returned unknown provider ${providerSnapshot.provider.id}.`);
+  assert.ok(providerSnapshot.provider.collectorKind, `${providerSnapshot.provider.id} collectorKind is required.`);
+  assert.ok(providerSnapshot.probes.length > 0, `${providerSnapshot.provider.id} should include source probes.`);
+  for (const probe of providerSnapshot.probes) {
+    assert.equal(probe.status, "skipped", `${providerSnapshot.provider.id} no-fetch probe should be skipped.`);
+    assertValidUrl(probe.url, `${providerSnapshot.provider.id} probe url`);
+  }
 }
 
 console.log(

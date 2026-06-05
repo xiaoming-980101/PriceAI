@@ -12,6 +12,7 @@
     "lint": "node_modules/node/bin/node node_modules/eslint/bin/eslint.js",
     "collect:prices": "node scripts/collect-prices.mjs",
     "collect:official": "node scripts/collect-official-prices.mjs",
+    "collect:api-models": "node scripts/collect-api-models.mjs",
     "collect:worker": "node scripts/collect-worker.mjs",
     "import:api-models": "node scripts/import-api-models.mjs",
     "test:api-models": "node scripts/test-api-models.mjs",
