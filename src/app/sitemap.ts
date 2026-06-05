@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getApiModelSummaries } from "@/lib/api-models";
+import { getApiModelSummaries, getApiProviderSummaries } from "@/lib/api-models";
 import { getExplorerData } from "@/lib/data";
 import { getOfficialPricePlanSummaries } from "@/lib/official-prices";
 
@@ -57,5 +57,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.65,
   }));
 
-  return [...staticRoutes, ...productRoutes, ...officialPriceRoutes, ...apiModelRoutes];
+  const apiProviderRoutes: MetadataRoute.Sitemap = getApiProviderSummaries("all").map((provider) => ({
+    url: `${siteUrl}/api-models/providers/${provider.id}`,
+    lastModified: now,
+    changeFrequency: "daily",
+    priority: 0.6,
+  }));
+
+  return [...staticRoutes, ...productRoutes, ...officialPriceRoutes, ...apiModelRoutes, ...apiProviderRoutes];
 }

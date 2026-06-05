@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowLeft, ChevronRight, Clock3, ExternalLink, Terminal } from "lucide-react";
+import { ArrowLeft, Clock3, Database, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -8,9 +8,9 @@ import {
   apiProviderTypeLabels,
   formatApiPrice,
   formatPlanPrice,
-  getApiModelOffersByModel,
-  getApiModelSummary,
-  getApiPlansByModel,
+  getApiModelOffersByProvider,
+  getApiPlansByProvider,
+  getApiProviderSummary,
   type ApiCurrency,
   type ApiModelOfferWithRelations,
   type ApiPlan,
@@ -25,41 +25,42 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const summary = getApiModelSummary(id);
+  const summary = getApiProviderSummary(id);
 
   if (!summary) {
     return {
-      title: "API 模型详情",
+      title: "API 渠道详情",
     };
   }
 
   return {
-    title: `${summary.displayName} API 渠道`,
-    description: `查看 ${summary.displayName} 的官方 API、模型路由、免费测试和订阅套餐入口。`,
+    title: `${summary.provider.name} API 模型覆盖`,
+    description: `查看 ${summary.provider.name} 覆盖的 API 模型、套餐、价格和限制。`,
     alternates: {
-      canonical: `/api-models/${id}`,
+      canonical: `/api-models/providers/${id}`,
     },
     openGraph: {
-      title: `${summary.displayName} API 渠道`,
-      description: `对比 ${summary.displayName} 的公开 API 渠道和限制。`,
-      url: `https://priceai.cc/api-models/${id}`,
+      title: `${summary.provider.name} API 模型覆盖`,
+      description: `对比 ${summary.provider.name} 的公开模型、套餐和限制。`,
+      url: `https://priceai.cc/api-models/providers/${id}`,
     },
   };
 }
 
-export default async function ApiModelDetailPage({
+export default async function ApiProviderDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const summary = getApiModelSummary(id);
+  const summary = getApiProviderSummary(id);
   const currency: ApiCurrency = "CNY";
 
   if (!summary) notFound();
 
-  const rows = getApiModelOffersByModel(id);
-  const plans = getApiPlansByModel(id);
+  const provider = summary.provider;
+  const rows = getApiModelOffersByProvider(id);
+  const plans = getApiPlansByProvider(id);
 
   return (
     <main className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
@@ -79,26 +80,34 @@ export default async function ApiModelDetailPage({
             <div className="min-w-0 max-w-3xl">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge>
-                  <Terminal size={15} />
-                  {summary.family}
+                  <Database size={15} />
+                  {apiProviderTypeLabels[provider.type]}
                 </Badge>
-                <Badge>{summary.model.modelId}</Badge>
-                {summary.model.contextWindow ? <Badge>{summary.model.contextWindow}</Badge> : null}
-                {summary.compatibility.slice(0, 3).map((item) => (
-                  <Badge key={item}>{item}</Badge>
+                {summary.families.map((family) => (
+                  <Badge key={family}>{family}</Badge>
                 ))}
               </div>
               <h1 className="mt-5 font-serif text-3xl font-bold tracking-normal text-[#202829] sm:text-4xl md:text-5xl">
-                {summary.displayName}
+                {provider.name}
               </h1>
-              <p className="mt-4 max-w-[75ch] text-sm leading-7 text-[#5a6061]">{summary.model.description}</p>
+              <p className="mt-4 max-w-[75ch] text-sm leading-7 text-[#5a6061]">{provider.description}</p>
+              <p className="mt-3 max-w-[75ch] text-sm leading-7 text-[#7a541b]">{provider.limitations}</p>
+              <a
+                href={provider.pricingUrl ?? provider.url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-5 inline-flex h-10 items-center gap-1.5 rounded-full bg-[#2d3435] px-4 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526]"
+              >
+                查看来源
+                <ExternalLink size={15} />
+              </a>
             </div>
 
             <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
-              <Metric label="渠道报价" value={`${summary.offerCount}`} />
-              <Metric label="来源渠道" value={`${summary.providerCount}`} />
-              <Metric label="官方 API" value={`${summary.officialCount}`} />
+              <Metric label="模型覆盖" value={`${summary.modelCount}`} />
+              <Metric label="报价明细" value={`${summary.offerCount}`} />
               <Metric label="套餐" value={`${summary.planCount}`} />
+              <Metric label="类型" value={apiProviderTypeLabels[provider.type]} />
             </div>
           </div>
         </section>
@@ -106,8 +115,8 @@ export default async function ApiModelDetailPage({
         {plans.length ? (
           <section className="mt-8">
             <div className="mb-3">
-              <h2 className="font-serif text-3xl font-semibold tracking-normal text-[#202829]">可用套餐</h2>
-              <p className="mt-2 text-sm text-[#5a6061]">套餐不是单纯最低价，需要同时看额度、刷新周期和用途边界。</p>
+              <h2 className="font-serif text-3xl font-semibold tracking-normal text-[#202829]">套餐与额度</h2>
+              <p className="mt-2 text-sm text-[#5a6061]">先看这个渠道的套餐口径，再决定是否适合你的调用方式。</p>
             </div>
             <div className="grid gap-3 lg:grid-cols-2">
               {plans.map((plan) => (
@@ -119,7 +128,7 @@ export default async function ApiModelDetailPage({
 
         <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="font-serif text-3xl font-semibold tracking-normal text-[#202829]">API 渠道报价表</h2>
+            <h2 className="font-serif text-3xl font-semibold tracking-normal text-[#202829]">覆盖模型明细</h2>
             <p className="mt-2 text-sm text-[#5a6061]">
               {rows.length} 条公开渠道信息 · 人民币展示，汇率日期 {apiModelFxSummary.date}
             </p>
@@ -135,8 +144,7 @@ export default async function ApiModelDetailPage({
             <table className="min-w-[1640px] w-full border-collapse text-left text-sm">
               <thead className="bg-[#f2f4f4] text-[0.68rem] font-semibold text-[#5a6061]">
                 <tr>
-                  <TableHead>渠道</TableHead>
-                  <TableHead>类型</TableHead>
+                  <TableHead>模型</TableHead>
                   <TableHead>调用模型名</TableHead>
                   <TableHead>输入价</TableHead>
                   <TableHead>输出价</TableHead>
@@ -179,6 +187,7 @@ function PlanPanel({ plan, currency }: { plan: ApiPlan; currency: ApiCurrency })
       <p className="mt-2 text-sm leading-6 text-[#5a6061]">{plan.quotaSummary}</p>
       <p className="mt-1 text-sm leading-6 text-[#5a6061]">{plan.resetSummary}</p>
       <p className="mt-3 text-xs leading-5 text-[#7a541b]">{plan.limitations}</p>
+      {plan.coverageLabel ? <p className="mt-2 text-xs leading-5 text-[#5a6061]">{plan.coverageLabel}</p> : null}
       <a
         href={plan.url}
         target="_blank"
@@ -198,17 +207,10 @@ function ApiOfferRow({ offer, currency }: { offer: ApiModelOfferWithRelations; c
   return (
     <tr className="align-top transition hover:bg-[#f7f9f9]">
       <td className="px-5 py-4">
-        <Link
-          href={`/api-models/providers/${offer.providerId}`}
-          className="inline-flex max-w-[210px] items-center gap-1.5 font-semibold leading-6 text-[#202829] transition hover:text-[#2f7a4b]"
-        >
-          {offer.provider.name}
-          <ChevronRight size={13} className="shrink-0" />
+        <Link href={`/api-models/${offer.modelId}`} className="block max-w-[230px] font-semibold leading-6 text-[#202829] hover:text-[#2f7a4b]">
+          {offer.model.displayName}
         </Link>
-        <p className="mt-1 text-xs text-[#5a6061]">{offer.billingMode}</p>
-      </td>
-      <td className="px-5 py-4">
-        <TypeChip type={offer.provider.type} />
+        <p className="mt-1 text-xs font-medium text-[#5a6061]">{offer.model.family}</p>
       </td>
       <td className="px-5 py-4">
         <p className="max-w-[230px] font-semibold leading-6 text-[#202829]">{offer.routeModelId ?? offer.model.modelId}</p>
