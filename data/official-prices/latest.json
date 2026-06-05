@@ -1,11 +1,14 @@
 {
-  "generatedAt": "2026-06-05T07:54:53.617Z",
+  "generatedAt": "2026-06-05T11:41:28.744Z",
   "dryRun": false,
   "source": {
     "kind": "apple_app_store_public_html",
     "evidenceSource": "app_store_html",
     "fxSource": "Frankfurter",
-    "fxSourceUrl": "https://api.frankfurter.dev/v1/latest?base=USD&symbols=CNY%2CTRY%2CPHP%2CJPY%2CSGD%2CHKD"
+    "fxSourceUrl": "https://api.frankfurter.dev/v1/latest?base=USD&symbols=CNY%2CTRY%2CPHP%2CJPY%2CSGD%2CHKD",
+    "fxFallback": false,
+    "fxFallbackReason": null,
+    "fxFallbackGeneratedAt": null
   },
   "scope": {
     "apps": [
@@ -55,7 +58,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Go",
       "rawSnippetHash": "6cf595e667ba74b4",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -74,7 +77,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Plus",
       "rawSnippetHash": "74c2b011f05d810a",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -93,7 +96,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Pro 5x",
       "rawSnippetHash": "465af7e72fdb08b7",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -112,7 +115,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Pro 20x",
       "rawSnippetHash": "8f66bf1dbf847dcc",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -131,7 +134,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Go",
       "rawSnippetHash": "98fcf2c1800a2b5a",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -150,7 +153,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Plus",
       "rawSnippetHash": "4c04c724101f2a82",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -169,7 +172,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Pro 5x",
       "rawSnippetHash": "2193763fac8ccdb5",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -188,7 +191,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Pro 20x",
       "rawSnippetHash": "92ab71e6cdd42df1",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -207,7 +210,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Go",
       "rawSnippetHash": "2d9eb6fe793c3ecc",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -226,7 +229,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Plus",
       "rawSnippetHash": "ce215c3b0c111a3a",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -245,7 +248,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Pro 5x",
       "rawSnippetHash": "30e4abab077bfb89",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -264,7 +267,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Pro 20x",
       "rawSnippetHash": "7e71859a6885ea5d",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -283,7 +286,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Go",
       "rawSnippetHash": "cb847fd5da4af1ca",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -302,7 +305,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Plus",
       "rawSnippetHash": "898e3713a1d6bfdc",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -321,7 +324,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Pro 5x",
       "rawSnippetHash": "d5bec803323fc589",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -340,7 +343,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Pro 20x",
       "rawSnippetHash": "623921ae46dcc514",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -359,7 +362,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Go",
       "rawSnippetHash": "d05a1eb3356b9ef5",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -378,7 +381,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Plus",
       "rawSnippetHash": "e55bdb71520b98f0",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -397,7 +400,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Pro 5x",
       "rawSnippetHash": "f848576dbbaefa26",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -416,9 +419,85 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "ChatGPT Pro 20x",
       "rawSnippetHash": "1c97ba0e330b754d",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
+    },
+    {
+      "appSlug": "chatgpt",
+      "planSlug": "go-monthly",
+      "countryCode": "HK",
+      "countryLabel": "香港",
+      "currencyCode": "HKD",
+      "priceText": null,
+      "priceValue": null,
+      "cnyPrice": null,
+      "fxRateToCny": null,
+      "fxDate": null,
+      "sourceUrl": "https://apps.apple.com/hk/app/chatgpt/id6448311069",
+      "evidenceSource": "app_store_html",
+      "rawTitle": null,
+      "rawSnippetHash": null,
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
+      "status": "missing",
+      "failureReason": "App Store returned HTTP 404 for this app and region."
+    },
+    {
+      "appSlug": "chatgpt",
+      "planSlug": "plus-monthly",
+      "countryCode": "HK",
+      "countryLabel": "香港",
+      "currencyCode": "HKD",
+      "priceText": null,
+      "priceValue": null,
+      "cnyPrice": null,
+      "fxRateToCny": null,
+      "fxDate": null,
+      "sourceUrl": "https://apps.apple.com/hk/app/chatgpt/id6448311069",
+      "evidenceSource": "app_store_html",
+      "rawTitle": null,
+      "rawSnippetHash": null,
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
+      "status": "missing",
+      "failureReason": "App Store returned HTTP 404 for this app and region."
+    },
+    {
+      "appSlug": "chatgpt",
+      "planSlug": "pro-5x",
+      "countryCode": "HK",
+      "countryLabel": "香港",
+      "currencyCode": "HKD",
+      "priceText": null,
+      "priceValue": null,
+      "cnyPrice": null,
+      "fxRateToCny": null,
+      "fxDate": null,
+      "sourceUrl": "https://apps.apple.com/hk/app/chatgpt/id6448311069",
+      "evidenceSource": "app_store_html",
+      "rawTitle": null,
+      "rawSnippetHash": null,
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
+      "status": "missing",
+      "failureReason": "App Store returned HTTP 404 for this app and region."
+    },
+    {
+      "appSlug": "chatgpt",
+      "planSlug": "pro-20x",
+      "countryCode": "HK",
+      "countryLabel": "香港",
+      "currencyCode": "HKD",
+      "priceText": null,
+      "priceValue": null,
+      "cnyPrice": null,
+      "fxRateToCny": null,
+      "fxDate": null,
+      "sourceUrl": "https://apps.apple.com/hk/app/chatgpt/id6448311069",
+      "evidenceSource": "app_store_html",
+      "rawTitle": null,
+      "rawSnippetHash": null,
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
+      "status": "missing",
+      "failureReason": "App Store returned HTTP 404 for this app and region."
     },
     {
       "appSlug": "claude",
@@ -435,7 +514,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Pro - Monthly",
       "rawSnippetHash": "65fd40f6a8311d2d",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -454,7 +533,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Max 5x - Monthly",
       "rawSnippetHash": "5ba8e6bfb2d93633",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -473,7 +552,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Max 20x - Monthly",
       "rawSnippetHash": "0d92dfdef27592c6",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -492,7 +571,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Pro - Annual",
       "rawSnippetHash": "50ea3811bc8cef9e",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -511,7 +590,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Pro - Monthly",
       "rawSnippetHash": "3c0b65441640bca1",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -530,7 +609,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Max 5x - Monthly",
       "rawSnippetHash": "06a86d7a53a99fa2",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -549,7 +628,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Max 20x - Monthly",
       "rawSnippetHash": "6d60abb5b14065dc",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -568,7 +647,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Pro - Annual",
       "rawSnippetHash": "98f78eb7e6611564",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -587,7 +666,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Pro - Monthly",
       "rawSnippetHash": "04ac8f42c6dc5397",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -606,7 +685,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Max 5x - Monthly",
       "rawSnippetHash": "49fdd22d867d2941",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -625,7 +704,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Max 20x - Monthly",
       "rawSnippetHash": "25f0aec4d1703ebd",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -644,7 +723,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Pro - Annual",
       "rawSnippetHash": "c522933a3be8b6e1",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -663,7 +742,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Pro - Monthly",
       "rawSnippetHash": "04050a4bce277e4f",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -682,7 +761,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Max 5x - Monthly",
       "rawSnippetHash": "3ead22e741f9a25c",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -701,7 +780,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Max 20x - Monthly",
       "rawSnippetHash": "caece36c6e41a6b8",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -720,7 +799,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Pro - Annual",
       "rawSnippetHash": "61f501588ab69c98",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -739,7 +818,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Pro - Monthly",
       "rawSnippetHash": "a3802a10af02d0b3",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -758,7 +837,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Max 5x - Monthly",
       "rawSnippetHash": "1cc3707627c64c49",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -777,7 +856,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Max 20x - Monthly",
       "rawSnippetHash": "8819e41ebe7395da",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -796,9 +875,85 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Claude Pro - Annual",
       "rawSnippetHash": "1dd5f27ea09e2637",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
+    },
+    {
+      "appSlug": "claude",
+      "planSlug": "pro-monthly",
+      "countryCode": "HK",
+      "countryLabel": "香港",
+      "currencyCode": "HKD",
+      "priceText": null,
+      "priceValue": null,
+      "cnyPrice": null,
+      "fxRateToCny": null,
+      "fxDate": null,
+      "sourceUrl": "https://apps.apple.com/hk/app/claude-by-anthropic/id6473753684",
+      "evidenceSource": "app_store_html",
+      "rawTitle": null,
+      "rawSnippetHash": null,
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
+      "status": "missing",
+      "failureReason": "App Store returned HTTP 404 for this app and region."
+    },
+    {
+      "appSlug": "claude",
+      "planSlug": "max-5x-monthly",
+      "countryCode": "HK",
+      "countryLabel": "香港",
+      "currencyCode": "HKD",
+      "priceText": null,
+      "priceValue": null,
+      "cnyPrice": null,
+      "fxRateToCny": null,
+      "fxDate": null,
+      "sourceUrl": "https://apps.apple.com/hk/app/claude-by-anthropic/id6473753684",
+      "evidenceSource": "app_store_html",
+      "rawTitle": null,
+      "rawSnippetHash": null,
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
+      "status": "missing",
+      "failureReason": "App Store returned HTTP 404 for this app and region."
+    },
+    {
+      "appSlug": "claude",
+      "planSlug": "max-20x-monthly",
+      "countryCode": "HK",
+      "countryLabel": "香港",
+      "currencyCode": "HKD",
+      "priceText": null,
+      "priceValue": null,
+      "cnyPrice": null,
+      "fxRateToCny": null,
+      "fxDate": null,
+      "sourceUrl": "https://apps.apple.com/hk/app/claude-by-anthropic/id6473753684",
+      "evidenceSource": "app_store_html",
+      "rawTitle": null,
+      "rawSnippetHash": null,
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
+      "status": "missing",
+      "failureReason": "App Store returned HTTP 404 for this app and region."
+    },
+    {
+      "appSlug": "claude",
+      "planSlug": "pro-annual",
+      "countryCode": "HK",
+      "countryLabel": "香港",
+      "currencyCode": "HKD",
+      "priceText": null,
+      "priceValue": null,
+      "cnyPrice": null,
+      "fxRateToCny": null,
+      "fxDate": null,
+      "sourceUrl": "https://apps.apple.com/hk/app/claude-by-anthropic/id6473753684",
+      "evidenceSource": "app_store_html",
+      "rawTitle": null,
+      "rawSnippetHash": null,
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
+      "status": "missing",
+      "failureReason": "App Store returned HTTP 404 for this app and region."
     },
     {
       "appSlug": "gemini",
@@ -815,7 +970,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Plus (200GB)",
       "rawSnippetHash": "b286b250b684ca66",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -834,7 +989,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Pro (5 TB)",
       "rawSnippetHash": "da67c39bb7570086",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -853,7 +1008,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Ultra (30 TB)",
       "rawSnippetHash": "9e0583e3e5ee0dd6",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -872,7 +1027,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Plus (200GB)",
       "rawSnippetHash": "077b2a9ad71c40a1",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -891,7 +1046,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Pro (5 TB)",
       "rawSnippetHash": "2ee623978cc14643",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -910,7 +1065,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": null,
       "rawSnippetHash": null,
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "missing",
       "failureReason": "No in-app purchase candidate matched this plan rule."
     },
@@ -929,7 +1084,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Plus (200GB)",
       "rawSnippetHash": "d4931801059d13b0",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -948,7 +1103,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Pro (5 TB)",
       "rawSnippetHash": "db4b709361e8eade",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -967,7 +1122,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Ultra (30 TB)",
       "rawSnippetHash": "32a521e1bb786c42",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -986,7 +1141,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Plus (200GB)",
       "rawSnippetHash": "53d6aae00e16b2cd",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1005,7 +1160,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Pro (5 TB)",
       "rawSnippetHash": "a55e1a5ec9404295",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1024,7 +1179,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Ultra (30 TB)",
       "rawSnippetHash": "0f0f2a099e7b5d0b",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1043,7 +1198,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Plus (200GB)",
       "rawSnippetHash": "15906c22f4c081da",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1062,7 +1217,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Pro (5 TB)",
       "rawSnippetHash": "43de96bd8a402cad",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1081,7 +1236,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Ultra (30 TB)",
       "rawSnippetHash": "8533106e173dedec",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1100,7 +1255,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Plus (200GB)",
       "rawSnippetHash": "1d14675b120b1d0f",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1119,7 +1274,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Pro (5 TB)",
       "rawSnippetHash": "d6736c74e9e3004d",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1138,7 +1293,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "Google AI Ultra (30 TB)",
       "rawSnippetHash": "16defdece934f4dc",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1157,7 +1312,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Lite",
       "rawSnippetHash": "14684d65eac2a1e4",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1176,7 +1331,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok",
       "rawSnippetHash": "0a971320c92fb6e5",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1195,7 +1350,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Heavy",
       "rawSnippetHash": "629fe87a1493b63b",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1214,7 +1369,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Lite",
       "rawSnippetHash": "d1b78186674f0290",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1233,7 +1388,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok",
       "rawSnippetHash": "0293f5d9f3db8ce6",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1252,7 +1407,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Heavy",
       "rawSnippetHash": "565b7361b0d1f283",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1271,7 +1426,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Lite",
       "rawSnippetHash": "bd8a410a93e72e2f",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1290,7 +1445,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok",
       "rawSnippetHash": "019013689951d4f8",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1309,7 +1464,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Heavy",
       "rawSnippetHash": "440e96b7d06c4832",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1328,7 +1483,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Lite",
       "rawSnippetHash": "66dbcd755f299cea",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1347,7 +1502,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok",
       "rawSnippetHash": "f80c1a5eae441931",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1366,7 +1521,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Heavy",
       "rawSnippetHash": "25e56027c6bc4261",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1385,7 +1540,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Lite",
       "rawSnippetHash": "70d3bd9d00f0c614",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1404,7 +1559,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok",
       "rawSnippetHash": "b2ea1d5321a10783",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1423,7 +1578,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Heavy",
       "rawSnippetHash": "c97101f8d93e0577",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1442,7 +1597,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Lite",
       "rawSnippetHash": "b3f0b8fad18b4399",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1461,7 +1616,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok",
       "rawSnippetHash": "3c94e6eeef0c427e",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     },
@@ -1480,7 +1635,7 @@
       "evidenceSource": "app_store_html",
       "rawTitle": "SuperGrok Heavy",
       "rawSnippetHash": "570a84e3036c774c",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
+      "fetchedAt": "2026-06-05T11:41:28.744Z",
       "status": "available",
       "failureReason": null
     }
@@ -1806,38 +1961,17 @@
       "reason": "No plan rule consumed this in-app purchase item."
     }
   ],
-  "failures": [
-    {
-      "appSlug": "chatgpt",
-      "countryCode": "HK",
-      "countryLabel": "香港",
-      "sourceUrl": "https://apps.apple.com/hk/app/chatgpt/id6448311069",
-      "evidenceSource": "app_store_html",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
-      "status": "parse_failed",
-      "failureReason": "HTTP 404 for https://apps.apple.com/hk/app/chatgpt/id6448311069"
-    },
-    {
-      "appSlug": "claude",
-      "countryCode": "HK",
-      "countryLabel": "香港",
-      "sourceUrl": "https://apps.apple.com/hk/app/claude-by-anthropic/id6473753684",
-      "evidenceSource": "app_store_html",
-      "fetchedAt": "2026-06-05T07:54:53.617Z",
-      "status": "parse_failed",
-      "failureReason": "HTTP 404 for https://apps.apple.com/hk/app/claude-by-anthropic/id6473753684"
-    }
-  ],
+  "failures": [],
   "run": {
-    "status": "partial_success",
+    "status": "success",
     "appCount": 4,
     "regionCount": 6,
-    "rowCount": 76,
+    "rowCount": 84,
     "availableCount": 75,
-    "missingCount": 1,
+    "missingCount": 9,
     "needsReviewCount": 0,
     "unmatchedCount": 29,
-    "failureCount": 2,
+    "failureCount": 0,
     "items": [
       {
         "appSlug": "chatgpt",
@@ -1845,7 +1979,7 @@
         "status": "success",
         "matchedCount": 4,
         "rawItemCount": 6,
-        "ms": 566,
+        "ms": 552,
         "failureReason": null
       },
       {
@@ -1854,7 +1988,7 @@
         "status": "success",
         "matchedCount": 4,
         "rawItemCount": 5,
-        "ms": 276,
+        "ms": 306,
         "failureReason": null
       },
       {
@@ -1863,7 +1997,7 @@
         "status": "success",
         "matchedCount": 4,
         "rawItemCount": 5,
-        "ms": 278,
+        "ms": 270,
         "failureReason": null
       },
       {
@@ -1872,7 +2006,7 @@
         "status": "success",
         "matchedCount": 4,
         "rawItemCount": 5,
-        "ms": 510,
+        "ms": 274,
         "failureReason": null
       },
       {
@@ -1881,16 +2015,16 @@
         "status": "success",
         "matchedCount": 4,
         "rawItemCount": 5,
-        "ms": 584,
+        "ms": 269,
         "failureReason": null
       },
       {
         "appSlug": "chatgpt",
         "countryCode": "HK",
-        "status": "failed",
+        "status": "missing",
         "matchedCount": 0,
         "rawItemCount": 0,
-        "ms": 306,
+        "ms": 314,
         "failureReason": "HTTP 404 for https://apps.apple.com/hk/app/chatgpt/id6448311069"
       },
       {
@@ -1899,7 +2033,7 @@
         "status": "success",
         "matchedCount": 4,
         "rawItemCount": 4,
-        "ms": 328,
+        "ms": 267,
         "failureReason": null
       },
       {
@@ -1908,7 +2042,7 @@
         "status": "success",
         "matchedCount": 4,
         "rawItemCount": 4,
-        "ms": 586,
+        "ms": 271,
         "failureReason": null
       },
       {
@@ -1917,7 +2051,7 @@
         "status": "success",
         "matchedCount": 4,
         "rawItemCount": 4,
-        "ms": 610,
+        "ms": 265,
         "failureReason": null
       },
       {
@@ -1926,7 +2060,7 @@
         "status": "success",
         "matchedCount": 4,
         "rawItemCount": 4,
-        "ms": 299,
+        "ms": 274,
         "failureReason": null
       },
       {
@@ -1935,16 +2069,16 @@
         "status": "success",
         "matchedCount": 4,
         "rawItemCount": 4,
-        "ms": 577,
+        "ms": 265,
         "failureReason": null
       },
       {
         "appSlug": "claude",
         "countryCode": "HK",
-        "status": "failed",
+        "status": "missing",
         "matchedCount": 0,
         "rawItemCount": 0,
-        "ms": 374,
+        "ms": 402,
         "failureReason": "HTTP 404 for https://apps.apple.com/hk/app/claude-by-anthropic/id6473753684"
       },
       {
@@ -1953,7 +2087,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 4,
-        "ms": 645,
+        "ms": 276,
         "failureReason": null
       },
       {
@@ -1962,7 +2096,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 5,
-        "ms": 324,
+        "ms": 271,
         "failureReason": null
       },
       {
@@ -1971,7 +2105,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 4,
-        "ms": 641,
+        "ms": 269,
         "failureReason": null
       },
       {
@@ -1980,7 +2114,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 5,
-        "ms": 286,
+        "ms": 267,
         "failureReason": null
       },
       {
@@ -1989,7 +2123,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 5,
-        "ms": 642,
+        "ms": 276,
         "failureReason": null
       },
       {
@@ -1998,7 +2132,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 5,
-        "ms": 592,
+        "ms": 273,
         "failureReason": null
       },
       {
@@ -2007,7 +2141,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 5,
-        "ms": 831,
+        "ms": 819,
         "failureReason": null
       },
       {
@@ -2016,7 +2150,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 5,
-        "ms": 577,
+        "ms": 527,
         "failureReason": null
       },
       {
@@ -2025,7 +2159,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 5,
-        "ms": 885,
+        "ms": 527,
         "failureReason": null
       },
       {
@@ -2034,7 +2168,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 5,
-        "ms": 1069,
+        "ms": 530,
         "failureReason": null
       },
       {
@@ -2043,7 +2177,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 5,
-        "ms": 953,
+        "ms": 600,
         "failureReason": null
       },
       {
@@ -2052,7 +2186,7 @@
         "status": "success",
         "matchedCount": 3,
         "rawItemCount": 5,
-        "ms": 940,
+        "ms": 519,
         "failureReason": null
       }
     ]
