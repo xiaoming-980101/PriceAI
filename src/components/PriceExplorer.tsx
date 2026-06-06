@@ -91,6 +91,7 @@ const EXPLORER_CACHE_KEY = "priceai:explorer:v1";
 const EXPLORER_CACHE_TTL_MS = 5 * 60 * 1000;
 const OFFER_LIST_CACHE_TTL_MS = 2 * 60 * 1000;
 const PRODUCT_DETAIL_PREFETCH_LIMIT = 3;
+const RETURN_HOME_INTENT_KEY = "priceai:return-home-intent";
 const stockOptions = ["all", "available", "out_of_stock"] as const;
 const sortOptions = ["available_price", "price", "updated", "channels"] as const;
 const viewOptions = ["cards", "table"] as const;
@@ -1622,7 +1623,7 @@ function tableStatusClass(isAvailable: boolean): string {
 
 function productDetailHref(slug: string, returnQuery: string): string {
   const path = `/products/${slug}`;
-  return returnQuery ? `${path}?back=${encodeURIComponent(returnQuery)}` : path;
+  return `${path}?back=${encodeURIComponent(returnQuery || "home")}`;
 }
 
 async function fetchOfferPage(
@@ -1749,6 +1750,12 @@ function sourceSecondaryLabel(offer: RawOffer): string | null {
 }
 
 function trackProductDetailOpen(product: Pick<CanonicalProduct, "id" | "platform" | "productType">) {
+  try {
+    window.sessionStorage.setItem(RETURN_HOME_INTENT_KEY, String(Date.now()));
+  } catch {
+    // Returning home still works through the href fallback if session storage is unavailable.
+  }
+
   trackAnalyticsEvent("product_detail_open", {
     product_id: product.id,
     platform: product.platform,

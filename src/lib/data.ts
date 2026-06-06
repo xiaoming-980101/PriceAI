@@ -748,7 +748,8 @@ async function listPublicProductOffersPage(
   const rows = ((data || []) as unknown as Record<string, unknown>[]);
   const total = rows.length ? Number(rows[0].total_count || 0) : await countVisibleProductOffers(productId);
   const offers = rows.map((row) => {
-    const { total_count: _totalCount, ...offerRow } = row;
+    const offerRow = { ...row };
+    delete offerRow.total_count;
     return mapRawOffer(offerRow);
   });
 
