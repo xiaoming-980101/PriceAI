@@ -34,6 +34,10 @@ const semanticIconByProductId: Record<string, LucideIcon> = {
   "other-tool-account": Wrench,
 };
 
+const semanticIconByPlatform: Record<string, LucideIcon> = {
+  接码: MessageCircleMore,
+};
+
 export function BrandIcon({
   platform,
   productId,
@@ -43,7 +47,7 @@ export function BrandIcon({
   productId?: string;
   className?: string;
 }) {
-  const SemanticIcon = productId ? semanticIconByProductId[productId] : null;
+  const SemanticIcon = productId ? semanticIconByProductId[productId] : semanticIconByPlatform[platform];
   const src = productId ? iconByProductId[productId] || iconByPlatform[platform] : iconByPlatform[platform];
 
   if (SemanticIcon) {
