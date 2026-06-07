@@ -216,10 +216,17 @@ export default function HowToSubscribeAiOfficiallyGuide() {
             <div>
               <h2 className="font-serif text-2xl font-semibold tracking-normal text-[#202829]">判断完官方路径，再看具体价格。</h2>
               <p className="mt-2 text-sm leading-6 text-[#5a6061]">
-                如果自己支付不顺，先看官方地区价和价格分层；如果准备找渠道，再回到比价工具核验当前有货报价。
+                如果自己支付不顺，先看 Apple ID 路径、官方地区价和价格分层；如果准备找渠道，再回到比价工具核验当前有货报价。
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-3">
+              <Link
+                href="/guides/apple-id-ai-subscription"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-[#2d3435] ring-1 ring-[#adb3b4]/20 transition hover:bg-[#f5f7f7]"
+              >
+                Apple ID 路径
+                <ArrowRight size={16} />
+              </Link>
               <Link
                 href="/official-prices"
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-[#2d3435] ring-1 ring-[#adb3b4]/20 transition hover:bg-[#f5f7f7]"

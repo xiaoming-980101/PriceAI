@@ -170,6 +170,13 @@ export default function WhyAiSubscriptionPricesDifferGuide() {
             </div>
             <div className="flex shrink-0 flex-wrap gap-3">
               <Link
+                href="/guides/apple-id-ai-subscription"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-[#2d3435] ring-1 ring-[#adb3b4]/20 transition hover:bg-[#f5f7f7]"
+              >
+                Apple ID 路径
+                <ArrowRight size={16} />
+              </Link>
+              <Link
                 href="/guides/how-to-subscribe-ai-officially"
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-[#2d3435] ring-1 ring-[#adb3b4]/20 transition hover:bg-[#f5f7f7]"
               >

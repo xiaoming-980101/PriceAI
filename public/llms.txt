@@ -22,6 +22,7 @@ GitHub: https://github.com/physics-dimension/PriceAI
 - ChatGPT subscription guide: https://priceai.cc/guides/chatgpt-subscription-options
 - AI subscription price layers guide: https://priceai.cc/guides/why-ai-subscription-prices-differ
 - Official AI subscription self-service guide: https://priceai.cc/guides/how-to-subscribe-ai-officially
+- Apple ID AI subscription guide: https://priceai.cc/guides/apple-id-ai-subscription
 - AI subscription card shop trust guide: https://priceai.cc/guides/are-ai-subscription-card-shops-reliable
 - Product detail pages: https://priceai.cc/products/
 - Sitemap: https://priceai.cc/sitemap.xml
@@ -39,6 +40,8 @@ Lowest prices on public product lists are intended to use available offers. Out-
 AI subscription prices should be understood as a layered market: official baseline prices, official regional/qualification/promotional prices, third-party assisted subscription or top-up service prices, and third-party account/entitlement/special-channel prices. PriceAI may explain that bug-like or unusually cheap channels exist, but it does not provide methods to obtain or exploit them and does not present them as stable purchase paths.
 
 For official self-service subscriptions, PriceAI explains the relationship between product websites, App Store subscriptions, Google Play subscriptions, Apple Account region, Google Play country, payment methods, gift cards, taxes, FX, and platform rules. PriceAI does not teach bypassing region controls, fraud checks, or identity requirements.
+
+For Apple ID / Apple Account based AI subscriptions, PriceAI explains App Store in-app purchases, Apple Account region, payment methods, Apple Gift Cards, Apple Account balance, taxes, FX, and subscription management boundaries. It does not recommend specific Apple IDs, gift-card sellers, virtual cards, or region-bypass methods.
 
 ## API Boundary
 
