@@ -15,8 +15,13 @@ if (!targetUrl) {
 
 const sourceName = args.name || sourceNameFromUrl(targetUrl);
 const endpoint = args.endpoint || "http://localhost:3000";
-const password = args.password || process.env.ADMIN_PASSWORD || "ai-price-hub-local";
+const password = args.password || process.env.ADMIN_PASSWORD || process.env.CRON_SECRET || null;
 const browserPath = args.browser || process.env.BROWSER_PATH || findBrowserPath();
+
+if (args.post && !password) {
+  console.error("--post 写回后台需要 --password、ADMIN_PASSWORD 或 CRON_SECRET。");
+  process.exit(1);
+}
 
 if (!browserPath) {
   console.error("没有找到可控制的本机浏览器。请安装 Chrome/Edge/Brave，或使用 --browser /path/to/browser 指定。");

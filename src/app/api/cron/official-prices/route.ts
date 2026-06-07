@@ -81,9 +81,6 @@ function authorizeCronRequest(request: Request) {
   const authorization = request.headers.get("authorization");
   if (secret && authorization === `Bearer ${secret}`) return null;
 
-  const url = new URL(request.url);
-  if (secret && url.searchParams.get("secret") === secret) return null;
-
   const adminHeader = request.headers.get("x-admin-password");
   if (adminPassword && adminHeader === adminPassword) return null;
 

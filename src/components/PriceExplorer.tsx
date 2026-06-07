@@ -60,6 +60,8 @@ type OfferListResponse = {
   total: number;
   limited: boolean;
   generatedAt: string;
+  degraded?: boolean;
+  message?: string | null;
 };
 
 const productTypeLabels: Record<string, string> = {
@@ -90,6 +92,8 @@ const scopeOptions = ["products", "offers"] as const;
 const EMPTY_EXPLORER_DATA: ExplorerData = {
   generatedAt: "",
   configured: true,
+  degraded: false,
+  message: null,
   products: [],
   sources: [],
   offerTotal: 0,
@@ -129,6 +133,7 @@ export function PriceExplorer({
   const [dataLoading, setDataLoading] = useState(!data && !explorerMemoryCache);
   const [dataError, setDataError] = useState<string | null>(null);
   const [query, setQuery] = useState(initialState.query ?? "");
+  const [effectiveQuery, setEffectiveQuery] = useState(initialState.query ?? "");
   const [platform, setPlatform] = useState(initialState.platform ?? "全部");
   const [productType, setProductType] = useState(initialState.productType ?? "全部");
   const [stock, setStock] = useState(initialState.stock ?? "all");
@@ -162,6 +167,7 @@ export function PriceExplorer({
     const frameId = window.requestAnimationFrame(() => {
       const nextState = parseExplorerInitialState(new URLSearchParams(window.location.search));
       setQuery(nextState.query ?? "");
+      setEffectiveQuery(nextState.query ?? "");
       setPlatform(nextState.platform ?? "全部");
       setProductType(nextState.productType ?? "全部");
       setStock(nextState.stock ?? "all");
@@ -180,7 +186,7 @@ export function PriceExplorer({
   }, [restoreStateFromUrl]);
 
   const products = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = effectiveQuery.trim().toLowerCase();
     const min = minPrice ? Number(minPrice) : null;
     const max = maxPrice ? Number(maxPrice) : null;
 
@@ -245,7 +251,7 @@ export function PriceExplorer({
 
       return compareProductFallback(a, b);
     });
-  }, [explorerData.products, maxPrice, minPrice, platform, productType, query, sort, stock]);
+  }, [effectiveQuery, explorerData.products, maxPrice, minPrice, platform, productType, sort, stock]);
 
   const totalAvailable = explorerData.products.reduce((sum, product) => sum + product.inStockCount, 0);
   const totalOutOfStock = explorerData.products.reduce((sum, product) => sum + product.outOfStockCount, 0);
@@ -273,6 +279,26 @@ export function PriceExplorer({
       }).toString(),
     [maxPrice, minPrice, platform, productType, query, scopeMode, sort, stock, viewMode],
   );
+  const offerQueryString = useMemo(
+    () =>
+      buildExplorerSearchParams({
+        query: effectiveQuery,
+        platform,
+        productType,
+        stock,
+        sort,
+        minPrice,
+        maxPrice,
+        viewMode,
+        scopeMode,
+      }).toString(),
+    [effectiveQuery, maxPrice, minPrice, platform, productType, scopeMode, sort, stock, viewMode],
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setEffectiveQuery(query), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
     if (!data) return;
@@ -374,7 +400,7 @@ export function PriceExplorer({
     if (!showingOffers) return;
 
     const controller = new AbortController();
-    const cacheKey = offerListCacheKey(explorerQueryString, 0);
+    const cacheKey = offerListCacheKey(offerQueryString, 0);
 
     async function loadOffers() {
       const cachedOffers =
@@ -393,7 +419,7 @@ export function PriceExplorer({
       setOffersError(null);
 
       try {
-        const nextResponse = await fetchOfferPage(explorerQueryString, 0, controller.signal);
+        const nextResponse = await fetchOfferPage(offerQueryString, 0, controller.signal);
         offerListMemoryCache.set(cacheKey, nextResponse);
         writeSessionCache(cacheKey, nextResponse);
         setOfferResponse(nextResponse);
@@ -409,7 +435,7 @@ export function PriceExplorer({
     loadOffers();
 
     return () => controller.abort();
-  }, [explorerQueryString, showingOffers, urlStateReady]);
+  }, [offerQueryString, showingOffers, urlStateReady]);
 
   const loadMoreOffers = useCallback(async () => {
     if (!showingOffers || !offerResponse || offersLoading || offersPaging) return;
@@ -418,7 +444,7 @@ export function PriceExplorer({
     setOffersPaging(true);
 
     try {
-      const nextPage = await fetchOfferPage(explorerQueryString, platformOffers.length);
+      const nextPage = await fetchOfferPage(offerQueryString, platformOffers.length);
       setOfferResponse((current) => {
         if (!current) return nextPage;
 
@@ -432,7 +458,7 @@ export function PriceExplorer({
           limited: nextPage.limited,
         };
 
-        const cacheKey = offerListCacheKey(explorerQueryString, 0);
+        const cacheKey = offerListCacheKey(offerQueryString, 0);
         offerListMemoryCache.set(cacheKey, mergedResponse);
         writeSessionCache(cacheKey, mergedResponse);
 
@@ -443,7 +469,7 @@ export function PriceExplorer({
     } finally {
       setOffersPaging(false);
     }
-  }, [explorerQueryString, offerResponse, offersLoading, offersPaging, platformOffers.length, showingOffers]);
+  }, [offerQueryString, offerResponse, offersLoading, offersPaging, platformOffers.length, showingOffers]);
 
   useEffect(() => {
     if (!hasMoreOffers) return;
@@ -483,6 +509,10 @@ export function PriceExplorer({
           <div className="mb-8 rounded-lg bg-[#fff7e8] px-5 py-4 text-sm text-[#6a4b16] shadow-[0_18px_50px_rgba(45,52,53,0.04)]">
             当前使用内置演示数据。配置 Supabase 后，可在后台维护渠道并保存真实采集结果。
           </div>
+        ) : null}
+
+        {!dataLoading && explorerData.degraded ? (
+          <DegradedBanner message={explorerData.message} />
         ) : null}
 
         <div className="mb-6 space-y-4 md:mb-9 md:space-y-5">
@@ -734,6 +764,9 @@ export function PriceExplorer({
             <EmptyState text={offersError} />
           ) : platformOffers.length ? (
             <>
+              {offerResponse?.degraded ? (
+                <DegradedBanner message={offerResponse.message} className="mb-4" />
+              ) : null}
               <PlatformOfferTable rows={platformOffers} onFeedback={setFeedbackRow} />
               {hasMoreOffers ? (
                 <div ref={offerLoadMoreRef} className="mt-4 flex justify-center">
@@ -758,7 +791,12 @@ export function PriceExplorer({
               ) : null}
             </>
           ) : (
-            <EmptyState text="没有符合条件的报价" />
+            <>
+              {offerResponse?.degraded ? (
+                <DegradedBanner message={offerResponse.message} className="mb-4" />
+              ) : null}
+              <EmptyState text="没有符合条件的报价" />
+            </>
           )
         ) : dataLoading ? (
           <ProductTableSkeleton viewMode={viewMode} />
@@ -1046,6 +1084,14 @@ function EmptyState({ text }: { text: string }) {
     <div className="rounded-lg bg-white px-6 py-16 text-center shadow-[0_20px_60px_rgba(45,52,53,0.05)] ring-1 ring-[#adb3b4]/15">
       <p className="font-serif text-2xl font-semibold text-[#202829]">{text}</p>
       <p className="mt-3 text-sm text-[#5a6061]">放宽筛选条件，或者提交新的可采集渠道。</p>
+    </div>
+  );
+}
+
+function DegradedBanner({ message, className = "mb-8" }: { message?: string | null; className?: string }) {
+  return (
+    <div className={`${className} rounded-lg bg-[#fff2ef] px-5 py-4 text-sm text-[#7b2f26] shadow-[0_18px_50px_rgba(45,52,53,0.04)] ring-1 ring-[#efd0ca]`}>
+      {message || "真实报价数据暂时不可用，请稍后刷新。"}
     </div>
   );
 }

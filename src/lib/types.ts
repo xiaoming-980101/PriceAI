@@ -107,6 +107,8 @@ export type ExplorerProductSummary = Omit<ProductGroup, "offers"> & {
 export type ExplorerData = {
   generatedAt: string;
   configured: boolean;
+  degraded?: boolean;
+  message?: string | null;
   products: ExplorerProductSummary[];
   sources: Source[];
   offerTotal: number;
@@ -115,6 +117,8 @@ export type ExplorerData = {
 export type DashboardData = {
   generatedAt: string;
   configured: boolean;
+  degraded?: boolean;
+  message?: string | null;
   products: ProductGroup[];
   sources: Source[];
   rawOffers: RawOffer[];
@@ -122,6 +126,7 @@ export type DashboardData = {
 
 export type AdminSummary = DashboardData & {
   isAuthenticated: boolean;
+  loadErrors: AdminLoadError[];
   rawOfferTotal: number;
   hiddenRawOfferTotal: number;
   crawlRuns: CrawlRun[];
@@ -134,6 +139,12 @@ export type AdminSummary = DashboardData & {
   sourceOfferStats: SourceOfferStats[];
   hiddenRawOffers: RawOffer[];
   feedbackRawOffers: RawOffer[];
+};
+
+export type AdminLoadError = {
+  key: string;
+  label: string;
+  message: string;
 };
 
 export type SourceOfferStats = {

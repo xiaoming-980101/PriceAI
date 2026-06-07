@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ADMIN_MANUAL_HIDE_REASON_PREFIX, listOfferFeedback, listSiteFeedback, listSubmissions } from "./admin";
+import { notifyOperationalIssue } from "./alerts";
 import { buildProductGroups, canonicalCatalog, comparePlatformOrder, resolveOfferProduct } from "./catalog";
 import { isSupabaseConfigured } from "./env";
 import { getApiModelAdminData } from "./api-models-db";
@@ -59,10 +60,14 @@ const RAW_OFFER_PUBLIC_SELECT = [
 
 type PublicOfferData = {
   configured: boolean;
+  degraded?: boolean;
+  message?: string | null;
   generatedAt: string;
   offers: RawOffer[];
   products: CanonicalProduct[];
 };
+
+const DATA_UNAVAILABLE_MESSAGE = "真实报价数据暂时不可用，请稍后刷新。";
 
 type PublicOfferPageRow = Record<string, unknown> & {
   total_count?: number | string | null;
@@ -176,8 +181,17 @@ async function readDashboardData(): Promise<DashboardData> {
 
     return buildDashboard(offers, sources, products.length ? products : canonicalCatalog, true);
   } catch (error) {
-    console.warn("Falling back to seed data because Supabase read failed:", error);
-    return buildDashboard(seedRawOffers, seedSources, canonicalCatalog, isSupabaseConfigured());
+    console.error("Supabase dashboard read failed:", error);
+    await notifyOperationalIssue({
+      event: "dashboard-data-degraded",
+      title: "PriceAI 后台数据读取失败，已进入降级状态",
+      severity: "critical",
+      details: { message: errorMessage(error) },
+    });
+    return buildDashboard([], [], canonicalCatalog, isSupabaseConfigured(), {
+      degraded: true,
+      message: DATA_UNAVAILABLE_MESSAGE,
+    });
   }
 }
 
@@ -235,6 +249,7 @@ async function loadPublicOfferData(): Promise<PublicOfferData> {
   if (!supabase) {
     return {
       configured: false,
+      degraded: false,
       generatedAt: new Date().toISOString(),
       offers: seedRawOffers.filter((offer) => !offer.hidden),
       products: canonicalCatalog,
@@ -254,11 +269,19 @@ async function loadPublicOfferData(): Promise<PublicOfferData> {
       products: products.length ? products : canonicalCatalog,
     };
   } catch (error) {
-    console.warn("Falling back to seed public offers because Supabase read failed:", error);
+    console.error("Supabase public offer read failed:", error);
+    await notifyOperationalIssue({
+      event: "public-offers-degraded",
+      title: "PriceAI 公开报价读取失败，前台已显示降级提示",
+      severity: "critical",
+      details: { message: errorMessage(error) },
+    });
     return {
       configured: isSupabaseConfigured(),
+      degraded: true,
+      message: DATA_UNAVAILABLE_MESSAGE,
       generatedAt: new Date().toISOString(),
-      offers: seedRawOffers.filter((offer) => !offer.hidden),
+      offers: [],
       products: canonicalCatalog,
     };
   }
@@ -297,6 +320,8 @@ async function buildExplorerData(): Promise<ExplorerData> {
   return {
     generatedAt: publicData.generatedAt,
     configured: publicData.configured,
+    degraded: publicData.degraded,
+    message: publicData.message,
     products: products.map(toExplorerProductSummary),
     sources: [],
     offerTotal: publicData.offers.length,
@@ -309,7 +334,7 @@ async function getExplorerDataFromDatabase(): Promise<ExplorerData | null> {
 
   const { data, error } = await supabase.rpc("list_public_product_summaries");
   if (error) {
-    console.warn("Falling back to full public data because product summary RPC failed:", error.message);
+    console.error("Product summary RPC failed:", error.message);
     return null;
   }
 
@@ -317,6 +342,8 @@ async function getExplorerDataFromDatabase(): Promise<ExplorerData | null> {
   return {
     generatedAt: new Date().toISOString(),
     configured: true,
+    degraded: false,
+    message: null,
     products: rows.map(mapPublicProductSummaryRow),
     sources: [],
     offerTotal: rows.reduce((sum, row) => sum + Number(row.offer_count || 0), 0),
@@ -330,6 +357,7 @@ export function getEmptyAdminSummary(isAuthenticated = false): AdminSummary {
     products: [],
     sources: [],
     rawOffers: [],
+    loadErrors: [],
     rawOfferTotal: 0,
     hiddenRawOfferTotal: 0,
     isAuthenticated,
@@ -488,6 +516,7 @@ async function readAdminSummary(): Promise<AdminSummary> {
       rawOfferTotal: dashboard.rawOffers.length,
       hiddenRawOfferTotal: 0,
       isAuthenticated: false,
+      loadErrors: [],
       crawlRuns: [],
       collectionJobs: [],
       officialPrices,
@@ -501,6 +530,7 @@ async function readAdminSummary(): Promise<AdminSummary> {
     };
   }
 
+  const loadErrors: AdminSummary["loadErrors"] = [];
   const [
     sourcesResult,
     productsResult,
@@ -517,19 +547,19 @@ async function readAdminSummary(): Promise<AdminSummary> {
   ] = await Promise.all([
     supabase.from("sources").select("*").order("name"),
     supabase.from("canonical_products").select("*").eq("is_active", true),
-    listAdminVisibleRawOffers().catch(() => ({ rows: [], total: 0 })),
+    adminLoad("visible-offers", "可见报价", listAdminVisibleRawOffers(), { rows: [], total: 0 }, loadErrors),
     supabase
       .from("crawl_runs")
       .select("*")
       .order("started_at", { ascending: false })
       .limit(30),
-    listCollectionJobs().catch(() => []),
-    listSubmissions("pending").catch(() => []),
-    listOfferFeedback("pending").catch(() => []),
-    listSiteFeedback("pending").catch(() => []),
-    listSourceOfferStats().catch(() => []),
-    listAdminHiddenRawOffers().catch(() => ({ rows: [], total: 0 })),
-    getOfficialSubscriptionAdminData().catch(() => ({
+    adminLoad("collection-jobs", "采集任务", listCollectionJobs(), [], loadErrors),
+    adminLoad("pending-submissions", "待审核渠道", listSubmissions("pending"), [], loadErrors),
+    adminLoad("offer-feedback", "报价反馈", listOfferFeedback("pending"), [], loadErrors),
+    adminLoad("site-feedback", "站点反馈", listSiteFeedback("pending"), [], loadErrors),
+    adminLoad("source-offer-stats", "渠道报价统计", listSourceOfferStats(), [], loadErrors),
+    adminLoad("hidden-offers", "手动下架报价", listAdminHiddenRawOffers(), { rows: [], total: 0 }, loadErrors),
+    adminLoad("official-prices", "官方地区价", getOfficialSubscriptionAdminData(), {
       configured: isSupabaseConfigured(),
       tableReady: false,
       source: "static" as const,
@@ -541,8 +571,8 @@ async function readAdminSummary(): Promise<AdminSummary> {
       currentPrices: [],
       collectRuns: [],
       unmatchedItems: [],
-    })),
-    getApiModelAdminData().catch(() => ({
+    }, loadErrors),
+    adminLoad("api-models", "API 模型", getApiModelAdminData(), {
       configured: isSupabaseConfigured(),
       tableReady: false,
       source: "static" as const,
@@ -555,15 +585,22 @@ async function readAdminSummary(): Promise<AdminSummary> {
       collectRuns: [],
       providerCandidates: [],
       providerSubmissions: [],
-    })),
+    }, loadErrors),
   ]);
+
+  if (sourcesResult.error) recordAdminLoadError(loadErrors, "sources", "渠道源", sourcesResult.error);
+  if (productsResult.error) recordAdminLoadError(loadErrors, "canonical-products", "标准商品", productsResult.error);
+  if (error) recordAdminLoadError(loadErrors, "crawl-runs", "采集日志", error);
 
   const sources = sourcesResult.error ? [] : (sourcesResult.data || []).map(mapSource);
   const feedbackRawOffers = await listRawOffersByIds(
     pendingOfferFeedback
       .map((item) => item.offerId)
       .filter((id): id is string => Boolean(id)),
-  ).catch(() => []);
+  ).catch((error) => {
+    recordAdminLoadError(loadErrors, "feedback-offers", "反馈关联报价", error);
+    return [];
+  });
   const canonicalProducts = productsResult.error
     ? canonicalCatalog
     : (productsResult.data || []).map(mapCanonicalProduct);
@@ -583,6 +620,7 @@ async function readAdminSummary(): Promise<AdminSummary> {
       rawOfferTotal: visibleOfferData.total,
       hiddenRawOfferTotal: hiddenOfferData.total,
       isAuthenticated: false,
+      loadErrors,
       crawlRuns: [],
       collectionJobs,
       officialPrices,
@@ -601,6 +639,7 @@ async function readAdminSummary(): Promise<AdminSummary> {
     rawOfferTotal: visibleOfferData.total,
     hiddenRawOfferTotal: hiddenOfferData.total,
     isAuthenticated: false,
+    loadErrors,
     crawlRuns: (data || []).map(mapCrawlRun),
     collectionJobs,
     officialPrices,
@@ -626,6 +665,41 @@ function toAdminOfferSearchPattern(value: string): string | null {
   const normalized = value.trim();
   if (!normalized) return null;
   return `%${normalized.replace(/[%,()]/g, " ").replace(/\s+/g, "%")}%`;
+}
+
+async function adminLoad<T>(
+  key: string,
+  label: string,
+  promise: Promise<T>,
+  fallback: T,
+  loadErrors: AdminSummary["loadErrors"],
+): Promise<T> {
+  try {
+    return await promise;
+  } catch (error) {
+    recordAdminLoadError(loadErrors, key, label, error);
+    return fallback;
+  }
+}
+
+function recordAdminLoadError(
+  loadErrors: AdminSummary["loadErrors"],
+  key: string,
+  label: string,
+  error: unknown,
+): void {
+  console.error(`Admin summary module failed: ${key}`, error);
+  if (loadErrors.some((item) => item.key === key)) return;
+  loadErrors.push({
+    key,
+    label,
+    message: errorMessage(error),
+  });
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error || "未知错误");
 }
 
 function filterAdminOfferMaintenanceRows(offers: RawOffer[], query: string): RawOffer[] {
@@ -901,6 +975,8 @@ async function loadPublicProductOffers(
       offers: [],
       total: 0,
       generatedAt: publicData.generatedAt,
+      degraded: publicData.degraded,
+      message: publicData.message,
     };
   }
 
@@ -915,6 +991,8 @@ async function loadPublicProductOffers(
     total,
     limited: total > offset + limit,
     generatedAt: publicData.generatedAt,
+    degraded: publicData.degraded,
+    message: publicData.message,
   };
 }
 
@@ -932,7 +1010,7 @@ async function getPublicProductOffersFromDatabase(
   });
 
   if (error) {
-    console.warn("Falling back to full public data because product offers RPC failed:", error.message);
+    console.error("Product offers RPC failed:", error.message);
     return null;
   }
 
@@ -945,6 +1023,8 @@ async function getPublicProductOffersFromDatabase(
     total,
     limited: total > filters.offset + filters.limit,
     generatedAt: new Date().toISOString(),
+    degraded: false,
+    message: null,
   };
 }
 
@@ -1022,6 +1102,8 @@ export async function listPublicOffers(filters: OfferListFilters = {}) {
     total: rows.length,
     limited: rows.length > offset + limit,
     generatedAt: publicData.generatedAt,
+    degraded: publicData.degraded,
+    message: publicData.message,
   };
 }
 
@@ -1044,7 +1126,7 @@ async function listPublicOffersFromDatabase(filters: OfferListFilters = {}) {
   });
 
   if (error) {
-    console.warn("Falling back to full public data because public offers RPC failed:", error.message);
+    console.error("Public offers RPC failed:", error.message);
     return null;
   }
 
@@ -1059,6 +1141,8 @@ async function listPublicOffersFromDatabase(filters: OfferListFilters = {}) {
     total,
     limited: total > offset + limit,
     generatedAt: new Date().toISOString(),
+    degraded: false,
+    message: null,
   };
 }
 
@@ -1149,10 +1233,13 @@ function buildDashboard(
   sources: Source[],
   products: CanonicalProduct[],
   configured: boolean,
+  options: Pick<DashboardData, "degraded" | "message"> = {},
 ): DashboardData {
   return {
     generatedAt: new Date().toISOString(),
     configured,
+    degraded: options.degraded,
+    message: options.message,
     products: buildProductGroups(offers, products),
     sources,
     rawOffers: offers,

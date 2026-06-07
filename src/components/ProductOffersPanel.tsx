@@ -13,6 +13,8 @@ type ProductOffersResponse = {
   total: number;
   limited?: boolean;
   generatedAt: string;
+  degraded?: boolean;
+  message?: string | null;
 };
 
 const OFFER_PAGE_SIZE = 80;
@@ -175,6 +177,9 @@ export function ProductOffersPanel({
 
   return (
     <>
+      {data?.degraded ? (
+        <DegradedBanner message={data.message} />
+      ) : null}
       <OfferTable offers={offers} onFeedback={setFeedbackOffer} />
       <section className="mt-5 grid gap-3 md:hidden">
         {offers.map((offer) => (
@@ -203,6 +208,14 @@ export function ProductOffersPanel({
         />
       ) : null}
     </>
+  );
+}
+
+function DegradedBanner({ message }: { message?: string | null }) {
+  return (
+    <div className="mt-6 rounded-lg bg-[#fff2ef] px-5 py-4 text-sm text-[#7b2f26] ring-1 ring-[#efd0ca]">
+      {message || "真实报价数据暂时不可用，请稍后刷新。"}
+    </div>
   );
 }
 

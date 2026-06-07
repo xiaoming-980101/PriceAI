@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { safeFetch } from "./safe-fetch.mjs";
 
 const env = readEnvFile(".env.local");
 
@@ -63,6 +64,8 @@ const DEFAULT_LOCK_SECONDS = 10 * 60;
 const DEFAULT_LIANDONG_SHOP_BULK_LIMIT = 20;
 const DEFAULT_LIANDONG_SHOP_BULK_DELAY_MS = 15_000;
 const DEFAULT_LIANDONG_SHOP_BREAKER_MINUTES = 30;
+const DEFAULT_PAGE_DELAY_MS = 300;
+const DEFAULT_CONCURRENCY = 1;
 
 export async function runPriceCollection(options = {}) {
   const targets = await loadTargets();
@@ -75,128 +78,18 @@ export async function runPriceCollection(options = {}) {
     throw new Error("No matching supported sources. Use --list to inspect available collectors.");
   }
 
-  const summary = [];
-
-  for (const target of selectedTargets) {
-    const startedAt = Date.now();
-    const cooldown = cooldownSkipReason(target, options);
-    if (cooldown) {
-      logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
-      logger?.log(`Skipped: ${cooldown.message}`);
-      summary.push({
-        sourceId: target.sourceId,
-        source: target.sourceName,
-        kind: target.kind,
-        status: "skipped",
-        offers: 0,
-        attempts: 0,
-        ms: Date.now() - startedAt,
-        message: cooldown.message,
-      });
-      continue;
-    }
-
-    const familySkip = collectionFamilySkipReason(target, familyState);
-    if (familySkip) {
-      logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
-      logger?.log(`Skipped: ${familySkip.message}`);
-      summary.push({
-        sourceId: target.sourceId,
-        source: target.sourceName,
-        kind: target.kind,
-        status: "skipped",
-        offers: 0,
-        attempts: 0,
-        ms: Date.now() - startedAt,
-        message: familySkip.message,
-      });
-      continue;
-    }
-
-    const lock = await acquireCollectionLock(target, lockOwner, options);
-    if (!lock.acquired) {
-      logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
-      logger?.log(`Skipped: ${lock.message}`);
-      summary.push({
-        sourceId: target.sourceId,
-        source: target.sourceName,
-        kind: target.kind,
-        status: "skipped",
-        offers: 0,
-        attempts: 0,
-        ms: Date.now() - startedAt,
-        message: lock.message,
-      });
-      continue;
-    }
-
-    await waitForCollectionFamily(target, familyState, logger);
-    markCollectionFamilyStarted(target, familyState);
-
-    logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
-
-    try {
-      const collection = await collectTargetWithRetries(target, options, logger);
-      const offers = collection.offers;
-      const status = offers.length ? "success" : "failed";
-      const message = offers.length
-        ? `HTTP collector found ${offers.length} offers after ${collection.attempts.length} attempt(s).`
-        : `HTTP collector found no offers after ${collection.attempts.length} attempt(s).`;
-
-      if (logger) printOfferPreview(offers);
-
-      if (options.post) {
-        const posted = await postCrawlLogBatched(target, offers, status, message, options, {
-          attempts: collection.attempts,
-          maxAttempts: collection.maxAttempts,
-        });
-        logger?.log(
-          `Posted ${posted.successCount} offers` +
-            (posted.writtenCount !== undefined
-              ? `, wrote ${posted.writtenCount}, unchanged ${posted.unchangedCount || 0}.`
-              : "."),
-        );
+  const groups = targetGroupsForCollection(selectedTargets);
+  const summary = (await runWithConcurrency(
+    groups,
+    concurrencyFor(options),
+    async (group) => {
+      const results = [];
+      for (const target of group.targets) {
+        results.push(await collectOneTarget(target, options, logger, lockOwner, familyState));
       }
-
-      summary.push({
-        sourceId: target.sourceId,
-        source: target.sourceName,
-        kind: target.kind,
-        status,
-        offers: offers.length,
-        attempts: collection.attempts.length,
-        ms: Date.now() - startedAt,
-      });
-      recordCollectionFamilyResult(target, familyState, { status, message });
-    } catch (error) {
-      const message = errorMessage(error);
-      const attempts = Array.isArray(error?.attempts) ? error.attempts : [];
-      logger?.error(`Failed: ${message}`);
-      recordCollectionFamilyResult(target, familyState, { status: "failed", message, logger });
-
-      if (options.post) {
-        await postCrawlLog(target, [], "failed", message, options, {
-          attempts,
-          maxAttempts: maxAttemptsFor(options),
-        }).catch((postError) => {
-          logger?.error(`Failed to post failure log: ${errorMessage(postError)}`);
-        });
-      }
-
-      summary.push({
-        sourceId: target.sourceId,
-        source: target.sourceName,
-        kind: target.kind,
-        status: "failed",
-        offers: 0,
-        attempts: attempts.length || maxAttemptsFor(options),
-        ms: Date.now() - startedAt,
-        message,
-      });
-    } finally {
-      await releaseCollectionLock(target, lockOwner, logger);
-    }
-  }
+      return results;
+    },
+  )).flat();
 
   return {
     summary,
@@ -207,6 +100,108 @@ export async function runPriceCollection(options = {}) {
     offerCount: summary.reduce((sum, item) => sum + item.offers, 0),
     finishedAt: new Date().toISOString(),
   };
+}
+
+async function collectOneTarget(target, options, logger, lockOwner, familyState) {
+  const startedAt = Date.now();
+  const skipped = (message) => ({
+    sourceId: target.sourceId,
+    source: target.sourceName,
+    kind: target.kind,
+    status: "skipped",
+    offers: 0,
+    attempts: 0,
+    ms: Date.now() - startedAt,
+    message,
+  });
+
+  const cooldown = cooldownSkipReason(target, options);
+  if (cooldown) {
+    logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
+    logger?.log(`Skipped: ${cooldown.message}`);
+    return skipped(cooldown.message);
+  }
+
+  const familySkip = collectionFamilySkipReason(target, familyState);
+  if (familySkip) {
+    logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
+    logger?.log(`Skipped: ${familySkip.message}`);
+    return skipped(familySkip.message);
+  }
+
+  const lock = await acquireCollectionLock(target, lockOwner, options);
+  if (!lock.acquired) {
+    logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
+    logger?.log(`Skipped: ${lock.message}`);
+    return skipped(lock.message);
+  }
+
+  await waitForCollectionFamily(target, familyState, logger);
+  markCollectionFamilyStarted(target, familyState);
+
+  logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
+
+  try {
+    const collection = await collectTargetWithRetries(target, options, logger);
+    const offers = collection.offers;
+    const status = offers.length ? "success" : "failed";
+    const message = offers.length
+      ? `HTTP collector found ${offers.length} offers after ${collection.attempts.length} attempt(s).`
+      : `HTTP collector found no offers after ${collection.attempts.length} attempt(s).`;
+
+    if (logger) printOfferPreview(offers);
+
+    if (options.post) {
+      const posted = await postCrawlLogBatched(target, offers, status, message, options, {
+        attempts: collection.attempts,
+        maxAttempts: collection.maxAttempts,
+      });
+      logger?.log(
+        `Posted ${posted.successCount} offers` +
+          (posted.writtenCount !== undefined
+            ? `, wrote ${posted.writtenCount}, unchanged ${posted.unchangedCount || 0}.`
+            : "."),
+      );
+    }
+
+    recordCollectionFamilyResult(target, familyState, { status, message });
+    return {
+      sourceId: target.sourceId,
+      source: target.sourceName,
+      kind: target.kind,
+      status,
+      offers: offers.length,
+      attempts: collection.attempts.length,
+      ms: Date.now() - startedAt,
+    };
+  } catch (error) {
+    const message = errorMessage(error);
+    const attempts = Array.isArray(error?.attempts) ? error.attempts : [];
+    logger?.error(`Failed: ${message}`);
+    recordCollectionFamilyResult(target, familyState, { status: "failed", message, logger });
+
+    if (options.post) {
+      await postCrawlLog(target, [], "failed", message, options, {
+        attempts,
+        maxAttempts: maxAttemptsFor(options),
+      }).catch((postError) => {
+        logger?.error(`Failed to post failure log: ${errorMessage(postError)}`);
+      });
+    }
+
+    return {
+      sourceId: target.sourceId,
+      source: target.sourceName,
+      kind: target.kind,
+      status: "failed",
+      offers: 0,
+      attempts: attempts.length || maxAttemptsFor(options),
+      ms: Date.now() - startedAt,
+      message,
+    };
+  } finally {
+    await releaseCollectionLock(target, lockOwner, logger);
+  }
 }
 
 export async function probeSource(options = {}) {
@@ -243,7 +238,7 @@ export async function probeSource(options = {}) {
   }
 
   try {
-    const offers = dedupeOffers(await collectTarget(target));
+    const offers = dedupeOffers(await collectTarget(target, options));
     return {
       sourceId: target.sourceId,
       sourceName: target.sourceName,
@@ -302,10 +297,10 @@ if (isCli()) {
     });
 }
 
-async function collectTarget(target) {
-  if (target.kind === "kami") return collectKamiLike(target);
+async function collectTarget(target, options = {}) {
+  if (target.kind === "kami") return collectKamiLike(target, options);
   if (target.kind === "dujiao") return collectDujiaoNext(target);
-  if (target.kind === "shopApi") return collectShopApi(target);
+  if (target.kind === "shopApi") return collectShopApi(target, options);
   if (target.kind === "xiaoheiwan") return collectXiaoheiwan(target);
   if (target.kind === "opensoraHtml") return collectOpensoraHtml(target);
   if (target.kind === "makerichHtml") return collectMakerichHtml(target);
@@ -326,7 +321,7 @@ async function collectTargetWithRetries(target, options = {}, logger = null) {
     const startedAt = Date.now();
 
     try {
-      const offers = dedupeOffers(await collectTarget(target));
+      const offers = dedupeOffers(await collectTarget(target, options));
       const message = offers.length ? `采集到 ${offers.length} 条报价。` : "采集结果为空。";
       attempts.push({
         attempt,
@@ -363,11 +358,12 @@ async function collectTargetWithRetries(target, options = {}, logger = null) {
   throw error;
 }
 
-async function collectKamiLike(target) {
+async function collectKamiLike(target, options = {}) {
   const offers = [];
   const base = target.baseUrl;
 
   for (let page = 1; page <= 10; page += 1) {
+    await waitBetweenPages(options);
     const payload = await fetchJson(`${base}/user/api/index/commodity?limit=100&page=${page}`);
     const items = Array.isArray(payload.data) ? payload.data : [];
     if (!items.length) break;
@@ -457,9 +453,9 @@ async function collectDujiaoNext(target) {
   return offers;
 }
 
-async function collectShopApi(target) {
+async function collectShopApi(target, options = {}) {
   const base = target.baseUrl;
-  const tokens = await discoverShopTokens(target);
+  const tokens = await discoverShopTokens(target, options);
   const offers = [];
 
   if (!tokens.length) {
@@ -487,6 +483,7 @@ async function collectShopApi(target) {
 
     for (const categoryId of categoryIds) {
       for (let page = 1; page <= 10; page += 1) {
+        await waitBetweenPages(options);
         const listPayload = await postJson(
           `${base}/shopApi/Shop/goodsList`,
           {
@@ -871,7 +868,7 @@ function stockFromGenericContext(value) {
   return stockMatch ? numberOrNull(stockMatch[1]) : null;
 }
 
-async function discoverShopTokens(target) {
+async function discoverShopTokens(target, options = {}) {
   const tokens = new Set();
   const entryToken = shopTokenFromUrl(target.sourceUrl);
   if (entryToken) tokens.add(entryToken);
@@ -883,6 +880,7 @@ async function discoverShopTokens(target) {
     .slice(0, 20);
 
   for (const itemUrl of itemUrls) {
+    await waitBetweenPages(options);
     const goodsKey = goodsKeyFromUrl(itemUrl);
     if (!goodsKey) continue;
 
@@ -1006,7 +1004,11 @@ async function postCrawlLog(target, offers, status, message, options = {}, detai
     options.password ||
     process.env.ADMIN_PASSWORD ||
     env.ADMIN_PASSWORD ||
-    "ai-price-hub-local";
+    process.env.CRON_SECRET ||
+    env.CRON_SECRET;
+  if (!password) {
+    throw new Error("写回采集结果需要 ADMIN_PASSWORD 或 CRON_SECRET。");
+  }
   const response = await fetch(`${endpoint.replace(/\/$/, "")}/api/admin/crawl-log`, {
     method: "POST",
     headers: {
@@ -1190,6 +1192,34 @@ function selectTargets(targets, options) {
         .some((value) => String(value).toLowerCase().includes(query)),
     ),
   );
+}
+
+function targetGroupsForCollection(targets) {
+  const groups = new Map();
+  for (const target of targets) {
+    const key = normalizeHostname(target.baseUrl || target.sourceUrl) || target.sourceId;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.targets.push(target);
+    } else {
+      groups.set(key, { key, targets: [target] });
+    }
+  }
+  return [...groups.values()];
+}
+
+async function runWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 function hasTargetFilters(options = {}) {
@@ -1496,8 +1526,37 @@ function maxAttemptsFor(options = {}) {
   return Math.max(1, Math.min(Math.trunc(value), 5));
 }
 
+function concurrencyFor(options = {}) {
+  const value = Number(
+    options.concurrency ||
+      options["concurrency"] ||
+      process.env.PRICEAI_COLLECT_CONCURRENCY ||
+      env.PRICEAI_COLLECT_CONCURRENCY ||
+      DEFAULT_CONCURRENCY,
+  );
+  if (!Number.isFinite(value)) return DEFAULT_CONCURRENCY;
+  return Math.max(1, Math.min(Math.trunc(value), 8));
+}
+
 function retryDelayMs(attempt) {
   return Math.min(1_000 * 2 ** (attempt - 1), 5_000);
+}
+
+function pageDelayMsFor(options = {}) {
+  const value = Number(
+    options.pageDelayMs ||
+      options["page-delay-ms"] ||
+      process.env.PRICEAI_COLLECT_PAGE_DELAY_MS ||
+      env.PRICEAI_COLLECT_PAGE_DELAY_MS ||
+      DEFAULT_PAGE_DELAY_MS,
+  );
+  if (!Number.isFinite(value)) return DEFAULT_PAGE_DELAY_MS;
+  return Math.max(0, Math.min(Math.trunc(value), 5_000));
+}
+
+async function waitBetweenPages(options = {}) {
+  const delayMs = pageDelayMsFor(options);
+  if (delayMs > 0) await delay(delayMs);
 }
 
 function delay(ms) {
@@ -1545,7 +1604,7 @@ function getSupabaseClient() {
 }
 
 async function fetchJson(url) {
-  const response = await fetch(url, {
+  const response = await safeFetch(url, {
     headers: defaultHeaders(url),
     signal: AbortSignal.timeout(20_000),
   });
@@ -1555,7 +1614,7 @@ async function fetchJson(url) {
 }
 
 async function fetchText(url) {
-  const response = await fetch(url, {
+  const response = await safeFetch(url, {
     headers: defaultHeaders(url),
     signal: AbortSignal.timeout(20_000),
   });
@@ -1565,7 +1624,7 @@ async function fetchText(url) {
 }
 
 async function postJson(url, body, referer) {
-  const response = await fetch(url, {
+  const response = await safeFetch(url, {
     method: "POST",
     headers: {
       ...defaultHeaders(referer || url),

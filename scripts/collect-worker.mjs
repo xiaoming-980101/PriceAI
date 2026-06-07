@@ -25,7 +25,9 @@ const password =
   args.password ||
   process.env.ADMIN_PASSWORD ||
   env.ADMIN_PASSWORD ||
-  "ai-price-hub-local";
+  process.env.CRON_SECRET ||
+  env.CRON_SECRET ||
+  null;
 const maxJobs = clampInteger(args.maxJobs || args["max-jobs"] || 1, 1, 20);
 const lockSeconds = clampInteger(args.lockSeconds || args["lock-seconds"] || 1800, 60, 7200);
 const channelCollectionFamilyState = createCollectionFamilyState({
@@ -133,6 +135,10 @@ async function runLocalJob(jobType) {
 }
 
 async function runChannelPriceJob(sourceId) {
+  if (!password) {
+    throw new Error("渠道采集写回需要 ADMIN_PASSWORD 或 CRON_SECRET。");
+  }
+
   return runPriceCollection({
     all: !sourceId,
     source: sourceId || undefined,

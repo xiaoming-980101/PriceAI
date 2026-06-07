@@ -422,7 +422,6 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
           query,
           limit: OFFER_EMERGENCY_PAGE_SIZE,
           offset,
-          password,
         });
         if (!result.ok) throw new Error(result.message || "读取报价失败。");
 
@@ -457,7 +456,7 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
         }));
       }
     },
-    [password],
+    [],
   );
 
   useEffect(() => {
@@ -1222,10 +1221,10 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     setGlobalMessage(result.ok ? { type: "success", text: "手动报价已保存，刷新页面后可查看。" } : { type: "error", text: result.message || "保存失败。" });
   }
 
-  async function refreshSubmissions(currentPassword: string) {
+  async function refreshSubmissions() {
     try {
       const response = await fetch("/api/admin/submissions?status=pending", {
-        headers: { "x-admin-password": currentPassword },
+        credentials: "include",
       });
       const json = await response.json().catch(() => ({ ok: false }));
       if (response.ok && json.ok) {
@@ -1236,10 +1235,10 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     }
   }
 
-  async function refreshOfferFeedback(currentPassword = password) {
+  async function refreshOfferFeedback() {
     try {
       const response = await fetch("/api/admin/feedback?status=pending", {
-        headers: { "x-admin-password": currentPassword },
+        credentials: "include",
       });
       const json = await response.json().catch(() => ({ ok: false }));
       if (response.ok && json.ok) {
@@ -1251,10 +1250,10 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     }
   }
 
-  async function refreshSiteFeedback(currentPassword = password) {
+  async function refreshSiteFeedback() {
     try {
       const response = await fetch("/api/admin/site-feedback?status=pending", {
-        headers: { "x-admin-password": currentPassword },
+        credentials: "include",
       });
       const json = await response.json().catch(() => ({ ok: false }));
       if (response.ok && json.ok) {
@@ -1356,10 +1355,10 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     try {
       const [approvedRes, rejectedRes] = await Promise.all([
         fetch("/api/admin/submissions?status=approved", {
-          headers: { "x-admin-password": password },
+          credentials: "include",
         }),
         fetch("/api/admin/submissions?status=rejected", {
-          headers: { "x-admin-password": password },
+          credentials: "include",
         }),
       ]);
       const approvedJson = await approvedRes.json().catch(() => ({ ok: false }));
@@ -1736,6 +1735,10 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
           </div>
         )}
 
+        {data.loadErrors.length ? (
+          <AdminLoadErrors errors={data.loadErrors} />
+        ) : null}
+
         {!authed ? (
           <section className="mx-auto mt-8 max-w-md rounded-lg border border-[#adb3b4]/30 bg-white p-6">
             <div className="flex items-center gap-2 text-lg font-semibold text-[#202829]">
@@ -1743,7 +1746,7 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
               后台密码
             </div>
             <p className="mt-2 text-sm text-[#5a6061]">
-              使用 `.env.local` 里的 `ADMIN_PASSWORD`。未配置时，本地默认密码为 `ai-price-hub-local`。
+              使用环境变量 `ADMIN_PASSWORD`。登录后后台操作会走安全 Cookie，不会在每个请求里重复携带明文密码。
             </p>
             <form onSubmit={login} className="mt-4 flex gap-2">
               <label htmlFor="admin-password" className="sr-only">
@@ -1888,7 +1891,7 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
                   )}
                   <button
                     type="button"
-                    onClick={() => refreshSubmissions(password)}
+                    onClick={() => refreshSubmissions()}
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4]"
                   >
                     <RefreshCcw size={14} />
@@ -3364,6 +3367,26 @@ function MessageBox({ message, onDismiss }: { message: Message; onDismiss?: () =
           <X size={15} />
         </button>
       )}
+    </div>
+  );
+}
+
+function AdminLoadErrors({ errors }: { errors: AdminSummary["loadErrors"] }) {
+  return (
+    <div className="mb-4 rounded-lg border border-[#9b3328]/20 bg-[#fbe9e7] px-4 py-3 text-sm text-[#9b3328]">
+      <div className="flex items-start gap-2">
+        <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">后台部分数据加载失败</p>
+          <ul className="mt-2 space-y-1">
+            {errors.map((error) => (
+              <li key={error.key} className="break-words">
+                {error.label}：{error.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
@@ -5545,24 +5568,24 @@ function SubmitButton({ loading, label }: { loading: boolean; label: string }) {
 
 /* ─── Helpers ─── */
 
-async function request(path: string, password: string, body: unknown) {
+async function request(path: string, _password: string, body: unknown) {
   const response = await fetch(path, {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      "x-admin-password": password,
     },
     body: JSON.stringify(body),
   });
   return response.json().catch(() => ({ ok: false, message: response.statusText }));
 }
 
-async function requestWithMethod(path: string, method: string, password: string, body: unknown) {
+async function requestWithMethod(path: string, method: string, _password: string, body: unknown) {
   const response = await fetch(path, {
     method,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      "x-admin-password": password,
     },
     body: JSON.stringify(body),
   });
@@ -5574,13 +5597,11 @@ async function fetchAdminOfferMaintenancePage({
   query,
   limit,
   offset,
-  password,
 }: {
   scope: OfferMaintenanceScope;
   query: string;
   limit: number;
   offset: number;
-  password: string;
 }): Promise<{
   ok: boolean;
   message?: string;
@@ -5594,7 +5615,7 @@ async function fetchAdminOfferMaintenancePage({
     offset: String(offset),
   });
   const response = await fetch(`/api/admin/offers?${params.toString()}`, {
-    headers: password ? { "x-admin-password": password } : undefined,
+    credentials: "include",
   });
   return response.json().catch(() => ({ ok: false, message: response.statusText }));
 }

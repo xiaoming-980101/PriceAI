@@ -1,12 +1,10 @@
 import "server-only";
 
-import { promises as dns } from "node:dns";
-import net from "node:net";
-
 import { canonicalCatalog, classifyOffer } from "./catalog";
 import { ADMIN_SESSION_COOKIE, getAdminPassword, verifyAdminSessionToken } from "./env";
 import { freshnessFields } from "./freshness";
 import { pruneOperationalLogs } from "./operational-logs";
+import { safeFetch } from "./safe-fetch";
 import { getSupabaseServerClient } from "./supabase";
 import type {
   ChannelSubmission,
@@ -1034,50 +1032,6 @@ function mapSourceRow(row: Record<string, unknown>): Source {
   };
 }
 
-function isPrivateAddress(address: string): boolean {
-  if (!address) return true;
-  const lower = address.toLowerCase();
-  if (lower === "localhost") return true;
-
-  const v4 = net.isIPv4(address);
-  const v6 = net.isIPv6(address);
-  if (!v4 && !v6) return false;
-
-  if (v4) {
-    const [a, b] = address.split(".").map(Number);
-    if (a === 10) return true;
-    if (a === 127) return true;
-    if (a === 0) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-    return false;
-  }
-
-  // IPv6: block loopback, link-local, ULA, mapped private v4
-  if (lower === "::1" || lower === "::") return true;
-  if (lower.startsWith("fe80:") || lower.startsWith("fc") || lower.startsWith("fd")) return true;
-  if (lower.startsWith("::ffff:")) return isPrivateAddress(address.split(":").pop() || "");
-  return false;
-}
-
-async function ensurePublicHost(hostname: string): Promise<void> {
-  if (!hostname) throw new Error("URL 缺少主机名。");
-  if (isPrivateAddress(hostname)) throw new Error("不允许的内部 IP。");
-
-  let records: Array<{ address: string }> = [];
-  try {
-    records = await dns.lookup(hostname, { all: true });
-  } catch {
-    throw new Error("无法解析该主机名。");
-  }
-  if (!records.length) throw new Error("无法解析该主机名。");
-  for (const record of records) {
-    if (isPrivateAddress(record.address)) throw new Error("不允许的内部 IP。");
-  }
-}
-
 const MAX_FETCH_BYTES = 256 * 1024;
 const FETCH_TIMEOUT_MS = 5000;
 const SHOP_API_TIMEOUT_MS = 8000;
@@ -1150,22 +1104,14 @@ export async function parseSubmissionMetadata(rawUrl: string): Promise<{
   meta.domain = parsed.host;
   Object.assign(meta, analyzeSubmissionUrl(parsed, null));
 
-  try {
-    await ensurePublicHost(parsed.hostname);
-  } catch (error) {
-    meta.parse_error = error instanceof Error ? error.message : String(error);
-    throw error;
-  }
-
   Object.assign(meta, await resolveSubmittedSource(parsed, null));
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const response = await fetch(parsed.toString(), {
+    const response = await safeFetch(parsed.toString(), {
       method: "GET",
-      redirect: "follow",
       signal: controller.signal,
       headers: {
         "user-agent": "AIPriceHubBot/1.0 (+https://priceai.cc)",
@@ -1406,7 +1352,7 @@ async function fetchShopTokenFromGoods(baseUrl: string, itemUrl: string, goodsKe
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const response = await fetch(`${baseUrl}/shopApi/Shop/goodsInfo`, {
+      const response = await safeFetch(`${baseUrl}/shopApi/Shop/goodsInfo`, {
         method: "POST",
         headers: {
           "content-type": "application/json",

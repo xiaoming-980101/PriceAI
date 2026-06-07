@@ -2,13 +2,13 @@ import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_MAX_AGE_SECONDS,
   createAdminSessionToken,
-  getAdminPassword,
+  verifyAdminPassword,
 } from "@/lib/env";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as { password?: string } | null;
 
-  if (!body?.password || body.password !== getAdminPassword()) {
+  if (!verifyAdminPassword(body?.password)) {
     return Response.json({ ok: false, message: "后台密码不正确。" }, { status: 401 });
   }
 
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     { ok: true },
     {
       headers: {
-        "Set-Cookie": `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(createAdminSessionToken())}; Path=/; Max-Age=${ADMIN_SESSION_MAX_AGE_SECONDS}; HttpOnly; SameSite=Lax${secure}`,
+        "Set-Cookie": `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(createAdminSessionToken())}; Path=/; Max-Age=${ADMIN_SESSION_MAX_AGE_SECONDS}; HttpOnly; SameSite=Strict${secure}`,
       },
     },
   );
