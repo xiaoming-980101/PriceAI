@@ -90,20 +90,20 @@ export async function getApiModelAdminData(): Promise<ApiModelAdminData> {
         .order("sort_order", { ascending: true }),
       supabase
         .from("api_models")
-        .select("id,family_id,display_name,model_id,status,source_url,source_label,data_updated_at,updated_at"),
+        .select("id,family_id,display_name,model_id,context_window,description,status,source_url,source_label,capabilities,suitable_tools,data_updated_at,updated_at"),
       supabase
         .from("api_providers")
-        .select("id,name,type,billing_mode,official_url,pricing_url,logo_url,enabled,limit_summary,limitations,source_label,data_updated_at,updated_at")
+        .select("id,name,type,billing_mode,official_url,pricing_url,logo_url,enabled,description,limit_summary,limitations,source_label,data_updated_at,updated_at")
         .order("name", { ascending: true }),
       supabase
         .from("api_plans")
-        .select("id,provider_id,name,type,price_label,price_usd_monthly,price_cny_monthly,quota_summary,limit_summary,source_url,source_label,enabled,data_updated_at,updated_at"),
+        .select("id,provider_id,name,type,price_label,price_usd_monthly,price_cny_monthly,quota_summary,reset_summary,limit_summary,limitations,coverage_label,compatibility,suitable_tools,source_url,source_label,enabled,data_updated_at,updated_at"),
       supabase
         .from("api_plan_models")
         .select("plan_id,model_id"),
       supabase
         .from("api_model_offers")
-        .select("id,model_id,provider_id,route_model_id,input_price,output_price,free_or_plan,limit_summary,pricing_url,source_label,status,collected_at,updated_at"),
+        .select("id,model_id,provider_id,route_model_id,input_price,output_price,cache_read_price,cache_write_price,free_or_plan,limit_summary,limitations,compatibility,suitable_tools,pricing_url,source_label,status,notes,collected_at,updated_at"),
       supabase
         .from("api_collection_runs")
         .select("id,provider_id,collector_kind,status,model_count,offer_count,error_message,started_at,finished_at")
@@ -169,11 +169,15 @@ export async function getApiModelAdminData(): Promise<ApiModelAdminData> {
         family: familyNameById.get(stringValue(row.family_id)) || stringValue(row.family_id),
         displayName: stringValue(row.display_name),
         modelId: stringValue(row.model_id),
+        contextWindow: nullableString(row.context_window),
+        description: stringValue(row.description),
         status: apiModelStatus(row.status),
         offerCount: offers.length,
         providerCount: new Set(offers.map((offer) => stringValue(offer.provider_id)).filter(Boolean)).size,
         sourceUrl: stringValue(row.source_url),
         sourceLabel: stringValue(row.source_label) || "公开来源",
+        capabilities: stringArray(row.capabilities),
+        suitableTools: stringArray(row.suitable_tools),
         updatedAt: timestampValue(row.data_updated_at || row.updated_at),
       };
     });
@@ -197,6 +201,7 @@ export async function getApiModelAdminData(): Promise<ApiModelAdminData> {
           offerCount: offers.length,
           modelCount: new Set(offers.map((offer) => stringValue(offer.model_id)).filter(Boolean)).size,
           planCount: (planRowsByProviderId.get(id) || []).length,
+          description: stringValue(row.description),
           limitSummary: stringValue(row.limit_summary),
           limitations: stringValue(row.limitations),
           sourceLabel: stringValue(row.source_label) || "公开来源",
@@ -220,10 +225,16 @@ export async function getApiModelAdminData(): Promise<ApiModelAdminData> {
           priceLabel: stringValue(row.price_label),
           priceUsdMonthly: numberValue(row.price_usd_monthly),
           priceCnyMonthly: numberValue(row.price_cny_monthly),
+          modelIds: planModelsByPlanId.get(id) || [],
           modelCount: (planModelsByPlanId.get(id) || []).length,
           enabled: booleanValue(row.enabled, true),
           quotaSummary: stringValue(row.quota_summary),
+          resetSummary: stringValue(row.reset_summary),
           limitSummary: stringValue(row.limit_summary),
+          limitations: stringValue(row.limitations),
+          coverageLabel: nullableString(row.coverage_label),
+          compatibility: stringArray(row.compatibility),
+          suitableTools: stringArray(row.suitable_tools),
           sourceUrl: stringValue(row.source_url),
           sourceLabel: stringValue(row.source_label) || "公开来源",
           updatedAt: timestampValue(row.data_updated_at || row.updated_at),
@@ -248,11 +259,17 @@ export async function getApiModelAdminData(): Promise<ApiModelAdminData> {
           routeModelId: nullableString(row.route_model_id),
           inputPrice: priceValue(row.input_price),
           outputPrice: priceValue(row.output_price),
+          cacheReadPrice: optionalPriceValue(row.cache_read_price) || null,
+          cacheWritePrice: optionalPriceValue(row.cache_write_price) || null,
           freeOrPlan: stringValue(row.free_or_plan),
           limitSummary: stringValue(row.limit_summary),
+          limitations: stringValue(row.limitations),
+          compatibility: stringArray(row.compatibility),
+          suitableTools: stringArray(row.suitable_tools),
           pricingUrl: nullableString(row.pricing_url),
           sourceLabel: stringValue(row.source_label) || "公开来源",
           status: apiModelStatus(row.status),
+          notes: nullableString(row.notes),
           updatedAt: timestampValue(row.collected_at || row.updated_at),
         };
       })
@@ -430,11 +447,15 @@ function buildStaticApiModelAdminData({
       family: model.family,
       displayName: model.displayName,
       modelId: model.modelId,
+      contextWindow: model.contextWindow || null,
+      description: model.description,
       status: "active",
       offerCount: offers.length,
       providerCount: new Set(offers.map((offer) => offer.providerId)).size,
       sourceUrl: model.sourceUrl,
       sourceLabel: model.sourceLabel,
+      capabilities: model.capabilities,
+      suitableTools: model.suitableTools,
       updatedAt: model.updatedAt,
     };
   });
@@ -454,6 +475,7 @@ function buildStaticApiModelAdminData({
       offerCount: offers.length,
       modelCount: new Set(offers.map((offer) => offer.modelId)).size,
       planCount: plans.length,
+      description: provider.description,
       limitSummary: provider.limitSummary,
       limitations: provider.limitations,
       sourceLabel: provider.sourceLabel,
@@ -471,10 +493,16 @@ function buildStaticApiModelAdminData({
     priceLabel: plan.priceLabel,
     priceUsdMonthly: plan.priceUsdMonthly ?? null,
     priceCnyMonthly: plan.priceCnyMonthly ?? null,
+    modelIds: plan.modelIds,
     modelCount: plan.modelIds.length,
     enabled: true,
     quotaSummary: plan.quotaSummary,
+    resetSummary: plan.resetSummary,
     limitSummary: plan.limitSummary,
+    limitations: plan.limitations,
+    coverageLabel: plan.coverageLabel || null,
+    compatibility: plan.compatibility,
+    suitableTools: plan.suitableTools,
     sourceUrl: plan.url,
     sourceLabel: plan.sourceLabel,
     updatedAt: plan.updatedAt,
@@ -498,11 +526,17 @@ function buildStaticApiModelAdminData({
         routeModelId: offer.routeModelId || null,
         inputPrice: offer.inputPrice,
         outputPrice: offer.outputPrice,
+        cacheReadPrice: offer.cacheReadPrice || null,
+        cacheWritePrice: offer.cacheWritePrice || null,
         freeOrPlan: offer.freeOrPlan,
         limitSummary: offer.limitSummary,
+        limitations: offer.limitations,
+        compatibility: offer.compatibility,
+        suitableTools: offer.suitableTools,
         pricingUrl: offer.pricingUrl || null,
         sourceLabel: offer.sourceLabel,
         status: "active",
+        notes: offer.notes || null,
         updatedAt: offer.updatedAt,
       };
     })

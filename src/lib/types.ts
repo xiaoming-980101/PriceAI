@@ -283,11 +283,15 @@ export type ApiModelAdminModel = {
   family: string;
   displayName: string;
   modelId: string;
+  contextWindow: string | null;
+  description: string;
   status: "active" | "inactive" | "needs_review";
   offerCount: number;
   providerCount: number;
   sourceUrl: string;
   sourceLabel: string;
+  capabilities: string[];
+  suitableTools: string[];
   updatedAt: string;
 };
 
@@ -303,6 +307,7 @@ export type ApiModelAdminProvider = {
   offerCount: number;
   modelCount: number;
   planCount: number;
+  description: string;
   limitSummary: string;
   limitations: string;
   sourceLabel: string;
@@ -319,9 +324,15 @@ export type ApiModelAdminPlan = {
   priceUsdMonthly: number | null;
   priceCnyMonthly: number | null;
   modelCount: number;
+  modelIds: string[];
   enabled: boolean;
   quotaSummary: string;
+  resetSummary: string;
   limitSummary: string;
+  limitations: string;
+  coverageLabel: string | null;
+  compatibility: string[];
+  suitableTools: string[];
   sourceUrl: string;
   sourceLabel: string;
   updatedAt: string;
@@ -338,11 +349,17 @@ export type ApiModelAdminOffer = {
   routeModelId: string | null;
   inputPrice: ApiPriceValue;
   outputPrice: ApiPriceValue;
+  cacheReadPrice: ApiPriceValue | null;
+  cacheWritePrice: ApiPriceValue | null;
   freeOrPlan: string;
   limitSummary: string;
+  limitations: string;
+  compatibility: string[];
+  suitableTools: string[];
   pricingUrl: string | null;
   sourceLabel: string;
   status: "active" | "inactive" | "needs_review";
+  notes: string | null;
   updatedAt: string;
 };
 

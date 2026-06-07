@@ -18,6 +18,7 @@ import {
   KeyRound,
   Loader2,
   MessageCircle,
+  Pencil,
   Plus,
   RefreshCcw,
   Search,
@@ -75,8 +76,14 @@ type ApiModelAdminData = AdminSummary["apiModels"];
 type ApiModelAdminProvider = ApiModelAdminData["providers"][number];
 type ApiModelAdminOffer = ApiModelAdminData["offers"][number];
 type ApiModelAdminPlan = ApiModelAdminData["plans"][number];
+type ApiModelAdminModel = ApiModelAdminData["models"][number];
 type ApiProviderCandidate = ApiModelAdminData["providerCandidates"][number];
 type ApiProviderSubmission = ApiModelAdminData["providerSubmissions"][number];
+type ApiModelEditableTarget = "model" | "provider" | "plan" | "offer";
+type ApiModelEditablePayload = Record<string, unknown> & {
+  target: ApiModelEditableTarget;
+  id: string;
+};
 
 const ADMIN_LIST_PREVIEW_ROWS = 8;
 
@@ -216,7 +223,9 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
   const [officialPlanPatches, setOfficialPlanPatches] = useState<Record<string, Partial<OfficialAdminPlan>>>({});
   const [officialRegionPatches, setOfficialRegionPatches] = useState<Record<string, Partial<OfficialAdminRegion>>>({});
   const [officialPricePatches, setOfficialPricePatches] = useState<Record<string, Partial<OfficialAdminPrice>>>({});
+  const [apiModelPatches, setApiModelPatches] = useState<Record<string, Partial<ApiModelAdminModel>>>({});
   const [apiProviderPatches, setApiProviderPatches] = useState<Record<string, Partial<ApiModelAdminProvider>>>({});
+  const [apiPlanPatches, setApiPlanPatches] = useState<Record<string, Partial<ApiModelAdminPlan>>>({});
   const [apiOfferPatches, setApiOfferPatches] = useState<Record<string, Partial<ApiModelAdminOffer>>>({});
   const [apiProviderSubmissions, setApiProviderSubmissions] = useState<ApiProviderSubmission[]>(data.apiModels.providerSubmissions || []);
   const [activeTab, setActiveTab] = useState<AdminTab>("review");
@@ -292,9 +301,17 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
   const apiModels = useMemo(
     (): ApiModelAdminData => ({
       ...data.apiModels,
+      models: (data.apiModels.models || []).map((model) => ({
+        ...model,
+        ...(apiModelPatches[model.id] || {}),
+      })),
       providers: (data.apiModels.providers || []).map((provider) => ({
         ...provider,
         ...(apiProviderPatches[provider.id] || {}),
+      })),
+      plans: (data.apiModels.plans || []).map((plan) => ({
+        ...plan,
+        ...(apiPlanPatches[plan.id] || {}),
       })),
       offers: (data.apiModels.offers || []).map((offer) => ({
         ...offer,
@@ -302,7 +319,7 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
       })),
       providerSubmissions: apiProviderSubmissions,
     }),
-    [apiOfferPatches, apiProviderPatches, apiProviderSubmissions, data.apiModels],
+    [apiModelPatches, apiOfferPatches, apiPlanPatches, apiProviderPatches, apiProviderSubmissions, data.apiModels],
   );
   const officialPrices = useMemo(
     (): OfficialAdminData => ({
@@ -813,6 +830,33 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     } else {
       setGlobalMessage({ type: "error", text: result.message || "更新 API 模型报价失败。" });
     }
+  }
+
+  async function saveApiModelEditable(payload: ApiModelEditablePayload): Promise<{ ok: boolean; message?: string }> {
+    const actionKey = `api-edit-${payload.target}-${payload.id}`;
+    setLoadingAction(actionKey);
+    const result = await requestWithMethod("/api/admin/api-models", "PATCH", password, payload);
+    setLoadingAction(null);
+
+    if (result.ok) {
+      const { target, id, ...patch } = payload;
+      if (target === "model") {
+        setApiModelPatches((prev) => ({ ...prev, [id]: patch as Partial<ApiModelAdminModel> }));
+      } else if (target === "provider") {
+        setApiProviderPatches((prev) => ({ ...prev, [id]: patch as Partial<ApiModelAdminProvider> }));
+      } else if (target === "plan") {
+        setApiPlanPatches((prev) => ({ ...prev, [id]: patch as Partial<ApiModelAdminPlan> }));
+      } else {
+        setApiOfferPatches((prev) => ({ ...prev, [id]: patch as Partial<ApiModelAdminOffer> }));
+      }
+      setGlobalMessage({ type: "success", text: "API 模型数据已保存，前台会以数据库记录为准。" });
+      router.refresh();
+      return { ok: true };
+    }
+
+    const message = result.message || "保存 API 模型数据失败。";
+    setGlobalMessage({ type: "error", text: message });
+    return { ok: false, message };
   }
 
   async function reviewApiProviderSubmission(
@@ -2234,6 +2278,7 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
                   onToggleProviderEnabled={toggleApiProviderEnabled}
                   onToggleOfferStatus={toggleApiOfferStatus}
                   onReviewProviderSubmission={reviewApiProviderSubmission}
+                  onSaveEditable={saveApiModelEditable}
                 />
               </div>
             )}
@@ -4033,6 +4078,7 @@ function ApiModelsAdminPanel({
   onToggleProviderEnabled,
   onToggleOfferStatus,
   onReviewProviderSubmission,
+  onSaveEditable,
 }: {
   data: ApiModelAdminData;
   loadingAction: string | null;
@@ -4044,22 +4090,52 @@ function ApiModelsAdminPanel({
   onToggleProviderEnabled: (provider: ApiModelAdminProvider, enabled: boolean) => void;
   onToggleOfferStatus: (offer: ApiModelAdminOffer, status: ApiModelAdminOffer["status"]) => void;
   onReviewProviderSubmission: (submission: ApiProviderSubmission, reviewStatus: ApiProviderSubmission["reviewStatus"]) => void;
+  onSaveEditable: (payload: ApiModelEditablePayload) => Promise<{ ok: boolean; message?: string }>;
 }) {
   const inactiveProviderCount = data.providers.filter((provider) => !provider.enabled).length;
   const inactiveOfferCount = data.offers.filter((offer) => offer.status !== "active").length;
+  const [editorPayload, setEditorPayload] = useState<ApiModelEditablePayload | null>(null);
+  const [editorText, setEditorText] = useState("");
+  const [editorError, setEditorError] = useState<string | null>(null);
   const apiSubmissionRowsKey = useMemo(() => data.providerSubmissions.map((submission) => submission.id).join("|"), [data.providerSubmissions]);
   const apiCandidateRowsKey = useMemo(() => data.providerCandidates.map((candidate) => candidate.id).join("|"), [data.providerCandidates]);
+  const apiModelRowsKey = useMemo(() => data.models.map((model) => model.id).join("|"), [data.models]);
   const apiProviderRowsKey = useMemo(() => data.providers.map((provider) => provider.id).join("|"), [data.providers]);
   const apiOfferRowsKey = useMemo(() => data.offers.map((offer) => offer.id).join("|"), [data.offers]);
   const apiPlanRowsKey = useMemo(() => data.plans.map((plan) => plan.id).join("|"), [data.plans]);
   const apiSubmissionRows = useAdminExpandableRows(data.providerSubmissions, `api-submissions:${apiSubmissionRowsKey}`);
   const apiCandidateRows = useAdminExpandableRows(data.providerCandidates, `api-candidates:${apiCandidateRowsKey}`);
+  const apiModelRows = useAdminExpandableRows(data.models, `api-models:${apiModelRowsKey}`);
   const apiProviderRows = useAdminExpandableRows(data.providers, `api-providers:${apiProviderRowsKey}`);
   const apiOfferRows = useAdminExpandableRows(data.offers, `api-offers:${apiOfferRowsKey}`);
   const apiPlanRows = useAdminExpandableRows(data.plans, `api-plans:${apiPlanRowsKey}`);
   const latestRuns = data.collectRuns.slice(0, 8);
   const pendingApiSubmissions = data.providerSubmissions.filter((submission) => submission.reviewStatus === "pending");
   const todoApiSubmissions = data.providerSubmissions.filter((submission) => submission.reviewStatus === "collector_todo");
+  const editorSaving = editorPayload ? loadingAction === `api-edit-${editorPayload.target}-${editorPayload.id}` : false;
+
+  function openEditor(payload: ApiModelEditablePayload) {
+    setEditorPayload(payload);
+    setEditorText(prettyApiEditablePayload(payload));
+    setEditorError(null);
+  }
+
+  async function saveEditor() {
+    const parsed = parseApiEditablePayload(editorText);
+    if (!parsed.ok) {
+      setEditorError(parsed.message);
+      return;
+    }
+
+    const result = await onSaveEditable(parsed.payload);
+    if (result.ok) {
+      setEditorPayload(null);
+      setEditorText("");
+      setEditorError(null);
+    } else {
+      setEditorError(result.message || "保存失败。");
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -4085,9 +4161,9 @@ function ApiModelsAdminPanel({
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-medium text-[#2d3435]">导入、采集与队列</p>
+            <p className="text-sm font-medium text-[#2d3435]">人工维护与来源校验</p>
             <p className="mt-1 text-sm leading-6 text-[#5a6061]">
-              先用公开文档整理的静态数据写入独立 api_* 表；采集任务会探测公开来源并写入 api_collection_runs 日志，确认后再扩展到自动更新报价。
+              API 模型价格以 Supabase api_* 表为最终真相。后台编辑会直接更新数据库；采集和试采集只用于检查来源链接、发现变化和留下校验记录，不自动覆盖价格。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -4098,7 +4174,7 @@ function ApiModelsAdminPanel({
               className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#2f7a4b] px-4 text-sm font-medium text-white transition-colors hover:bg-[#256a3d] disabled:opacity-60"
             >
               {loadingAction === "api-models-enqueue" ? <Loader2 size={15} className="animate-spin" /> : <ClipboardList size={15} />}
-              加入采集队列
+              加入校验队列
             </button>
             <Link
               href="/api-models"
@@ -4114,7 +4190,7 @@ function ApiModelsAdminPanel({
               className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#2d3435] px-4 text-sm font-medium text-white transition-colors hover:bg-[#202829] disabled:opacity-60"
             >
               {loadingAction === "api-models-probe" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
-              试采集 OpenRouter
+              校验 OpenRouter
             </button>
             <button
               type="button"
@@ -4122,7 +4198,7 @@ function ApiModelsAdminPanel({
               className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-4 text-sm font-medium text-[#2d3435] transition-colors hover:bg-[#f2f4f4]"
             >
               <Copy size={15} />
-              复制采集 dry-run
+              复制校验 dry-run
             </button>
             <button
               type="button"
@@ -4138,7 +4214,7 @@ function ApiModelsAdminPanel({
         {probeResult ? (
           <div className={`mt-4 rounded-lg border px-4 py-3 text-sm ${probeResult.ok ? "border-[#2f7a4b]/20 bg-[#e8f3ec] text-[#2f7a4b]" : "border-[#9b3328]/20 bg-[#fbe9e7] text-[#9b3328]"}`}>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{probeResult.ok ? "试采集完成" : "试采集失败"}</span>
+              <span className="font-medium">{probeResult.ok ? "来源校验完成" : "来源校验失败"}</span>
               {probeResult.result?.run?.status ? <Badge tone="info">{officialRunStatusLabel(probeResult.result.run.status)}</Badge> : null}
               {probeResult.result?.scope?.providers?.length ? <Badge tone="info">{probeResult.result.scope.providers.join(", ")}</Badge> : null}
             </div>
@@ -4150,6 +4226,84 @@ function ApiModelsAdminPanel({
             ) : null}
             {probeResult.message ? <p className="mt-1 break-words text-xs leading-5">{probeResult.message}</p> : null}
           </div>
+        ) : null}
+      </Panel>
+
+      <Panel title="API 标准模型" icon={<Database size={17} />}>
+        {data.models.length ? (
+          <div className="overflow-x-auto rounded-lg border border-[#adb3b4]/20">
+            <table className="min-w-[980px] w-full divide-y divide-[#adb3b4]/15 text-left text-sm">
+              <thead className="bg-[#f2f4f4] text-xs font-semibold text-[#5a6061]">
+                <tr>
+                  <th className="px-4 py-3">模型</th>
+                  <th className="px-4 py-3">能力 / 工具</th>
+                  <th className="px-4 py-3">覆盖</th>
+                  <th className="px-4 py-3">状态</th>
+                  <th className="px-4 py-3">更新时间</th>
+                  <th className="px-4 py-3">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#adb3b4]/15 bg-white">
+                {apiModelRows.visibleItems.map((model) => (
+                  <tr key={model.id} className="align-top">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-[#2d3435]">{model.displayName}</div>
+                      <p className="mt-1 text-xs text-[#adb3b4]">{model.family} · {model.modelId}{model.contextWindow ? ` · ${model.contextWindow}` : ""}</p>
+                      {model.sourceUrl ? (
+                        <a
+                          href={model.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#47657a] transition-colors hover:text-[#2d3435]"
+                        >
+                          {model.sourceLabel || "查看来源"}
+                          <ExternalLink size={12} />
+                        </a>
+                      ) : null}
+                    </td>
+                    <td className="max-w-[320px] px-4 py-3">
+                      <p className="line-clamp-2 text-[#5a6061]">{model.description || "未记录说明"}</p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {model.capabilities.slice(0, 4).map((item) => <Badge key={item} tone="info">{item}</Badge>)}
+                        {model.suitableTools.slice(0, 3).map((item) => <Badge key={item}>{item}</Badge>)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-[#5a6061]">{model.providerCount} 个来源 · {model.offerCount} 条报价</td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${apiModelStatusClass(model.status)}`}>
+                        {apiModelStatusLabel(model.status)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[#5a6061]">{formatRelativeTime(model.updatedAt)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => openEditor(buildApiModelPayload(model))}
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4]"
+                      >
+                        <Pencil size={13} />
+                        编辑
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Database size={32} className="text-[#adb3b4]" />}
+            title="暂无 API 标准模型"
+            description="导入 api_models 后，标准模型会出现在这里。"
+          />
+        )}
+        {apiModelRows.canToggle ? (
+          <AdminListPager
+            expanded={apiModelRows.expanded}
+            label={apiModelRows.statusLabel}
+            buttonLabel={apiModelRows.toggleLabel}
+            onToggle={apiModelRows.toggle}
+          />
         ) : null}
       </Panel>
 
@@ -4459,19 +4613,29 @@ function ApiModelsAdminPanel({
                       </td>
                       <td className="px-4 py-3 text-[#5a6061]">{formatRelativeTime(provider.updatedAt)}</td>
                       <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          disabled={loading}
-                          onClick={() => onToggleProviderEnabled(provider, !provider.enabled)}
-                          className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border bg-white px-3 text-xs font-medium transition-colors disabled:opacity-60 ${
-                            provider.enabled
-                              ? "border-[#9b3328]/20 text-[#9b3328] hover:bg-[#fbe9e7]"
-                              : "border-[#2f7a4b]/20 text-[#2f7a4b] hover:bg-[#e8f3ec]"
-                          }`}
-                        >
-                          {loading ? <Loader2 size={14} className="animate-spin" /> : null}
-                          {provider.enabled ? "停用" : "启用"}
-                        </button>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openEditor(buildApiProviderPayload(provider))}
+                            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4]"
+                          >
+                            <Pencil size={13} />
+                            编辑
+                          </button>
+                          <button
+                            type="button"
+                            disabled={loading}
+                            onClick={() => onToggleProviderEnabled(provider, !provider.enabled)}
+                            className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border bg-white px-3 text-xs font-medium transition-colors disabled:opacity-60 ${
+                              provider.enabled
+                                ? "border-[#9b3328]/20 text-[#9b3328] hover:bg-[#fbe9e7]"
+                                : "border-[#2f7a4b]/20 text-[#2f7a4b] hover:bg-[#e8f3ec]"
+                            }`}
+                          >
+                            {loading ? <Loader2 size={14} className="animate-spin" /> : null}
+                            {provider.enabled ? "停用" : "启用"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -4555,19 +4719,29 @@ function ApiModelsAdminPanel({
                       </td>
                       <td className="px-4 py-3 text-[#5a6061]">{formatRelativeTime(offer.updatedAt)}</td>
                       <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          disabled={loading}
-                          onClick={() => onToggleOfferStatus(offer, isActive ? "inactive" : "active")}
-                          className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border bg-white px-3 text-xs font-medium transition-colors disabled:opacity-60 ${
-                            isActive
-                              ? "border-[#9b3328]/20 text-[#9b3328] hover:bg-[#fbe9e7]"
-                              : "border-[#2f7a4b]/20 text-[#2f7a4b] hover:bg-[#e8f3ec]"
-                          }`}
-                        >
-                          {loading ? <Loader2 size={14} className="animate-spin" /> : null}
-                          {isActive ? "下架" : "恢复"}
-                        </button>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openEditor(buildApiOfferPayload(offer))}
+                            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4]"
+                          >
+                            <Pencil size={13} />
+                            编辑
+                          </button>
+                          <button
+                            type="button"
+                            disabled={loading}
+                            onClick={() => onToggleOfferStatus(offer, isActive ? "inactive" : "active")}
+                            className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border bg-white px-3 text-xs font-medium transition-colors disabled:opacity-60 ${
+                              isActive
+                                ? "border-[#9b3328]/20 text-[#9b3328] hover:bg-[#fbe9e7]"
+                                : "border-[#2f7a4b]/20 text-[#2f7a4b] hover:bg-[#e8f3ec]"
+                            }`}
+                          >
+                            {loading ? <Loader2 size={14} className="animate-spin" /> : null}
+                            {isActive ? "下架" : "恢复"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -4597,7 +4771,7 @@ function ApiModelsAdminPanel({
           {data.plans.length ? (
             <div className="divide-y divide-[#adb3b4]/15 rounded-lg border border-[#adb3b4]/20">
               {apiPlanRows.visibleItems.map((plan) => (
-                <ApiPlanRow key={plan.id} plan={plan} />
+                <ApiPlanRow key={plan.id} plan={plan} onEdit={() => openEditor(buildApiPlanPayload(plan))} />
               ))}
             </div>
           ) : (
@@ -4645,20 +4819,51 @@ function ApiModelsAdminPanel({
           )}
         </Panel>
       </div>
+
+      {editorPayload ? (
+        <ApiModelJsonEditorModal
+          payload={editorPayload}
+          text={editorText}
+          error={editorError}
+          saving={editorSaving}
+          onChange={(value) => {
+            setEditorText(value);
+            setEditorError(null);
+          }}
+          onCancel={() => {
+            setEditorPayload(null);
+            setEditorText("");
+            setEditorError(null);
+          }}
+          onSave={saveEditor}
+        />
+      ) : null}
     </div>
   );
 }
 
-function ApiPlanRow({ plan }: { plan: ApiModelAdminPlan }) {
+function ApiPlanRow({ plan, onEdit }: { plan: ApiModelAdminPlan; onEdit: () => void }) {
   return (
     <div className="px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium text-[#2d3435]">{plan.name}</span>
-        <Badge>{plan.providerName}</Badge>
-        <Badge tone="info">{apiProviderTypeLabel(plan.type)}</Badge>
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${apiProviderStatusClass(plan.enabled)}`}>
-          {plan.enabled ? "启用" : "停用"}
-        </span>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-[#2d3435]">{plan.name}</span>
+            <Badge>{plan.providerName}</Badge>
+            <Badge tone="info">{apiProviderTypeLabel(plan.type)}</Badge>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${apiProviderStatusClass(plan.enabled)}`}>
+              {plan.enabled ? "启用" : "停用"}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4]"
+        >
+          <Pencil size={13} />
+          编辑
+        </button>
       </div>
       <p className="mt-2 text-sm text-[#5a6061]">
         {formatApiPlanAdminPrice(plan)} · 覆盖 {plan.modelCount} 个模型
@@ -4678,6 +4883,209 @@ function ApiPlanRow({ plan }: { plan: ApiModelAdminPlan }) {
       </a>
     </div>
   );
+}
+
+function ApiModelJsonEditorModal({
+  payload,
+  text,
+  error,
+  saving,
+  onChange,
+  onCancel,
+  onSave,
+}: {
+  payload: ApiModelEditablePayload;
+  text: string;
+  error: string | null;
+  saving: boolean;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#202829]/45 px-4 py-6">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="api-model-json-editor-title"
+        className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[#adb3b4]/20 bg-white shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-[#adb3b4]/15 px-5 py-4">
+          <div>
+            <h3 id="api-model-json-editor-title" className="text-base font-semibold text-[#2d3435]">
+              编辑 {apiEditableTargetLabel(payload.target)}
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-[#5a6061]">
+              这里直接更新 Supabase api_* 表。请保留 target 和 id，只修改需要维护的字段。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#adb3b4]/30 bg-white text-[#5a6061] transition-colors hover:bg-[#f2f4f4]"
+            aria-label="关闭编辑弹窗"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+          <textarea
+            value={text}
+            onChange={(event) => onChange(event.target.value)}
+            spellCheck={false}
+            className="min-h-[420px] w-full resize-y rounded-lg border border-[#adb3b4]/35 bg-[#202829] px-3 py-3 font-mono text-xs leading-6 text-[#f2f4f4] outline-none transition-colors focus:border-[#2f7a4b]"
+          />
+          {error ? (
+            <p className="mt-3 rounded-lg border border-[#9b3328]/20 bg-[#fbe9e7] px-3 py-2 text-sm leading-6 text-[#9b3328]">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#adb3b4]/15 px-5 py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-[#adb3b4]/30 bg-white px-4 text-sm font-medium text-[#5a6061] transition-colors hover:bg-[#f2f4f4]"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#2f7a4b] px-4 text-sm font-medium text-white transition-colors hover:bg-[#256a3d] disabled:opacity-60"
+          >
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function buildApiModelPayload(model: ApiModelAdminModel): ApiModelEditablePayload {
+  return {
+    target: "model",
+    id: model.id,
+    displayName: model.displayName,
+    modelId: model.modelId,
+    contextWindow: model.contextWindow,
+    description: model.description,
+    status: model.status,
+    sourceUrl: model.sourceUrl,
+    sourceLabel: model.sourceLabel,
+    capabilities: model.capabilities,
+    suitableTools: model.suitableTools,
+  };
+}
+
+function buildApiProviderPayload(provider: ApiModelAdminProvider): ApiModelEditablePayload {
+  return {
+    target: "provider",
+    id: provider.id,
+    name: provider.name,
+    type: provider.type,
+    billingMode: provider.billingMode,
+    url: provider.url,
+    pricingUrl: provider.pricingUrl,
+    description: provider.description,
+    limitSummary: provider.limitSummary,
+    limitations: provider.limitations,
+    sourceLabel: provider.sourceLabel,
+    enabled: provider.enabled,
+  };
+}
+
+function buildApiPlanPayload(plan: ApiModelAdminPlan): ApiModelEditablePayload {
+  return {
+    target: "plan",
+    id: plan.id,
+    name: plan.name,
+    type: plan.type,
+    priceLabel: plan.priceLabel,
+    priceUsdMonthly: plan.priceUsdMonthly,
+    priceCnyMonthly: plan.priceCnyMonthly,
+    quotaSummary: plan.quotaSummary,
+    resetSummary: plan.resetSummary,
+    limitSummary: plan.limitSummary,
+    limitations: plan.limitations,
+    coverageLabel: plan.coverageLabel,
+    compatibility: plan.compatibility,
+    suitableTools: plan.suitableTools,
+    sourceUrl: plan.sourceUrl,
+    sourceLabel: plan.sourceLabel,
+    enabled: plan.enabled,
+    modelIds: plan.modelIds,
+  };
+}
+
+function buildApiOfferPayload(offer: ApiModelAdminOffer): ApiModelEditablePayload {
+  return {
+    target: "offer",
+    id: offer.id,
+    routeModelId: offer.routeModelId,
+    inputPrice: offer.inputPrice,
+    outputPrice: offer.outputPrice,
+    cacheReadPrice: offer.cacheReadPrice,
+    cacheWritePrice: offer.cacheWritePrice,
+    freeOrPlan: offer.freeOrPlan,
+    limitSummary: offer.limitSummary,
+    limitations: offer.limitations,
+    compatibility: offer.compatibility,
+    suitableTools: offer.suitableTools,
+    pricingUrl: offer.pricingUrl,
+    sourceLabel: offer.sourceLabel,
+    status: offer.status,
+    notes: offer.notes,
+  };
+}
+
+function prettyApiEditablePayload(payload: ApiModelEditablePayload): string {
+  return JSON.stringify(payload, null, 2);
+}
+
+function parseApiEditablePayload(text: string): { ok: true; payload: ApiModelEditablePayload } | { ok: false; message: string } {
+  try {
+    const parsed = JSON.parse(text) as Partial<ApiModelEditablePayload>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, message: "JSON 必须是一个对象。" };
+    }
+    if (!isApiEditableTarget(parsed.target)) {
+      return { ok: false, message: "target 必须是 model、provider、plan 或 offer。" };
+    }
+    if (typeof parsed.id !== "string" || !parsed.id.trim()) {
+      return { ok: false, message: "id 不能为空。" };
+    }
+    return { ok: true, payload: parsed as ApiModelEditablePayload };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "JSON 格式错误。" };
+  }
+}
+
+function isApiEditableTarget(value: unknown): value is ApiModelEditableTarget {
+  return value === "model" || value === "provider" || value === "plan" || value === "offer";
+}
+
+function apiEditableTargetLabel(value: ApiModelEditableTarget): string {
+  if (value === "model") return "标准模型";
+  if (value === "provider") return "来源渠道";
+  if (value === "plan") return "套餐";
+  return "报价";
+}
+
+function apiModelStatusLabel(value: ApiModelAdminModel["status"]): string {
+  if (value === "active") return "展示中";
+  if (value === "needs_review") return "待复核";
+  return "已停用";
+}
+
+function apiModelStatusClass(value: ApiModelAdminModel["status"]): string {
+  if (value === "active") return "bg-[#e8f3ec] text-[#2f7a4b]";
+  if (value === "needs_review") return "bg-[#fff7e8] text-[#7a541b]";
+  return "bg-[#f2f4f4] text-[#5a6061]";
 }
 
 function formatApiPlanAdminPrice(plan: ApiModelAdminPlan) {
