@@ -12,7 +12,7 @@ export function GuideReadingFooter({ currentHref }: { currentHref: string }) {
   const readingPath = getGuideReadingPathForGuide(currentHref);
 
   return (
-    <section className="mt-12 overflow-hidden rounded-lg bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15">
+    <section data-guide-no-toc className="mt-12 overflow-hidden rounded-lg bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15">
       <div className="grid gap-0 lg:grid-cols-[minmax(0,0.82fr)_minmax(320px,0.48fr)]">
         <div className="border-b border-[#edf0f1] p-6 sm:p-7 lg:border-b-0 lg:border-r">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#e8f3ec] text-[#2f7a4b]">

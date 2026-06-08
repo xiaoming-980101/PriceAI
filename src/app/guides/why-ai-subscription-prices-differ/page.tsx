@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ArrowRight, CheckCircle2, CreditCard, ExternalLink, Gift, HelpCircle, Layers3, ShieldAlert, Tags } from "lucide-react";
 import Link from "next/link";
+import { GuideDocsLayout } from "@/components/GuideDocsLayout";
 import { GuideReadingFooter } from "@/components/GuideReadingFooter";
 import { JsonLd } from "@/components/JsonLd";
-import { SiteHeader } from "@/components/SiteHeader";
 
 export const revalidate = 86400;
 
@@ -28,12 +28,8 @@ export default function WhyAiSubscriptionPricesDifferGuide() {
   return (
     <>
       <JsonLd data={buildGuideJsonLd()} />
-      <main className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
-        <div className="sticky top-0 z-40 bg-[#f9f9f9]/95 shadow-[0_10px_24px_rgba(45,52,53,0.035)] backdrop-blur-xl">
-          <SiteHeader />
-        </div>
-
-        <article className="mx-auto max-w-[1080px] px-5 pb-14 pt-8 sm:px-8 lg:pt-12">
+      <GuideDocsLayout currentHref="/guides/why-ai-subscription-prices-differ">
+        <article className="pb-14">
           <section className="grid gap-8 lg:grid-cols-[minmax(0,0.78fr)_310px] lg:items-start">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full bg-[#e8f3ec] px-3 py-1.5 text-xs font-semibold text-[#2f7a4b] ring-1 ring-[#45bf78]/15">
@@ -210,7 +206,7 @@ export default function WhyAiSubscriptionPricesDifferGuide() {
 
           <GuideReadingFooter currentHref="/guides/why-ai-subscription-prices-differ" />
         </article>
-      </main>
+      </GuideDocsLayout>
     </>
   );
 }

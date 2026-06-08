@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { ArrowRight, BookOpenText, Layers3, Search } from "lucide-react";
+import { ArrowRight, BookOpenText, FileText, Search } from "lucide-react";
 import Link from "next/link";
+import { GuideDocsLayout } from "@/components/GuideDocsLayout";
 import { GuidesDirectory } from "@/components/GuidesDirectory";
 import { JsonLd } from "@/components/JsonLd";
-import { SiteHeader } from "@/components/SiteHeader";
 import {
   getGuideCategory,
   getGuidePathStepEntry,
@@ -34,12 +34,8 @@ export default function GuidesIndexPage() {
   return (
     <>
       <JsonLd data={buildGuidesJsonLd()} />
-      <main className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
-        <div className="sticky top-0 z-40 bg-[#f9f9f9]/95 shadow-[0_10px_24px_rgba(45,52,53,0.035)] backdrop-blur-xl">
-          <SiteHeader activeSection="guides" />
-        </div>
-
-        <article className="mx-auto max-w-[1180px] px-5 pb-14 pt-8 sm:px-8 lg:pt-12">
+      <GuideDocsLayout currentHref="/guides">
+        <article className="pb-14">
           <section className="grid gap-6 lg:grid-cols-[minmax(0,0.76fr)_320px] lg:items-start">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full bg-[#e8f3ec] px-3 py-1.5 text-xs font-semibold text-[#2f7a4b] ring-1 ring-[#45bf78]/15">
@@ -50,7 +46,7 @@ export default function GuidesIndexPage() {
                 所有 AI 订阅指南都在这里。
               </h1>
               <p className="mt-5 max-w-[72ch] text-base leading-8 text-[#5a6061]">
-                这里是 PriceAI 的知识库入口，用来集中检索价格分层、官方订阅、支付方式、礼品卡、地区价和渠道判断相关指南。
+                这里是 PriceAI 的知识库入口。左侧按主题浏览，正文区域查看阅读路径和全部文章，右侧可以快速跳到当前页面的段落。
               </p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <a
@@ -79,7 +75,7 @@ export default function GuidesIndexPage() {
               <div className="mt-5 rounded-lg bg-[#f2f4f4] px-4 py-3 text-sm leading-6 text-[#5a6061]">
                 <div className="flex gap-2">
                   <Search size={16} className="mt-1 shrink-0 text-[#2f7a4b]" />
-                  <p>可以直接搜索 ChatGPT、Google Play、礼品卡、虚拟卡、地区价、卡网等关键词。</p>
+                  <p>适合按 ChatGPT、Google Play、礼品卡、虚拟卡、地区价、卡网等关键词检索。</p>
                 </div>
               </div>
             </aside>
@@ -142,10 +138,10 @@ export default function GuidesIndexPage() {
               <a
                 key={category.id}
                 href="#all-guides"
-                className="rounded-lg bg-white p-4 shadow-[0_16px_40px_rgba(45,52,53,0.035)] ring-1 ring-[#adb3b4]/15 transition hover:-translate-y-0.5 hover:bg-[#fbfcfc]"
+                className="rounded-lg bg-white p-4 shadow-[0_16px_40px_rgba(45,52,53,0.035)] ring-1 ring-[#adb3b4]/15 transition hover:bg-[#fbfcfc]"
               >
                 <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#e8f3ec] text-[#2f7a4b]">
-                  <Layers3 size={17} />
+                  <FileText size={17} />
                 </div>
                 <h2 className="mt-4 font-semibold text-[#202829]">{category.label}</h2>
                 <p className="mt-2 text-sm leading-6 text-[#5a6061]">{category.description}</p>
@@ -155,7 +151,7 @@ export default function GuidesIndexPage() {
 
           <GuidesDirectory />
         </article>
-      </main>
+      </GuideDocsLayout>
     </>
   );
 }
