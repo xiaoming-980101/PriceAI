@@ -84,10 +84,10 @@ export function GuidePageToc() {
   }, [pathname]);
 
   return (
-    <nav aria-label="本文目录" className="rounded-lg bg-white p-4 shadow-[0_16px_42px_rgba(45,52,53,0.035)] ring-1 ring-[#adb3b4]/15">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#5a6061]">本文目录</p>
+    <nav aria-label="本文目录" className="border-l border-[#dfe4e5] pl-4">
+      <p className="text-xs font-semibold text-[#7a8182]">本文目录</p>
       {items.length ? (
-        <div className="mt-3 space-y-1">
+        <div className="mt-3 space-y-0.5">
           {items.map((item) => {
             const active = activeId === item.id;
 
@@ -96,7 +96,7 @@ export function GuidePageToc() {
                 key={item.id}
                 href={`#${item.id}`}
                 className={`block rounded-md px-2 py-1.5 text-sm leading-5 transition ${
-                  active ? "bg-[#e8f3ec] font-semibold text-[#2f7a4b]" : "text-[#5a6061] hover:bg-[#f2f4f4] hover:text-[#202829]"
+                  active ? "font-semibold text-[#2f7a4b]" : "text-[#5a6061] hover:bg-[#edf0f1] hover:text-[#202829]"
                 }`}
               >
                 {item.label}
@@ -105,7 +105,7 @@ export function GuidePageToc() {
           })}
         </div>
       ) : (
-        <p className="mt-3 text-sm leading-6 text-[#5a6061]">当前页面暂无可跳转目录。</p>
+        <p className="mt-3 text-sm leading-6 text-[#7a8182]">当前页面暂无可跳转目录。</p>
       )}
     </nav>
   );

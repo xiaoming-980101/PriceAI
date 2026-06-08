@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowRight, BookOpenText, FileText, Search } from "lucide-react";
+import { ArrowRight, BookOpenText } from "lucide-react";
 import Link from "next/link";
 import { GuideDocsLayout } from "@/components/GuideDocsLayout";
 import { GuidesDirectory } from "@/components/GuidesDirectory";
@@ -7,7 +7,6 @@ import { JsonLd } from "@/components/JsonLd";
 import {
   getGuideCategory,
   getGuidePathStepEntry,
-  guideCategories,
   guideEntries,
   guideReadingPaths,
 } from "@/lib/guides";
@@ -35,133 +34,100 @@ export default function GuidesIndexPage() {
     <>
       <JsonLd data={buildGuidesJsonLd()} />
       <GuideDocsLayout currentHref="/guides">
-        <article className="pb-14">
-          <section className="grid gap-6 lg:grid-cols-[minmax(0,0.76fr)_320px] lg:items-start">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-[#e8f3ec] px-3 py-1.5 text-xs font-semibold text-[#2f7a4b] ring-1 ring-[#45bf78]/15">
-                <BookOpenText size={15} />
-                指南总目录
-              </div>
-              <h1 className="mt-5 font-serif text-4xl font-semibold leading-tight tracking-normal text-[#202829] sm:text-5xl">
-                所有 AI 订阅指南都在这里。
-              </h1>
-              <p className="mt-5 max-w-[72ch] text-base leading-8 text-[#5a6061]">
-                这里是 PriceAI 的知识库入口。左侧按主题浏览，正文区域查看阅读路径和全部文章，右侧可以快速跳到当前页面的段落。
-              </p>
-              <div className="mt-7 flex flex-wrap gap-3">
-                <a
-                  href="#all-guides"
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#2d3435] px-5 text-sm font-semibold text-[#f8f8f8] transition hover:-translate-y-0.5 hover:bg-[#202829]"
-                >
-                  查看全部指南
-                  <ArrowRight size={16} />
-                </a>
-                <Link
-                  href="/?stock=available"
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-[#2d3435] ring-1 ring-[#adb3b4]/20 transition hover:bg-[#f5f7f7]"
-                >
-                  回到比价工具
-                  <ArrowRight size={16} />
-                </Link>
-              </div>
+        <article className="pb-14 text-[#2d3435]">
+          <section className="border-b border-[#dfe4e5] pb-8">
+            <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#2f7a4b]">
+              <BookOpenText size={15} />
+              指南总目录
             </div>
-
-            <aside className="rounded-lg bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#5a6061]">目录概览</p>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <Metric label="指南" value={`${guideEntries.length}`} />
-                <Metric label="分类" value={`${guideCategories.length}`} />
-              </div>
-              <div className="mt-5 rounded-lg bg-[#f2f4f4] px-4 py-3 text-sm leading-6 text-[#5a6061]">
-                <div className="flex gap-2">
-                  <Search size={16} className="mt-1 shrink-0 text-[#2f7a4b]" />
-                  <p>适合按 ChatGPT、Google Play、礼品卡、虚拟卡、地区价、卡网等关键词检索。</p>
-                </div>
-              </div>
-            </aside>
+            <h1 className="mt-4 font-serif text-4xl font-semibold leading-tight tracking-normal text-[#202829] sm:text-5xl">
+              AI 订阅指南
+            </h1>
+            <p className="mt-5 max-w-[72ch] text-base leading-8 text-[#5a6061]">
+              从价格差异、官方订阅、支付方式到第三方渠道判断，这里集中收录 PriceAI 的所有指南。你可以先按阅读路径进入，也可以直接在下方检索全部文章。
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a
+                href="#reading-paths"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#2d3435] px-4 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#202829]"
+              >
+                查看阅读路径
+                <ArrowRight size={15} />
+              </a>
+              <a
+                href="#all-guides"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#edf0f1] px-4 text-sm font-semibold text-[#2d3435] transition hover:bg-[#dde4e5]"
+              >
+                浏览全部目录
+                <ArrowRight size={15} />
+              </a>
+              <Link
+                href="/?stock=available"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md text-sm font-semibold text-[#2d3435] transition hover:bg-[#edf0f1]"
+              >
+                回到比价工具
+                <ArrowRight size={15} />
+              </Link>
+            </div>
           </section>
 
-          <section className="mt-8 rounded-lg bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15 sm:p-6">
+          <section id="reading-paths" className="mt-10 border-b border-[#dfe4e5] pb-10">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#5a6061]">按问题阅读</p>
-                <h2 className="mt-3 font-serif text-3xl font-semibold tracking-normal text-[#202829]">先选一条路径</h2>
+                <p className="text-xs font-semibold text-[#7a8182]">按问题阅读</p>
+                <h2 className="mt-3 font-serif text-3xl font-semibold tracking-normal text-[#202829]">推荐阅读路径</h2>
                 <p className="mt-2 max-w-[72ch] text-sm leading-7 text-[#5a6061]">
-                  如果你还不确定该读哪篇，可以先按当前问题走一条短路径。每条路径会把基础解释、风险判断和回到比价工具串起来。
+                  如果你还不确定该读哪篇，可以先按当前问题走一条短路径。
                 </p>
               </div>
               <a
                 href="#all-guides"
-                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-[#f2f4f4] px-4 text-sm font-semibold text-[#2d3435] ring-1 ring-[#adb3b4]/15 transition hover:bg-[#dde4e5]"
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-[#edf0f1] px-4 text-sm font-semibold text-[#2d3435] transition hover:bg-[#dde4e5]"
               >
                 直接看全部目录
                 <ArrowRight size={15} />
               </a>
             </div>
 
-            <div className="mt-6 grid gap-4 lg:grid-cols-3">
+            <div className="mt-6 divide-y divide-[#dfe4e5] border-y border-[#dfe4e5]">
               {guideReadingPaths.map((path) => (
-                <div key={path.id} className="rounded-lg bg-[#f9f9f9] p-4 ring-1 ring-[#adb3b4]/15">
-                  <span className="inline-flex h-7 items-center rounded-full bg-[#e8f3ec] px-3 text-xs font-semibold text-[#2f7a4b]">
-                    {path.audience}
-                  </span>
-                  <h3 className="mt-3 font-semibold text-[#202829]">{path.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-[#5a6061]">{path.description}</p>
-                  <div className="mt-4 space-y-2">
+                <div key={path.id} className="grid gap-4 py-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div>
+                    <p className="text-xs font-semibold text-[#2f7a4b]">{path.audience}</p>
+                    <h3 className="mt-2 font-semibold text-[#202829]">{path.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-[#5a6061]">{path.description}</p>
+                  </div>
+                  <ol className="space-y-2">
                     {path.steps.map((step, index) => {
                       const guide = getGuidePathStepEntry(step);
 
                       return (
-                        <Link
-                          key={step.href}
-                          href={step.href}
-                          className="group flex gap-3 rounded-lg bg-white px-3 py-3 ring-1 ring-[#adb3b4]/10 transition hover:-translate-y-0.5 hover:ring-[#45bf78]/30"
-                        >
-                          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] text-xs font-bold text-[#5a6061]">
-                            {index + 1}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block text-sm font-semibold text-[#202829]">{guide?.title ?? step.label}</span>
-                            <span className="mt-1 block text-xs leading-5 text-[#5a6061]">{step.description}</span>
-                          </span>
-                        </Link>
+                        <li key={step.href}>
+                          <Link
+                            href={step.href}
+                            className="group grid gap-3 rounded-md px-2 py-2 transition hover:bg-[#edf0f1] sm:grid-cols-[28px_minmax(0,1fr)]"
+                          >
+                            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#edf0f1] text-xs font-bold text-[#5a6061] group-hover:bg-[#dde4e5]">
+                              {index + 1}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold text-[#202829]">{guide?.title ?? step.label}</span>
+                              <span className="mt-1 block text-xs leading-5 text-[#5a6061]">{step.description}</span>
+                            </span>
+                          </Link>
+                        </li>
                       );
                     })}
-                  </div>
+                  </ol>
                 </div>
               ))}
             </div>
-          </section>
-
-          <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {guideCategories.map((category) => (
-              <a
-                key={category.id}
-                href="#all-guides"
-                className="rounded-lg bg-white p-4 shadow-[0_16px_40px_rgba(45,52,53,0.035)] ring-1 ring-[#adb3b4]/15 transition hover:bg-[#fbfcfc]"
-              >
-                <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#e8f3ec] text-[#2f7a4b]">
-                  <FileText size={17} />
-                </div>
-                <h2 className="mt-4 font-semibold text-[#202829]">{category.label}</h2>
-                <p className="mt-2 text-sm leading-6 text-[#5a6061]">{category.description}</p>
-              </a>
-            ))}
           </section>
 
           <GuidesDirectory />
         </article>
       </GuideDocsLayout>
     </>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-[#f2f4f4] px-4 py-3">
-      <p className="text-xs font-semibold text-[#5a6061]">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-[#202829]">{value}</p>
-    </div>
   );
 }
 
