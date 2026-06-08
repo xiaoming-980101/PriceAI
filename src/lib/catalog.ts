@@ -140,6 +140,26 @@ export const canonicalCatalog: CanonicalProduct[] = [
     aliases: ["claude pro", "pro 尼区", "claude 月卡"],
   },
   {
+    id: "claude-team-standard",
+    slug: "claude-team-standard",
+    displayName: "Claude Team Standard",
+    platform: "Claude",
+    productType: "订阅/会员",
+    spec: "Team Standard / 1.25x",
+    summary: "Claude Team 标准席位、Standard seat 或 1.25x 团队订阅。",
+    aliases: ["claude team standard", "team standard", "标准席位", "1.25x", "1.25倍"],
+  },
+  {
+    id: "claude-team-premium",
+    slug: "claude-team-premium",
+    displayName: "Claude Team Premium",
+    platform: "Claude",
+    productType: "订阅/会员",
+    spec: "Team Premium / 6.25x",
+    summary: "Claude Team 高级席位、Premium seat 或 6.25x 团队订阅。",
+    aliases: ["claude team premium", "team premium", "高级席位", "6.25x", "6.25倍"],
+  },
+  {
     id: "claude-max-5x",
     slug: "claude-max-5x",
     displayName: "Claude Max 5x",
@@ -450,6 +470,14 @@ export function classifyOffer(
   }
 
   if (isClaudeProduct(value)) {
+    if (isClaudeTeamPremium(value)) {
+      return getCanonicalProduct("claude-team-premium");
+    }
+
+    if (isClaudeTeamStandard(value)) {
+      return getCanonicalProduct("claude-team-standard");
+    }
+
     if (matches(value, ["20x", "x20", "20×", "max 20", "max x20"])) {
       return getCanonicalProduct("claude-max-20x");
     }
@@ -909,6 +937,33 @@ function classifyPureEmail(value: string): string {
 
 function isClaudeProduct(value: string): boolean {
   return matches(value, ["claude", "克劳德"]);
+}
+
+function isClaudeTeamProduct(value: string): boolean {
+  return isClaudeProduct(value) && matches(value, ["team", "团队", "席位"]);
+}
+
+function isClaudeTeamPremium(value: string): boolean {
+  if (!isClaudeProduct(value)) return false;
+
+  const hasPremiumSignal = matches(value, [
+    "premium",
+    "高级席位",
+    "高级",
+    "6.25x",
+    "6.25 x",
+    "6.25倍",
+    "6.25 倍",
+  ]);
+
+  if (!hasPremiumSignal) return false;
+  return isClaudeTeamProduct(value) || matches(value, ["6.25x", "6.25 x", "6.25倍", "6.25 倍"]);
+}
+
+function isClaudeTeamStandard(value: string): boolean {
+  if (!isClaudeTeamProduct(value)) return false;
+
+  return true;
 }
 
 function isGeminiProduct(value: string): boolean {

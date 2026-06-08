@@ -110,6 +110,15 @@ function buildSuspiciousChecks(items) {
         /(plus.*(充值|cdk|自助|首登)|有team不能冲|要稳买我的team)/i.test(offer.normalizedTitle),
     },
     {
+      key: "claude_personal_maybe_team",
+      label: "Claude Pro / Max 中疑似 Team 商品",
+      expected: "claude-team-standard/claude-team-premium",
+      filter: (offer) =>
+        ["claude-pro-month", "claude-max-5x", "claude-max-20x", "claude-account"].includes(offer.nextProductId) &&
+        /claude|克劳德/i.test(offer.normalizedTitle) &&
+        /(team|团队|席位|1\.25\s*x|1\.25\s*倍|6\.25\s*x|6\.25\s*倍)/i.test(offer.normalizedTitle),
+    },
+    {
       key: "ultra_maybe_gemini_pro",
       label: "Ultra 中疑似 Gemini Pro",
       expected: "gemini-pro-year",
