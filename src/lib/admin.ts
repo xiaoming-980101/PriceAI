@@ -1040,6 +1040,7 @@ function mapSourceRow(row: Record<string, unknown>): Source {
 const MAX_FETCH_BYTES = 256 * 1024;
 const FETCH_TIMEOUT_MS = 5000;
 const SHOP_API_TIMEOUT_MS = 8000;
+const CURRENCY_PRICE_RE = /[¥￥]\s*\d+(?:\.\d{1,2})?/;
 export async function parseSubmissionMetadata(rawUrl: string): Promise<{
   url: string;
   parsedTitle: string | null;
@@ -1116,6 +1117,7 @@ export async function parseSubmissionMetadata(rawUrl: string): Promise<{
       meta.product_type = canonical.productType;
       Object.assign(meta, await resolveSubmittedSource(parsed, parsedTitle, html));
     }
+    Object.assign(meta, refineSubmissionCollectorFromHtml(parsed, html, meta));
   } catch (error) {
     meta.parse_error = error instanceof Error ? error.message : String(error);
   } finally {
@@ -1226,6 +1228,44 @@ async function resolveSourceFromKnownOffer(
 
 function inferCollectorKind(host: string): string {
   return inferCollectorKindFromHost(host, host, "browser") || "browser";
+}
+
+function refineSubmissionCollectorFromHtml(
+  parsed: URL,
+  html: string,
+  currentMeta: Record<string, unknown>,
+): Record<string, unknown> {
+  const currentKind = normalizeCollectorKind(currentMeta.suggested_collector_kind);
+  if (currentKind && currentKind !== "browser" && currentKind !== "unsupported") return {};
+
+  const detectedKind = inferCollectorKindFromSubmissionFingerprint(parsed, html);
+  if (!detectedKind || detectedKind === "browser" || detectedKind === "unsupported") return {};
+
+  return {
+    suggested_collection_method: "http",
+    suggested_collector_kind: detectedKind,
+    support_status: "fingerprint_supported",
+    support_reason: `页面指纹识别到 ${detectedKind} 采集器，建议试采集确认后入库。`,
+  };
+}
+
+function inferCollectorKindFromSubmissionFingerprint(parsed: URL, html: string): CollectorKind | null {
+  const hostKind = inferCollectorKindFromHost(parsed.hostname);
+  if (hostKind) return hostKind;
+
+  const lower = html.toLowerCase();
+  if (lower.includes("/user/api/index/commodity") || (lower.includes("commodity_name") && lower.includes("/assets/static/acg.js"))) {
+    return "kami";
+  }
+  if (lower.includes("/api/v1/public/products") || lower.includes("dujiaoka")) return "dujiao";
+  if (lower.includes("/shop/user/products")) return "shopUserProductsApi";
+  if (lower.includes("mooncake_catalog") || lower.includes("mooncake-official-media/catalog")) return "mooncakeCatalog";
+  if (lower.includes("/api/shop/products")) return "ikunloveApi";
+  if (lower.includes("/api/products")) return "publicProductsApi";
+  if (/card position-relative/i.test(html) && /card-title/i.test(html) && /\/buy\/\d+/i.test(html)) return "unicornHtml";
+  if (/atelier-catalog-card/i.test(html)) return "beibeiHtml";
+  if (parsed.pathname.match(/\/(?:product|products|goods|item)\//i) && CURRENCY_PRICE_RE.test(html)) return "genericHtml";
+  return null;
 }
 
 function inferSubmittedSourceName(host: string, parsedTitle: string | null, shopToken: string | null): string {

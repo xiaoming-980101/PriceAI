@@ -17,6 +17,19 @@ const DEFAULT_LIANDONG_SHOP_BULK_DELAY_MS = 15_000;
 const DEFAULT_LIANDONG_SHOP_BREAKER_MINUTES = 30;
 const DEFAULT_PAGE_DELAY_MS = 300;
 const DEFAULT_CONCURRENCY = 1;
+const AUTO_DETECT_COLLECTOR_KINDS = [
+  "dujiao",
+  "kami",
+  "publicProductsApi",
+  "shopUserProductsApi",
+  "mooncakeCatalog",
+  "ikunloveApi",
+  "unicornHtml",
+  "opensoraHtml",
+  "makerichHtml",
+  "beibeiHtml",
+  "genericHtml",
+];
 
 export async function runPriceCollection(options = {}) {
   const targets = await loadTargets();
@@ -173,6 +186,16 @@ export async function probeSource(options = {}) {
   const limit = Math.max(1, Math.min(Number(options.limit || 12), 50));
 
   if (!target.kind) {
+    const detected = shouldAutoDetectCollector(options)
+      ? await detectCollectorByProbe(target, options, limit)
+      : null;
+    if (detected?.offers?.length) {
+      return probeSuccessResponse(detected.target, detected.offers, startedAt, limit, {
+        attempts: detected.attempts,
+        message: `自动试探成功，识别到 ${detected.target.kind} 采集器，采集到 ${detected.offers.length} 条报价。`,
+      });
+    }
+
     return {
       sourceId: target.sourceId,
       sourceName: target.sourceName,
@@ -182,30 +205,41 @@ export async function probeSource(options = {}) {
       status: "unsupported",
       offerCount: 0,
       offers: [],
+      attempts: detected?.attempts || [],
       ms: Date.now() - startedAt,
       finishedAt: new Date().toISOString(),
-      message: "当前链接暂未识别到自动采集器。若渠道真实，请加入采集器待办，补解析脚本后重新试采集。",
+      message: detected?.attempts?.length
+        ? "已尝试现有 HTTP 采集器，但没有识别到可比价商品；若渠道真实，请加入采集器待办，补解析脚本后重新试采集。"
+        : "当前链接暂未识别到自动采集器。若渠道真实，请加入采集器待办，补解析脚本后重新试采集。",
     };
   }
 
   try {
     const offers = dedupeOffers(await collectTarget(target, options));
-    return {
-      sourceId: target.sourceId,
-      sourceName: target.sourceName,
-      sourceUrl: target.sourceUrl,
-      baseUrl: target.baseUrl,
-      kind: target.kind,
-      status: offers.length ? "success" : "empty",
-      offerCount: offers.length,
-      offers: offers.slice(0, limit),
-      ms: Date.now() - startedAt,
-      finishedAt: new Date().toISOString(),
-      message: offers.length
-        ? `试采集成功，识别到 ${offers.length} 条报价。`
-        : "已连接到采集器，但没有识别到可比价商品。",
-    };
+    if (offers.length || !shouldFallbackDetectCollector(options, target.kind)) {
+      return probeSuccessResponse(target, offers, startedAt, limit);
+    }
+
+    const detected = await detectCollectorByProbe(target, options, limit, [target.kind]);
+    if (detected?.offers?.length) {
+      return probeSuccessResponse(detected.target, detected.offers, startedAt, limit, {
+        attempts: detected.attempts,
+        message: `原解析器 ${target.kind} 返回空结果，已自动试出 ${detected.target.kind} 采集器，采集到 ${detected.offers.length} 条报价。`,
+      });
+    }
+
+    return probeSuccessResponse(target, offers, startedAt, limit, { attempts: detected?.attempts || [] });
   } catch (error) {
+    if (shouldFallbackDetectCollector(options, target.kind)) {
+      const detected = await detectCollectorByProbe(target, options, limit, [target.kind]);
+      if (detected?.offers?.length) {
+        return probeSuccessResponse(detected.target, detected.offers, startedAt, limit, {
+          attempts: detected.attempts,
+          message: `原解析器 ${target.kind} 失败，已自动试出 ${detected.target.kind} 采集器，采集到 ${detected.offers.length} 条报价。`,
+        });
+      }
+    }
+
     return {
       sourceId: target.sourceId,
       sourceName: target.sourceName,
@@ -220,6 +254,83 @@ export async function probeSource(options = {}) {
       message: errorMessage(error),
     };
   }
+}
+
+async function detectCollectorByProbe(target, options = {}, limit = 12, skipKinds = []) {
+  const attempts = [];
+  const skip = new Set(skipKinds.filter(Boolean));
+  const candidates = collectorProbeCandidates(target).filter((kind) => !skip.has(kind));
+
+  for (const kind of candidates) {
+    const probeTarget = { ...target, kind, configuredKind: target.configuredKind || "auto" };
+    const startedAt = Date.now();
+    try {
+      const offers = dedupeOffers(await collectTarget(probeTarget, { ...options, pageDelayMs: options.pageDelayMs ?? 0 }));
+      attempts.push({
+        kind,
+        status: offers.length ? "success" : "empty",
+        offerCount: offers.length,
+        ms: Date.now() - startedAt,
+      });
+      if (offers.length) return { target: probeTarget, offers, attempts };
+    } catch (error) {
+      attempts.push({
+        kind,
+        status: "failed",
+        offerCount: 0,
+        ms: Date.now() - startedAt,
+        message: errorMessage(error).slice(0, 240),
+      });
+    }
+  }
+
+  return { attempts };
+}
+
+function collectorProbeCandidates(target) {
+  const candidates = [];
+  const add = (kind) => {
+    if (!candidates.includes(kind)) candidates.push(kind);
+  };
+
+  const url = safeUrl(target.sourceUrl);
+  const text = `${target.sourceId} ${target.sourceName} ${target.sourceUrl}`.toLowerCase();
+  if (shopTokenFromUrl(target.sourceUrl) || target.rawOffers.some((offer) => goodsKeyFromUrl(offer.url))) add("shopApi");
+  if (text.includes("dujiao") || text.includes("独角")) add("dujiao");
+  if (text.includes("kami") || text.includes("发卡")) add("kami");
+  if (url?.pathname.match(/\/(?:product|products|goods|item)\//i)) add("genericHtml");
+
+  for (const kind of AUTO_DETECT_COLLECTOR_KINDS) add(kind);
+  return candidates;
+}
+
+function shouldAutoDetectCollector(options = {}) {
+  return options.autoDetect !== false && options["auto-detect"] !== "false";
+}
+
+function shouldFallbackDetectCollector(options = {}, currentKind = null) {
+  if (!shouldAutoDetectCollector(options)) return false;
+  if (!currentKind || currentKind === "browser" || currentKind === "unsupported") return true;
+  return options.fallbackDetect === true || options["fallback-detect"] === true;
+}
+
+function probeSuccessResponse(target, offers, startedAt, limit, extra = {}) {
+  return {
+    sourceId: target.sourceId,
+    sourceName: target.sourceName,
+    sourceUrl: target.sourceUrl,
+    baseUrl: target.baseUrl,
+    kind: target.kind,
+    status: offers.length ? "success" : "empty",
+    offerCount: offers.length,
+    offers: offers.slice(0, limit),
+    attempts: extra.attempts || [],
+    ms: Date.now() - startedAt,
+    finishedAt: new Date().toISOString(),
+    message: extra.message || (offers.length
+      ? `试采集成功，识别到 ${offers.length} 条报价。`
+      : "已连接到采集器，但没有识别到可比价商品。"),
+  };
 }
 
 export { loadTargets, selectTargets };

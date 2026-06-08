@@ -43,6 +43,7 @@ export async function POST(request: Request) {
       collectorKind: stringMeta(meta, "suggested_collector_kind") || undefined,
       rawOffers: [{ url: submission.url }],
       limit: 12,
+      fallbackDetect: true,
     });
     const updated = await recordSubmissionProbeResult(payload.id, result);
 
