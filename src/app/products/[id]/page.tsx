@@ -6,7 +6,7 @@ import { BrandIcon } from "@/components/BrandIcon";
 import { JsonLd } from "@/components/JsonLd";
 import { ProductDetailHeader, ProductReturnLink } from "@/components/ProductDetailHeader";
 import { ProductOffersPanel } from "@/components/ProductOffersPanel";
-import { canonicalCatalog } from "@/lib/catalog";
+import { canonicalCatalog, isAvailable } from "@/lib/catalog";
 import { getPublicProductSummary, listPublicProductOffers } from "@/lib/data";
 import {
   getOfficialPricePlanSummaryFromDataset,
@@ -17,7 +17,7 @@ import {
   type OfficialPricesDataset,
 } from "@/lib/official-prices";
 import { getOfficialPricesDataset } from "@/lib/official-prices-db";
-import type { ExplorerProductSummary } from "@/lib/types";
+import type { ExplorerProductSummary, RawOffer } from "@/lib/types";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
 
 export const revalidate = 1800;
@@ -79,6 +79,7 @@ const productTypeLabels: Record<string, string> = {
   工具账号: "工具账号",
   其他: "其他",
 };
+const STRUCTURED_DATA_OFFER_LIMIT = 1200;
 
 export default async function ProductDetail({
   params,
@@ -86,9 +87,10 @@ export default async function ProductDetail({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [product, initialOffers, officialPricesDataset] = await Promise.all([
+  const [product, initialOffers, structuredDataOffers, officialPricesDataset] = await Promise.all([
     getPublicProductSummary(id),
     listPublicProductOffers(id, { limit: 80, offset: 0 }),
+    listPublicProductOffers(id, { limit: STRUCTURED_DATA_OFFER_LIMIT, offset: 0 }),
     getOfficialPricesDataset(),
   ]);
 
@@ -99,7 +101,7 @@ export default async function ProductDetail({
 
   return (
     <>
-    <JsonLd data={buildProductJsonLd(product, officialReference, seoProfile)} />
+    <JsonLd data={buildProductJsonLd(product, structuredDataOffers.offers, officialReference, seoProfile)} />
     <main className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
       <ProductDetailHeader />
 
@@ -650,16 +652,23 @@ function getRelatedCta(product: ExplorerProductSummary): RelatedCta | null {
 
 function buildProductJsonLd(
   product: ExplorerProductSummary,
+  offers: RawOffer[],
   officialReference: OfficialPriceReference | null,
   seoProfile: ProductSeoProfile | null,
 ) {
   const productUrl = `https://priceai.cc/products/${product.slug}`;
-  const lowestOffer = product.lowestPrice !== null && product.lowestOffer
+  const availablePrices = offers
+    .filter((offer) => isAvailable(offer) && offer.currency === (product.lowestOffer?.currency || offer.currency))
+    .map((offer) => offer.price)
+    .filter((price): price is number => typeof price === "number" && Number.isFinite(price));
+  const priceCurrency = product.lowestOffer?.currency || offers.find((offer) => offer.currency)?.currency || "CNY";
+  const lowestOffer = product.lowestPrice !== null && product.lowestOffer && availablePrices.length
     ? {
         "@type": "AggregateOffer",
-        lowPrice: product.lowestPrice,
-        priceCurrency: product.lowestOffer.currency || "CNY",
-        offerCount: Math.max(product.inStockCount, 1),
+        lowPrice: Math.min(...availablePrices),
+        highPrice: Math.max(...availablePrices),
+        priceCurrency,
+        offerCount: availablePrices.length,
         availability: "https://schema.org/InStock",
         url: productUrl,
       }
