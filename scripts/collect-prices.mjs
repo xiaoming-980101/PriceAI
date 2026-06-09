@@ -32,6 +32,8 @@ const AUTO_DETECT_COLLECTOR_KINDS = [
 ];
 
 export async function runPriceCollection(options = {}) {
+  const startedAtMs = Date.now();
+  const startedAt = new Date(startedAtMs).toISOString();
   const targets = await loadTargets();
   const selectedTargets = selectTargets(targets, options);
   const logger = options.silent ? null : console;
@@ -43,9 +45,10 @@ export async function runPriceCollection(options = {}) {
   }
 
   const groups = targetGroupsForCollection(selectedTargets);
+  const concurrency = concurrencyFor(options);
   const summary = (await runWithConcurrency(
     groups,
-    concurrencyFor(options),
+    concurrency,
     async (group) => {
       const results = [];
       for (const target of group.targets) {
@@ -54,15 +57,27 @@ export async function runPriceCollection(options = {}) {
       return results;
     },
   )).flat();
+  const finishedAt = new Date().toISOString();
+  const performance = buildCollectionPerformanceReport({
+    summary,
+    targets: selectedTargets,
+    groups,
+    concurrency,
+    startedAt,
+    finishedAt,
+    durationMs: Date.now() - startedAtMs,
+  });
 
   return {
     summary,
+    performance,
     targetCount: selectedTargets.length,
     successCount: summary.filter((item) => item.status === "success").length,
     failureCount: summary.filter((item) => item.status !== "success" && item.status !== "skipped").length,
     skippedCount: summary.filter((item) => item.status === "skipped").length,
     offerCount: summary.reduce((sum, item) => sum + item.offers, 0),
-    finishedAt: new Date().toISOString(),
+    startedAt,
+    finishedAt,
   };
 }
 
@@ -352,6 +367,7 @@ if (isCli()) {
     .then((result) => {
       console.log("\nSummary");
       console.table(result.summary);
+      printCollectionPerformance(result.performance);
     })
     .catch((error) => {
       console.error(errorMessage(error));
@@ -1473,6 +1489,117 @@ async function runWithConcurrency(items, concurrency, worker) {
   });
   await Promise.all(workers);
   return results;
+}
+
+function buildCollectionPerformanceReport({
+  summary,
+  targets,
+  groups,
+  concurrency,
+  startedAt,
+  finishedAt,
+  durationMs,
+}) {
+  const byKind = aggregateCollectionBy(summary, (item) => item.kind || "unknown");
+  const byStatus = aggregateCollectionBy(summary, (item) => item.status || "unknown");
+  const slowestTargets = [...summary]
+    .sort((a, b) => Number(b.ms || 0) - Number(a.ms || 0))
+    .slice(0, 10)
+    .map((item) => ({
+      sourceId: item.sourceId,
+      source: item.source,
+      kind: item.kind,
+      status: item.status,
+      offers: item.offers,
+      attempts: item.attempts,
+      ms: item.ms,
+      message: item.message || null,
+    }));
+  const multiTargetGroups = groups
+    .filter((group) => group.targets.length > 1)
+    .map((group) => ({
+      key: group.key,
+      targetCount: group.targets.length,
+      sourceIds: group.targets.map((target) => target.sourceId),
+    }))
+    .sort((a, b) => b.targetCount - a.targetCount);
+
+  return {
+    startedAt,
+    finishedAt,
+    durationMs,
+    concurrency,
+    targetCount: targets.length,
+    groupCount: groups.length,
+    multiTargetGroupCount: multiTargetGroups.length,
+    offers: summary.reduce((sum, item) => sum + Number(item.offers || 0), 0),
+    byStatus,
+    byKind,
+    slowestTargets,
+    multiTargetGroups: multiTargetGroups.slice(0, 10),
+  };
+}
+
+function aggregateCollectionBy(items, keyForItem) {
+  const map = new Map();
+
+  for (const item of items) {
+    const key = String(keyForItem(item) || "unknown");
+    const existing = map.get(key) || {
+      key,
+      targets: 0,
+      offers: 0,
+      attempts: 0,
+      totalMs: 0,
+      maxMs: 0,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+    };
+
+    existing.targets += 1;
+    existing.offers += Number(item.offers || 0);
+    existing.attempts += Number(item.attempts || 0);
+    existing.totalMs += Number(item.ms || 0);
+    existing.maxMs = Math.max(existing.maxMs, Number(item.ms || 0));
+    if (item.status === "success") existing.success += 1;
+    else if (item.status === "skipped") existing.skipped += 1;
+    else existing.failed += 1;
+    map.set(key, existing);
+  }
+
+  return [...map.values()]
+    .map((entry) => ({
+      ...entry,
+      avgMs: entry.targets ? Math.round(entry.totalMs / entry.targets) : 0,
+    }))
+    .sort((a, b) => b.totalMs - a.totalMs);
+}
+
+function printCollectionPerformance(performance) {
+  if (!performance) return;
+
+  console.log("\nPerformance");
+  console.table([
+    {
+      targets: performance.targetCount,
+      groups: performance.groupCount,
+      concurrency: performance.concurrency,
+      durationMs: performance.durationMs,
+      offers: performance.offers,
+      multiTargetGroups: performance.multiTargetGroupCount,
+    },
+  ]);
+
+  if (performance.byKind?.length) {
+    console.log("\nBy collector kind");
+    console.table(performance.byKind);
+  }
+
+  if (performance.slowestTargets?.length) {
+    console.log("\nSlowest targets");
+    console.table(performance.slowestTargets);
+  }
 }
 
 function hasTargetFilters(options = {}) {
