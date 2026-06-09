@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowUpDown,
   ChevronRight,
   Database,
   ExternalLink,
@@ -161,25 +160,19 @@ export function OfficialPricesExplorer({ dataset }: { dataset: OfficialPricesDat
             onChange={(value) => setPlatform(value as PlatformFilter)}
           />
         </div>
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
-          <div className="inline-flex h-11 min-w-0 items-center rounded-full bg-[#e4e9ea] p-1">
-            <ViewToggleButton
-              active={scopeMode === "products"}
-              icon={<PackageCheck size={16} />}
-              label="标准"
-              onClick={() => setScopeMode("products")}
-            />
-            <ViewToggleButton
-              active={scopeMode === "offers"}
-              icon={<Database size={16} />}
-              label="报价"
-              onClick={() => setScopeMode("offers")}
-            />
-          </div>
-          <div className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-full bg-[#e4e9ea] px-3 text-sm font-semibold text-[#2d3435]">
-            <ArrowUpDown size={16} className="shrink-0" />
-            <span className="truncate">{scopeMode === "products" ? "最低价" : "人民币低价"}</span>
-          </div>
+        <div className="inline-flex h-11 max-w-full items-center overflow-x-auto rounded-full bg-[#e4e9ea] p-1">
+          <ViewToggleButton
+            active={scopeMode === "products"}
+            icon={<PackageCheck size={16} />}
+            label="标准"
+            onClick={() => setScopeMode("products")}
+          />
+          <ViewToggleButton
+            active={scopeMode === "offers"}
+            icon={<Database size={16} />}
+            label="报价"
+            onClick={() => setScopeMode("offers")}
+          />
         </div>
       </section>
 
@@ -207,10 +200,6 @@ export function OfficialPricesExplorer({ dataset }: { dataset: OfficialPricesDat
               label="全部报价"
               onClick={() => setScopeMode("offers")}
             />
-          </div>
-          <div className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-[#e4e9ea] px-4 text-sm font-semibold text-[#2d3435]">
-            <ArrowUpDown size={17} />
-            {scopeMode === "products" ? "最低地区价优先" : "折算人民币从低到高"}
           </div>
         </div>
       </section>

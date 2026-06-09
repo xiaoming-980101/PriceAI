@@ -9,6 +9,7 @@ import {
   buildOfficialPricePlanSummaries,
   getOfficialPricePlanSummaryFromDataset,
   getOfficialPriceRowsByIdFromDataset,
+  type OfficialPriceRow,
 } from "@/lib/official-prices";
 import { getOfficialPricesDataset } from "@/lib/official-prices-db";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
@@ -124,7 +125,9 @@ export default async function OfficialPriceDetailPage({
           </div>
         </div>
 
-        <section className="mt-5 overflow-hidden rounded-lg bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15">
+        <OfficialPriceMobileList rows={rows} />
+
+        <section className="mt-5 hidden overflow-hidden rounded-lg bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15 md:block">
           <div className="overflow-x-auto">
             <table className="min-w-[980px] w-full border-collapse text-left text-sm">
               <thead className="bg-[#f2f4f4] text-[0.68rem] font-semibold text-[#5a6061]">
@@ -176,6 +179,50 @@ export default async function OfficialPriceDetailPage({
         </p>
       </div>
     </main>
+  );
+}
+
+function OfficialPriceMobileList({ rows }: { rows: OfficialPriceRow[] }) {
+  return (
+    <section className="mt-5 grid gap-3 md:hidden">
+      {rows.map((row) => (
+        <article
+          key={`${row.appSlug}-${row.planSlug}-${row.countryCode}`}
+          className="rounded-lg bg-white p-4 shadow-[0_16px_45px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-base font-bold text-[#202829]">
+                {row.countryLabel}
+                <span className="ml-1.5 text-xs font-semibold text-[#5a6061]">{row.countryCode}</span>
+              </p>
+              <p className="mt-1 text-sm font-semibold text-[#202829]">
+                {row.priceText}
+                <span className="ml-1.5 text-xs font-medium text-[#5a6061]">{row.currencyCode}</span>
+              </p>
+            </div>
+            <p className="shrink-0 text-right text-lg font-bold tabular-nums text-[#202829]">
+              {formatCurrency(row.cnyPrice, "CNY")}
+            </p>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-[#5a6061]">
+            <span>1 {row.currencyCode} ≈ {formatCurrency(row.fxRateToCny, "CNY")}</span>
+            <span>{formatRelativeTime(row.fetchedAt)}</span>
+          </div>
+
+          <a
+            href={row.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full bg-[#e4e9ea] px-3 text-xs font-semibold text-[#2d3435] transition hover:bg-[#dde4e5]"
+          >
+            App Store
+            <ExternalLink size={13} />
+          </a>
+        </article>
+      ))}
+    </section>
   );
 }
 

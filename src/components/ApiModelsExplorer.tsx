@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowUpDown,
   ChevronRight,
   Database,
   ExternalLink,
@@ -273,9 +272,9 @@ export function ApiModelsExplorer({ dataset }: { dataset: ApiModelDataset }) {
           </div>
 
           <div className="grid grid-cols-4 gap-2 xl:w-[420px]">
-            <Metric label="标准模型" value={`${allModelCount}`} />
-            <Metric label="渠道报价" value={`${dataset.offers.length}`} />
-            <Metric label="来源渠道" value={`${dataset.providers.length}`} />
+            <Metric label="模型" value={`${allModelCount}`} />
+            <Metric label="报价" value={`${dataset.offers.length}`} />
+            <Metric label="渠道" value={`${dataset.providers.length}`} />
             <Metric label="免费" value={`${freeCount}`} />
           </div>
         </div>
@@ -298,52 +297,37 @@ export function ApiModelsExplorer({ dataset }: { dataset: ApiModelDataset }) {
               onChange={(value) => setFamily(value)}
             />
           </div>
-          <div className="space-y-2">
-            <div className="inline-flex h-11 max-w-full items-center overflow-x-auto rounded-full bg-[#e4e9ea] p-1">
-              <ViewToggleButton
-                active={scopeMode === "models"}
-                icon={<PackageCheck size={16} />}
-                label="标准"
-                onClick={() => setScopeMode("models")}
-              />
-              <ViewToggleButton
-                active={scopeMode === "offers"}
-                icon={<Database size={16} />}
-                label="报价"
-                onClick={() => setScopeMode("offers")}
-              />
-              <ViewToggleButton
-                active={scopeMode === "providers"}
-                icon={<Layers3 size={16} />}
-                label="渠道"
-                onClick={() => setScopeMode("providers")}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <label className="relative inline-flex h-11 min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-full bg-[#e4e9ea] px-3 text-sm font-semibold text-[#2d3435]">
-                <ArrowUpDown size={16} className="shrink-0" />
-                <span className="truncate">{mobileSortLabel(mobileSort, scopeMode)}</span>
-                <select
-                  aria-label="排序"
-                  value={mobileSort}
-                  onChange={(event) => setMobileSort(event.target.value as MobileSortMode)}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                >
-                  <option value="recommended">推荐排序</option>
-                  <option value="price">低价优先</option>
-                  <option value="updated">最新优先</option>
-                  <option value="channels">渠道优先</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={() => setFiltersOpen(true)}
-                className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[#e4e9ea] px-3 text-sm font-semibold text-[#2d3435] transition hover:bg-[#dde4e5]"
-              >
-                <Filter size={16} />
-                筛选{mobileFilterCount({ currency, typeFilter }) ? ` ${mobileFilterCount({ currency, typeFilter })}` : ""}
-              </button>
-            </div>
+          <div className="inline-flex h-11 max-w-full items-center overflow-x-auto rounded-full bg-[#e4e9ea] p-1">
+            <ViewToggleButton
+              active={scopeMode === "models"}
+              icon={<PackageCheck size={16} />}
+              label="标准"
+              onClick={() => setScopeMode("models")}
+            />
+            <ViewToggleButton
+              active={scopeMode === "offers"}
+              icon={<Database size={16} />}
+              label="报价"
+              onClick={() => setScopeMode("offers")}
+            />
+            <ViewToggleButton
+              active={scopeMode === "providers"}
+              icon={<Layers3 size={16} />}
+              label="渠道"
+              onClick={() => setScopeMode("providers")}
+            />
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(true)}
+              className={`inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-semibold transition ${
+                mobileFilterCount({ currency, typeFilter })
+                  ? "bg-white text-[#202829] shadow-[0_8px_24px_rgba(45,52,53,0.08)]"
+                  : "text-[#5a6061] hover:text-[#202829]"
+              }`}
+            >
+              <Filter size={16} />
+              筛选{mobileFilterCount({ currency, typeFilter }) ? ` ${mobileFilterCount({ currency, typeFilter })}` : ""}
+            </button>
           </div>
         </div>
 
@@ -393,11 +377,6 @@ export function ApiModelsExplorer({ dataset }: { dataset: ApiModelDataset }) {
                   {item === "CNY" ? "人民币" : "美元"}
                 </button>
               ))}
-            </div>
-
-            <div className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-[#e4e9ea] px-4 text-sm font-semibold text-[#2d3435]">
-              <ArrowUpDown size={17} />
-              {scopeMode === "models" ? "模型家族优先" : scopeMode === "offers" ? "模型与价格优先" : "官方/Token Plan 优先"}
             </div>
 
             <button
@@ -1422,13 +1401,6 @@ function matchesOffer(offer: ApiModelOfferWithRelations, query: string) {
     .join(" ")
     .toLowerCase()
     .includes(query);
-}
-
-function mobileSortLabel(sort: MobileSortMode, scopeMode: ScopeMode) {
-  if (sort === "price") return "低价";
-  if (sort === "updated") return "最新";
-  if (sort === "channels") return scopeMode === "providers" ? "覆盖" : "渠道";
-  return "推荐";
 }
 
 function mobileFilterCount({ currency, typeFilter }: { currency: ApiCurrency; typeFilter: TypeFilter }) {
