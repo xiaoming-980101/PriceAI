@@ -99,6 +99,14 @@ const productSeoProfiles: Record<string, ProductSeoProfile> = {
     metadataTitle: "Outlook 邮箱价格对比：Hotmail、微软邮箱和渠道报价",
     metadataDescription: "查看 Outlook / Hotmail / Microsoft 邮箱有货最低价、批发账号、渠道报价、库存和更新时间。",
   }),
+  "education-email": profile({
+    metadataTitle: "教育邮箱价格对比：Edu 邮箱、学校邮箱和渠道报价",
+    metadataDescription: "查看教育邮箱、Edu 邮箱、学校邮箱渠道的有货最低价、库存、来源和更新时间。",
+  }),
+  "email-account": profile({
+    metadataTitle: "其他邮箱价格对比：域名邮箱、账号和渠道报价",
+    metadataDescription: "查看其他邮箱、域名邮箱、账号渠道的有货最低价、库存、来源和更新时间。",
+  }),
   "apple-id-account": profile({
     metadataTitle: "Apple ID 价格对比：苹果账号、订阅辅助和渠道报价",
     metadataDescription: "查看 Apple ID / 苹果账号有货最低价、账号渠道报价、库存、来源和更新时间，辅助理解 App Store 订阅路径。",
@@ -106,6 +114,46 @@ const productSeoProfiles: Record<string, ProductSeoProfile> = {
   "virtual-card": profile({
     metadataTitle: "虚拟卡价格对比：Visa、MasterCard、绑卡和渠道报价",
     metadataDescription: "查看虚拟卡、Visa、MasterCard、绑卡相关渠道的有货最低价、库存、来源和更新时间。",
+  }),
+  "openai-phone-verification": profile({
+    metadataTitle: "OpenAI ChatGPT 接码价格对比：手机号验证和渠道报价",
+    metadataDescription: "查看 OpenAI / ChatGPT 接码、手机号验证服务的有货最低价、渠道报价、库存和更新时间。",
+  }),
+  "google-phone-verification": profile({
+    metadataTitle: "Google Gemini 接码价格对比：Google 验证、Gmail 接码和渠道报价",
+    metadataDescription: "查看 Google / Gmail / Gemini 接码服务有货最低价、渠道报价、库存、来源和更新时间。",
+  }),
+  "paypal-phone-verification": profile({
+    metadataTitle: "PayPal 接码价格对比：手机号验证和渠道报价",
+    metadataDescription: "查看 PayPal 接码、手机号验证服务的有货最低价、渠道报价、库存和更新时间。",
+  }),
+  "phone-verification": profile({
+    metadataTitle: "接码价格对比：短信验证、手机号验证和渠道报价",
+    metadataDescription: "查看通用接码、短信验证、手机号验证服务的有货最低价、渠道报价、库存和更新时间。",
+  }),
+  "cursor-account": profile({
+    metadataTitle: "Cursor 账号价格对比：会员账号、成品号和渠道报价",
+    metadataDescription: "查看 Cursor 账号、会员账号、成品号的有货最低价、渠道报价、库存和更新时间。",
+  }),
+  "kiro-account": profile({
+    metadataTitle: "Kiro 账号价格对比：会员账号、成品号和渠道报价",
+    metadataDescription: "查看 Kiro 账号、会员账号、成品号的有货最低价、渠道报价、库存和更新时间。",
+  }),
+  "windsurf-account": profile({
+    metadataTitle: "Windsurf 账号价格对比：AI 编程工具账号和渠道报价",
+    metadataDescription: "查看 Windsurf 账号、AI 编程工具账号的有货最低价、渠道报价、库存和更新时间。",
+  }),
+  "perplexity-account": profile({
+    metadataTitle: "Perplexity 账号价格对比：会员账号、Pro 账号和渠道报价",
+    metadataDescription: "查看 Perplexity 账号、Pro 账号、会员账号的有货最低价、渠道报价、库存和更新时间。",
+  }),
+  "suno-account": profile({
+    metadataTitle: "Suno 账号价格对比：音乐生成账号、会员账号和渠道报价",
+    metadataDescription: "查看 Suno 账号、会员账号、音乐生成工具账号的有货最低价、渠道报价、库存和更新时间。",
+  }),
+  "x-twitter-account": profile({
+    metadataTitle: "X / 推特账号价格对比：Twitter 账号、Premium 和渠道报价",
+    metadataDescription: "查看 X / Twitter / 推特账号、Premium 相关账号的有货最低价、渠道报价、库存和更新时间。",
   }),
 };
 
