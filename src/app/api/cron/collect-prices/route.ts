@@ -50,9 +50,9 @@ async function runCronCollection(request: Request) {
     });
 
     return Response.json({
-      ok: true,
-      startedAt,
       ...result,
+      ok: true,
+      startedAt: result.startedAt || startedAt,
     });
   } catch (error) {
     return Response.json(
