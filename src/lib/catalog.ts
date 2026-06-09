@@ -192,12 +192,22 @@ export const canonicalCatalog: CanonicalProduct[] = [
   {
     id: "gemini-pro-year",
     slug: "gemini-pro-year",
-    displayName: "Gemini Pro",
+    displayName: "Gemini Pro 成品号",
+    platform: "Gemini",
+    productType: "成品账号",
+    spec: "Pro / 成品号",
+    summary: "Gemini Pro、Google AI Pro、Pixel 渠道、Gmail 老号或家庭组等成品账号。",
+    aliases: ["gemini pro 成品号", "gemini 一年成品号", "gemini 12个月成品号", "pixel gemini", "google ai pro 成品号"],
+  },
+  {
+    id: "gemini-pro-recharge",
+    slug: "gemini-pro-recharge",
+    displayName: "Gemini Pro 充值/开通",
     platform: "Gemini",
     productType: "订阅/会员",
-    spec: "Pro",
-    summary: "Gemini Pro 年卡、成品号、CDK、优惠链接或自助充值。",
-    aliases: ["gemini pro", "gemini 一年", "gemini 12个月", "gemini cdk"],
+    spec: "Pro / 充值开通",
+    summary: "Gemini Pro、Google AI Pro 的 CDK、自助充值、优惠链接、绑卡、激活链接或代开通服务。",
+    aliases: ["gemini pro 充值", "gemini cdk", "gemini 优惠链接", "google ai pro 充值", "gemini 自助开通"],
   },
   {
     id: "gemini-ultra",
@@ -494,9 +504,17 @@ function classifyOfferByTitle(
     return getCanonicalProduct("openai-api-cdk");
   }
 
+  if (isSupportService(value)) {
+    return getCanonicalProduct("other-product");
+  }
+
   if (isGeminiProduct(value)) {
-    if (matches(value, ["ultra", "250美元", "250 美元", "45k", "25k", "企业"])) {
+    if (isGeminiUltraProduct(value)) {
       return getCanonicalProduct("gemini-ultra");
+    }
+
+    if (isGeminiProRecharge(value)) {
+      return getCanonicalProduct("gemini-pro-recharge");
     }
 
     return getCanonicalProduct("gemini-pro-year");
@@ -556,10 +574,6 @@ function classifyOfferByTitle(
 
   if (isChatGptPro5(value)) {
     return getCanonicalProduct("chatgpt-pro-5x");
-  }
-
-  if (isSupportService(value)) {
-    return getCanonicalProduct("other-product");
   }
 
   if (isAmbiguousPlusPackage(value)) {
@@ -814,11 +828,19 @@ function isSupportService(value: string): boolean {
     return false;
   }
 
+  if (hasNegatedTutorialMention(value) && isAiSubscriptionOrAccountTitle(value)) {
+    return false;
+  }
+
   if (matches(value, ["教程", "电话卡", "手机套餐", "代理服务", "并发数", "安装版", "安装教程", "登陆教程", "登录教程"])) {
     return true;
   }
 
   return false;
+}
+
+function hasNegatedTutorialMention(value: string): boolean {
+  return matches(value, ["无教程", "无 教程", "没有教程", "不含教程", "不带教程"]);
 }
 
 function isToolSourceCodeProduct(value: string): boolean {
@@ -909,6 +931,15 @@ function isStandaloneVerificationService(value: string): boolean {
   }
 
   if (matches(value, ["手机接码"]) && matches(value, ["可绑定", "绑定 3 个", "绑定3个"])) {
+    return true;
+  }
+
+  if (
+    matches(value, ["短效手机号", "短效 手机号", "手机号"]) &&
+    matches(value, ["google", "谷歌", "gmail", "gemini", "pixel"]) &&
+    matches(value, ["风控", "人机", "验证", "过gemini", "过 gemini"]) &&
+    !hasAccountBundleSignal(value)
+  ) {
     return true;
   }
 
@@ -1100,6 +1131,7 @@ function isApiProduct(value: string): boolean {
   if (isClaudeProduct(value) && matches(value, ["team", "席位", "标准席位", "高级席位", "1.25x", "1.25倍", "6.25x", "6.25倍"])) return false;
   if (matches(value, ["gemini pro", "google ai pro"]) && matches(value, ["一年", "订阅", "cdk"])) return false;
 
+  if (matches(value, ["apikey", "api key", "api-key"])) return true;
   if (matches(value, ["claude/gpt/gemini中转站", "中转站", "中转余额", "中转 gpt", "api中转", "api 中转"])) return true;
   if (matches(value, ["中转api", "中转 api"])) return true;
   if (matches(value, ["兑换码"]) && matches(value, ["api", "额度", "100刀", "200刀", "300刀", "1000刀", "2100刀", "官方1:1"])) return true;
@@ -1233,6 +1265,100 @@ function isGeminiProduct(value: string): boolean {
   }
 
   return matches(value, ["gemini", "google ai", "ai ultra"]) || (matches(value, ["pixel"]) && matches(value, ["pro", "订阅"]));
+}
+
+function isGeminiUltraProduct(value: string): boolean {
+  if (isGeminiProUltraMixedTitle(value)) return false;
+  if (matches(value, ["google ai ultra", "gemini ultra", "ai ultra", "企业 ultra", "企业ultra"])) return true;
+  if (matches(value, ["250美元", "250 美元", "250美金", "250 美金", "250刀", "45k", "25k"]) && matches(value, ["gemini", "google ai", "ultra", "flow"])) return true;
+
+  return matches(value, ["flow"]) && matches(value, ["gemini", "google ai", "ultra"]);
+}
+
+function isGeminiProUltraMixedTitle(value: string): boolean {
+  return matches(value, ["pro ultra", "pro uitra", "ai pro ultra", "ai pro uitra", "gemini ai pro ultra", "gemini ai pro uitra"]);
+}
+
+function isGeminiProRecharge(value: string): boolean {
+  if (!isGeminiProduct(value)) return false;
+  if (isGeminiUltraProduct(value)) return false;
+
+  const hasRechargeSignal = matches(value, [
+    "自助充值",
+    "自助开通",
+    "充值",
+    "代充",
+    "直充",
+    "开通",
+    "cdk",
+    "卡密",
+    "兑换码",
+    "优惠链接",
+    "提取",
+    "激活链接",
+    "激活码",
+    "一次卡",
+    "绑卡",
+    "订阅",
+    "充自己号",
+    "自备账号",
+    "自己号",
+  ]);
+
+  if (!hasRechargeSignal) return false;
+
+  if (isGeminiProAccount(value) && !isGeminiSelfAccountRecharge(value)) {
+    return false;
+  }
+
+  return true;
+}
+
+function isGeminiSelfAccountRecharge(value: string): boolean {
+  return matches(value, [
+    "自备账号",
+    "自备 账号",
+    "自己号",
+    "自己的号",
+    "充自己号",
+    "给自己号",
+    "自助充值",
+    "自助开通",
+    "代充",
+    "直充",
+    "cdk",
+    "优惠链接",
+    "提取",
+    "激活链接",
+    "一次卡",
+    "绑卡",
+  ]);
+}
+
+function isGeminiProAccount(value: string): boolean {
+  return matches(value, [
+    "成品号",
+    "成品",
+    "账号",
+    "账户",
+    "个人账号",
+    "邮箱",
+    "gmail",
+    "google 账号",
+    "谷歌账号",
+    "pixel",
+    "首登",
+    "直登",
+    "独享",
+    "家庭组",
+    "随机地区",
+    "美区",
+    "老邮箱",
+    "老号",
+    "带2fa",
+    "带 2fa",
+    "长效接码",
+  ]);
 }
 
 function isGrokProduct(value: string): boolean {

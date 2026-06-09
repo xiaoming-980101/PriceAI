@@ -111,6 +111,7 @@ function buildSuspiciousChecks(items) {
     "claude-max-20x",
     "claude-account",
     "gemini-pro-year",
+    "gemini-pro-recharge",
     "gemini-ultra",
     "super-grok",
     "grok-account",
@@ -163,7 +164,7 @@ function buildSuspiciousChecks(items) {
     {
       key: "ultra_maybe_gemini_pro",
       label: "Ultra 中疑似 Gemini Pro",
-      expected: "gemini-pro-year",
+      expected: "gemini-pro-year/gemini-pro-recharge",
       filter: (offer) =>
         offer.nextProductId === "gemini-ultra" &&
         /gemini\s*pro/.test(offer.normalizedTitle) &&

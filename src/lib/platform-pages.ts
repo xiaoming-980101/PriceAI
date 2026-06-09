@@ -161,11 +161,11 @@ export const platformPageConfigs = {
     platform: "Gemini",
     iconPlatform: "Gemini",
     pageUrl: "https://priceai.cc/platforms/gemini",
-    productIds: ["gemini-pro-year", "gemini-ultra"],
+    productIds: ["gemini-pro-year", "gemini-pro-recharge", "gemini-ultra"],
     badge: "Gemini 平台价格页",
     title: "Gemini Pro 与 Google AI Ultra 价格对比",
     intro:
-      "这里聚合 Gemini Pro、Google AI Pro、Gemini Ultra、Google AI Ultra、年卡、CDK 和相关充值渠道。你可以先看有货最低价，再结合 Google Play、官方地区价和渠道说明判断是否适合购买。",
+      "这里聚合 Gemini Pro 成品号、Google AI Pro 充值/开通、Gemini Ultra、Google AI Ultra、年卡、CDK 和相关渠道。你可以先看有货最低价，再结合 Google Play、官方地区价和渠道说明判断是否适合购买。",
     primaryHref: "/?platform=Gemini&stock=available",
     primaryLabel: "查看 Gemini 有货报价",
     secondaryHref: "/?platform=Gemini&scope=offers&stock=available",
@@ -173,13 +173,18 @@ export const platformPageConfigs = {
     tableTitle: "当前收录的 Gemini 标准商品",
     tableDescription: "Gemini 外层最低价只取有货报价；缺货、隐藏或下架报价不进入当前可买最低价。",
     optionsEyebrow: "Decision",
-    optionsTitle: "先判断你要的是 Pro、Ultra，还是官方地区价路径。",
+    optionsTitle: "先判断你要的是成品号、充值开通、Ultra，还是官方地区价路径。",
     optionsIntro:
-      "Gemini 相关渠道经常把 Google AI Pro、Gemini Pro 年卡、学生资格、CDK、Ultra 和 Google Play 路径混在一起。先看清交付物，再看价格。",
+      "Gemini 相关渠道经常把 Google AI Pro、Gemini Pro 年卡、成品号、学生资格、CDK、优惠链接、Ultra 和 Google Play 路径混在一起。先看清交付物，再看价格。",
     optionCards: [
       {
-        title: "Gemini Pro",
-        text: "常见标题包括 Google AI Pro、Gemini Pro 年卡、CDK、优惠链接或自助充值，重点看有效期和账号归属。",
+        title: "成品号",
+        text: "通常是直接交付 Google / Gmail 账号或 Pixel 渠道成品号，重点看账号归属、首登、地区和售后。",
+        icon: "sparkles",
+      },
+      {
+        title: "充值/开通",
+        text: "常见标题包括 Gemini Pro CDK、自助充值、优惠链接、绑卡、激活链接或代开通，重点看是否需要自备账号。",
         icon: "sparkles",
       },
       {
@@ -212,11 +217,11 @@ export const platformPageConfigs = {
     faqs: [
       [
         "Gemini Pro 和 Google AI Pro 是一回事吗？",
-        "很多渠道会混用 Gemini Pro 和 Google AI Pro。购买前要以原渠道商品详情为准，确认它是订阅权益、账号、CDK、优惠链接还是充值服务。",
+        "很多渠道会混用 Gemini Pro 和 Google AI Pro。购买前要以原渠道商品详情为准，确认它是成品账号、CDK、优惠链接、充值开通，还是其他形式。",
       ],
       [
         "Gemini Pro 年卡为什么价格差很多？",
-        "常见原因包括官方地区价、学生或活动资格、第三方成品号、CDK、优惠链接和渠道库存。低价不等于同款，必须看交付方式、有效期和售后。",
+        "常见原因包括官方地区价、学生或活动资格、第三方成品号、CDK、优惠链接、代开通和渠道库存。低价不等于同款，必须看交付方式、有效期和售后。",
       ],
       [
         "Google Play 订阅 Gemini 要注意什么？",
@@ -241,7 +246,7 @@ export const platformPageConfigs = {
     metadata: {
       title: "Gemini Pro 与 Google AI Ultra 价格对比",
       description:
-        "查看 Gemini Pro、Google AI Pro、Gemini Ultra、Google AI Ultra、年卡、CDK 和渠道报价的有货最低价、更新时间和购买前说明。",
+        "查看 Gemini Pro 成品号、Google AI Pro 充值/开通、Gemini Ultra、Google AI Ultra、年卡、CDK 和渠道报价的有货最低价、更新时间和购买前说明。",
       alternates: {
         canonical: "/platforms/gemini",
       },

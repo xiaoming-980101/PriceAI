@@ -281,36 +281,69 @@ const productSeoProfiles: Record<string, ProductSeoProfile> = {
     ],
   },
   "gemini-pro-year": {
-    metadataTitle: "Gemini Pro 价格对比：Google AI Pro、年卡、CDK 和渠道报价",
-    metadataDescription: "查看 Gemini Pro / Google AI Pro 有货最低价、年卡、成品号、CDK、渠道报价和更新时间。",
+    metadataTitle: "Gemini Pro 成品号价格对比：Google AI Pro 账号、年卡和渠道报价",
+    metadataDescription: "查看 Gemini Pro / Google AI Pro 成品号有货最低价、账号、年卡、渠道报价和更新时间。",
     lead:
-      "Gemini Pro / Google AI Pro 的低价来源可能包括官方地区价、学生或活动资格、第三方成品号、CDK 或代开渠道。对比时不要只看标价，也要看账号归属和续费方式。",
+      "Gemini Pro / Google AI Pro 成品号通常是直接交付 Google / Gmail 账号、Pixel 渠道账号或已开通权益的账号。对比时不要只看标价，也要看账号归属、首登要求、地区和续费方式。",
     points: [
-      "Gemini Pro 常和 Google AI Pro、年卡、学生价、CDK 等表达混在一起。",
-      "如果涉及 Google 账号或地区价，要额外注意账号地区、支付方式和续费限制。",
+      "Gemini Pro 成品号要优先确认是否可改密、是否需要手机验证、是否带 2FA 或接码链接。",
+      "如果涉及 Google 账号或 Pixel 渠道，要额外注意账号地区、首登要求和续费限制。",
       "第三方渠道价格仅供参考，实际权益和售后以原平台说明为准。",
     ],
     faq: [
       {
         question: "Gemini Pro 和 Google AI Pro 是一回事吗？",
         answer:
-          "很多渠道会混用 Gemini Pro 和 Google AI Pro。实际购买前应以原平台商品说明为准，确认是订阅权益、账号、CDK 还是其他形式。",
+          "很多渠道会混用 Gemini Pro 和 Google AI Pro。实际购买前应以原平台商品说明为准，确认它是否是成品账号、充值开通、CDK 或其他形式。",
       },
       {
-        question: "Gemini Pro 年卡为什么价格差很多？",
+        question: "Gemini Pro 成品号为什么价格差很多？",
         answer:
-          "价格差异可能来自官方地区价、活动资格、学生资格、账号库存或第三方渠道策略。低价不等于同款，必须看交付方式和质保。",
+          "价格差异可能来自账号地区、账号年限、活动资格、学生资格、账号库存或第三方渠道策略。低价不等于同款，必须看交付方式和质保。",
       },
       {
-        question: "购买 Gemini Pro 前应该看哪些信息？",
+        question: "购买 Gemini Pro 成品号前应该看哪些信息？",
         answer:
-          "重点看是否需要提供 Google 账号、是否支持续费、是否有地区限制、是否能换绑，以及售后和退款规则。",
+          "重点看账号是否归你、是否支持改密、是否需要手机验证、是否有地区限制、是否能换绑，以及售后和退款规则。",
       },
     ],
     links: [
       { label: "官方地区价", href: "/official-prices", description: "查看 Gemini / Google AI 的公开地区价参考。" },
       { label: "Google Play 订阅指南", href: "/guides/google-play-ai-subscription", description: "理解 Google Play 国家/地区、付款资料和续费限制。" },
       { label: "地区价风险", href: "/guides/ai-subscription-region-price-risks", description: "判断低价区、税费、汇率和账号地区风险。" },
+    ],
+  },
+  "gemini-pro-recharge": {
+    metadataTitle: "Gemini Pro 充值/开通价格对比：CDK、优惠链接和代开通渠道",
+    metadataDescription: "查看 Gemini Pro / Google AI Pro 充值开通、CDK、优惠链接、绑卡和代开通渠道报价。",
+    lead:
+      "Gemini Pro 充值/开通聚合的是 CDK、自助充值、优惠链接、绑卡、激活链接或代开通服务。它和直接买成品号不同，核心要看是否需要自备账号、能否续费和失败后如何处理。",
+    points: [
+      "先确认是给自己账号开通，还是兑换 CDK、提取优惠链接或走绑卡流程。",
+      "充值/开通类可以参考官方地区价，但最终成交条件仍以原渠道说明为准。",
+      "如果价格明显低于常规地区价，要额外核验有效期、失败处理和售后范围。",
+    ],
+    faq: [
+      {
+        question: "Gemini Pro 充值/开通和成品号有什么区别？",
+        answer:
+          "充值/开通通常围绕你的账号、CDK、优惠链接或绑卡流程交付；成品号则是直接交付一个已有权益的 Google / Gmail 账号。两者的风险和售后重点不同。",
+      },
+      {
+        question: "Gemini Pro CDK、优惠链接和代开通是同一种吗？",
+        answer:
+          "不是。CDK 更偏兑换或卡密，优惠链接通常需要按指定流程领取或激活，代开通则可能需要卖家协助操作。购买前要看清是否需要提供账号信息。",
+      },
+      {
+        question: "为什么这个页面会显示官方参考价？",
+        answer:
+          "充值/开通类更接近官方订阅路径，所以官方地区价可以作为价格锚点。但第三方渠道的交付方式、售后和限制仍需要回到原平台核验。",
+      },
+    ],
+    links: [
+      { label: "Gemini 平台页", href: "/platforms/gemini", description: "查看 Gemini 成品号、充值开通和 Ultra 的整体入口。" },
+      { label: "官方地区价", href: "/official-prices", description: "查看 Gemini / Google AI 的公开地区价参考。" },
+      { label: "Google Play 订阅指南", href: "/guides/google-play-ai-subscription", description: "理解 Google Play 国家/地区、付款资料和续费限制。" },
     ],
   },
   "claude-pro-month": {
@@ -421,7 +454,7 @@ const officialPlanByProductId: Record<string, { appSlug: "chatgpt" | "claude" | 
   "claude-pro-month": { appSlug: "claude", planSlug: "pro-monthly" },
   "claude-max-5x": { appSlug: "claude", planSlug: "max-5x-monthly" },
   "claude-max-20x": { appSlug: "claude", planSlug: "max-20x-monthly" },
-  "gemini-pro-year": { appSlug: "gemini", planSlug: "ai-pro" },
+  "gemini-pro-recharge": { appSlug: "gemini", planSlug: "ai-pro" },
   "gemini-ultra": { appSlug: "gemini", planSlug: "ai-ultra" },
   "super-grok": { appSlug: "grok", planSlug: "supergrok" },
 };
