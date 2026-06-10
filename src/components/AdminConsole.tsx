@@ -738,18 +738,26 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     }
   }
 
-  async function enqueueOfficialPriceCollection() {
-    setLoadingAction("official-enqueue");
-    setGlobalMessage({ type: "info", text: "正在创建官方地区价采集任务..." });
+  async function enqueueOfficialPriceCollection(officialMode: "weekly_full" | "fx_only") {
+    const loadingKey = officialMode === "fx_only" ? "official-enqueue-fx" : "official-enqueue-weekly";
+    setLoadingAction(loadingKey);
+    setGlobalMessage({
+      type: "info",
+      text: officialMode === "fx_only" ? "正在创建官方地区价汇率刷新任务..." : "正在创建官方地区价周全量采集任务...",
+    });
 
     try {
       const result = await request("/api/admin/collection-jobs", password, {
         jobType: "official_prices",
-        priority: 25,
+        officialMode,
+        priority: officialMode === "fx_only" ? 15 : 25,
         maxAttempts: 2,
       });
       if (result.ok) {
-        setGlobalMessage({ type: "success", text: "已创建官方地区价采集任务，等待 worker 领取。" });
+        setGlobalMessage({
+          type: "success",
+          text: officialMode === "fx_only" ? "已创建汇率刷新任务，等待 worker 领取。" : "已创建周全量采集任务，等待 worker 领取。",
+        });
         router.refresh();
       } else {
         setGlobalMessage({ type: "error", text: result.message || "创建官方地区价任务失败。" });
@@ -2605,7 +2613,8 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
                   loadingAction={loadingAction}
                   probeResult={officialProbeResult}
                   onProbe={probeOfficialPrices}
-                  onEnqueueCollection={enqueueOfficialPriceCollection}
+                  onEnqueueWeeklyCollection={() => enqueueOfficialPriceCollection("weekly_full")}
+                  onEnqueueFxRefresh={() => enqueueOfficialPriceCollection("fx_only")}
                   onCopyCommand={copyOfficialCollectorCommand}
                   onToggleAppEnabled={toggleOfficialAppEnabled}
                   onTogglePlanEnabled={toggleOfficialPlanEnabled}
@@ -4365,7 +4374,8 @@ function OfficialPricesAdminPanel({
   loadingAction,
   probeResult,
   onProbe,
-  onEnqueueCollection,
+  onEnqueueWeeklyCollection,
+  onEnqueueFxRefresh,
   onCopyCommand,
   onToggleAppEnabled,
   onTogglePlanEnabled,
@@ -4376,7 +4386,8 @@ function OfficialPricesAdminPanel({
   loadingAction: string | null;
   probeResult: OfficialProbeResult | null;
   onProbe: () => void;
-  onEnqueueCollection: () => void;
+  onEnqueueWeeklyCollection: () => void;
+  onEnqueueFxRefresh: () => void;
   onCopyCommand: () => void;
   onToggleAppEnabled: (app: OfficialAdminApp, enabled: boolean) => void;
   onTogglePlanEnabled: (plan: OfficialAdminPlan, enabled: boolean) => void;
@@ -4424,12 +4435,21 @@ function OfficialPricesAdminPanel({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={onEnqueueCollection}
-              disabled={loadingAction === "official-enqueue"}
+              onClick={onEnqueueWeeklyCollection}
+              disabled={loadingAction === "official-enqueue-weekly"}
               className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#2f7a4b] px-4 text-sm font-medium text-white transition-colors hover:bg-[#256a3d] disabled:opacity-60"
             >
-              {loadingAction === "official-enqueue" ? <Loader2 size={15} className="animate-spin" /> : <ClipboardList size={15} />}
-              加入采集队列
+              {loadingAction === "official-enqueue-weekly" ? <Loader2 size={15} className="animate-spin" /> : <ClipboardList size={15} />}
+              加入周全量采集
+            </button>
+            <button
+              type="button"
+              onClick={onEnqueueFxRefresh}
+              disabled={loadingAction === "official-enqueue-fx"}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-[#2f7a4b]/25 bg-white px-4 text-sm font-medium text-[#2f7a4b] transition-colors hover:bg-[#eef8f1] disabled:opacity-60"
+            >
+              {loadingAction === "official-enqueue-fx" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
+              刷新汇率估算
             </button>
             <button
               type="button"

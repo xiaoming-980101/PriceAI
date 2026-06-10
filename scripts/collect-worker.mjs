@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { collectApiModels } from "./collect-api-models.mjs";
-import { collectOfficialPrices } from "./collect-official-prices.mjs";
+import { collectOfficialPrices, refreshOfficialPriceFxRates } from "./collect-official-prices.mjs";
 import { createCollectionFamilyState, runPriceCollection } from "./collect-prices.mjs";
 import { pruneOperationalLogs } from "./operational-log-retention.mjs";
 
@@ -121,7 +121,7 @@ async function runJob(job) {
 }
 
 async function runCollectionJobByType(job, sourceId) {
-  if (job.job_type === "official_prices") return runOfficialPriceJob();
+  if (job.job_type === "official_prices") return runOfficialPriceJob(job);
   if (job.job_type === "api_models") return runApiModelJob();
   return runChannelPriceJob(sourceId);
 }
@@ -162,9 +162,22 @@ async function runChannelPriceJob(sourceId) {
   });
 }
 
-async function runOfficialPriceJob() {
+async function runOfficialPriceJob(job) {
   const app = args["official-app"] || env.PRICEAI_OFFICIAL_PRICE_APP || undefined;
   const regions = args["official-regions"] || env.PRICEAI_OFFICIAL_PRICE_REGIONS || undefined;
+  const officialMode =
+    jobMode(args["official-mode"]) ||
+    jobMode(jobResultMode(job)) ||
+    jobMode(env.PRICEAI_OFFICIAL_PRICE_MODE) ||
+    "weekly_full";
+
+  if (officialMode === "fx_only") {
+    return refreshOfficialPriceFxRates({
+      regions,
+      post: true,
+      mode: "worker",
+    });
+  }
 
   return collectOfficialPrices({
     all: !app,
@@ -301,6 +314,17 @@ function apiCollectionRunStatus(value) {
   if (value === "failed") return "failed";
   if (value === "partial_success") return "partial";
   return "success";
+}
+
+function jobResultMode(job) {
+  const result = job && typeof job.result === "object" ? job.result : null;
+  return result?.officialMode || result?.official_mode || null;
+}
+
+function jobMode(value) {
+  if (value === "fx_only" || value === "fx-only") return "fx_only";
+  if (value === "weekly_full" || value === "weekly-full" || value === "full") return "weekly_full";
+  return null;
 }
 
 function firstProbeError(snapshot) {

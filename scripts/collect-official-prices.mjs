@@ -17,12 +17,61 @@ const userAgent =
 
 const DEFAULT_TIMEOUT_MS = 25000;
 const FETCH_DELAY_MS = 250;
+const APPLE_STOREFRONT_IDS = {
+  AR: "143505",
+  AT: "143445",
+  AU: "143460",
+  BE: "143446",
+  BR: "143503",
+  CA: "143455",
+  CH: "143459",
+  CO: "143501",
+  CZ: "143489",
+  DE: "143443",
+  DK: "143458",
+  EG: "143516",
+  ES: "143454",
+  FI: "143447",
+  FR: "143442",
+  GB: "143444",
+  GR: "143448",
+  HK: "143463",
+  HU: "143482",
+  ID: "143476",
+  IE: "143449",
+  IL: "143491",
+  IN: "143467",
+  IT: "143450",
+  JP: "143462",
+  KR: "143466",
+  MX: "143468",
+  MY: "143473",
+  NG: "143561",
+  NL: "143452",
+  NO: "143457",
+  NZ: "143461",
+  PE: "143507",
+  PH: "143474",
+  PK: "143477",
+  PL: "143478",
+  PT: "143453",
+  RO: "143487",
+  SE: "143456",
+  SG: "143464",
+  TH: "143475",
+  TR: "143480",
+  TW: "143470",
+  UA: "143492",
+  US: "143441",
+  VN: "143471",
+  ZA: "143472",
+};
 
 if (isCli()) {
   const args = normalizeOptions(parseArgs(process.argv.slice(2)));
 
   try {
-    const result = await collectOfficialPrices(args);
+    const result = args.fxOnly ? await refreshOfficialPriceFxRates(args) : await collectOfficialPrices(args);
     printSummary(result);
 
     if (args.dryRun) {
@@ -65,7 +114,11 @@ export async function collectOfficialPrices(options = {}) {
       const startedAt = Date.now();
 
       try {
-        const html = await fetchText(sourceUrl, { timeoutMs: Number(options.timeoutMs || options.timeout || DEFAULT_TIMEOUT_MS) });
+        const html = await fetchText(sourceUrl, {
+          timeoutMs: Number(options.timeoutMs || options.timeout || DEFAULT_TIMEOUT_MS),
+          headers: appStoreRequestHeaders(region),
+        });
+        assertExpectedAppStorePage(html, app, region, sourceUrl);
         const rawItems = extractInAppPurchasePairs(html, sourceUrl);
 
         if (!rawItems.length) {
@@ -229,6 +282,48 @@ export async function collectOfficialPrices(options = {}) {
   return result;
 }
 
+export async function refreshOfficialPriceFxRates(options = {}) {
+  options = normalizeOptions(options);
+
+  const configs = await loadConfig();
+  const regions = selectRegions(configs.regions, options);
+  if (!regions.length) throw new Error("No enabled regions matched. Use --regions US,TR,PH.");
+
+  const fx = await fetchFxSnapshot(regions);
+  const generatedAt = new Date().toISOString();
+  const result = {
+    generatedAt,
+    dryRun: Boolean(options.dryRun),
+    source: {
+      kind: "official_price_fx_refresh",
+      fxSource: fx.source,
+      fxSourceUrl: fx.sourceUrl,
+      fxFallback: Boolean(fx.fallback),
+      fxFallbackReason: fx.fallbackReason || null,
+      fxFallbackGeneratedAt: fx.fallbackGeneratedAt || null,
+    },
+    scope: {
+      regions: regions.map((region) => region.countryCode),
+      currencies: Array.from(new Set(["USD", ...regions.map((region) => region.currencyCode).filter(Boolean)])).sort(),
+    },
+    fx,
+    run: {
+      status: "success",
+      regionCount: regions.length,
+      fxRateCount: Object.keys(fx.rates || {}).length,
+      currentPriceCount: 0,
+      updatedCurrentPriceCount: 0,
+      skippedCurrentPriceCount: 0,
+    },
+  };
+
+  if (options.post || options.db) {
+    result.database = await postOfficialFxRefresh(result, options);
+  }
+
+  return result;
+}
+
 async function loadConfig() {
   const [apps, regions, rules] = await Promise.all([
     readJson(path.join(configDir, "apps.json")),
@@ -301,6 +396,94 @@ async function postOfficialPriceSnapshot(result, configs, options) {
     fxRatesWritten: fxRows.length,
     runId,
   };
+}
+
+async function postOfficialFxRefresh(result, options) {
+  const fxRows = buildFxRows(result.fx, result.generatedAt);
+  const plan = {
+    dryRun: Boolean(options.dryRun),
+    fxRates: fxRows.length,
+    currentRows: 0,
+    updatedCurrentRows: 0,
+    skippedCurrentRows: 0,
+  };
+
+  if (options.dryRun) {
+    return {
+      status: "planned",
+      ...plan,
+      message: "--fx-only --post --dry-run only builds the FX refresh plan; no Supabase credentials or remote writes are required.",
+    };
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for --post/--db.");
+  }
+
+  const currentRows = await listOfficialCurrentPricesForFxRefresh(supabase);
+  const updatedRows = [];
+  let skippedCurrentRows = 0;
+
+  for (const row of currentRows) {
+    const priceValue = Number(row.price_value);
+    const currencyCode = String(row.currency_code || "");
+    if (!Number.isFinite(priceValue) || !currencyCode) {
+      skippedCurrentRows++;
+      continue;
+    }
+
+    const fxRateToCny = rateToCny(currencyCode, result.fx);
+    updatedRows.push({
+      id: row.id,
+      cny_price: roundCurrency(priceValue * fxRateToCny),
+      fx_rate_to_cny: fxRateToCny,
+      fx_date: result.fx.date,
+      updated_at: result.generatedAt,
+    });
+  }
+
+  await upsertRows(supabase, "fx_rates", fxRows, {
+    onConflict: "base_currency,target_currency,date,source",
+  });
+  await upsertRows(supabase, "official_subscription_region_prices", updatedRows, {
+    onConflict: "id",
+  });
+  await pruneOperationalLogs(supabase, readEnvFile(path.join(repoRoot, ".env.local")));
+
+  result.run.currentPriceCount = currentRows.length;
+  result.run.updatedCurrentPriceCount = updatedRows.length;
+  result.run.skippedCurrentPriceCount = skippedCurrentRows;
+
+  return {
+    status: "posted",
+    ...plan,
+    currentRows: currentRows.length,
+    updatedCurrentRows: updatedRows.length,
+    skippedCurrentRows,
+    fxRatesWritten: fxRows.length,
+  };
+}
+
+async function listOfficialCurrentPricesForFxRefresh(supabase) {
+  const output = [];
+  const pageSize = 1000;
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("official_subscription_region_prices")
+      .select("id,price_value,currency_code,status")
+      .in("status", ["available", "stale"])
+      .not("price_value", "is", null)
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    const rows = data || [];
+    output.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+
+  return output;
 }
 
 function expandRowsForDatabase(result, configs) {
@@ -697,7 +880,7 @@ export function loadFallbackFxSnapshot(currencies, latestPath = defaultOutPath) 
   }
 }
 
-async function fetchText(url, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+async function fetchText(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers = {} } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -706,6 +889,7 @@ async function fetchText(url, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
       headers: {
         "accept-language": "en-US,en;q=0.9",
         "user-agent": userAgent,
+        ...headers,
       },
       signal: controller.signal,
     });
@@ -728,6 +912,13 @@ export function extractInAppPurchasePairs(html, sourceUrl = "") {
   const seen = new Set();
   const pairPattern = /<div class="text-pair[^"]*"[^>]*>\s*<span>([\s\S]*?)<\/span>\s*<span>([\s\S]*?)<\/span>\s*<\/div>/g;
 
+  for (const item of extractAddOnPurchaseItems(html, sourceUrl)) {
+    const key = `${item.title}\u0000${item.priceText}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(item);
+  }
+
   for (const match of html.matchAll(pairPattern)) {
     const title = decodeHtmlText(match[1]);
     const priceText = normalizePriceText(decodeHtmlText(match[2]));
@@ -746,6 +937,112 @@ export function extractInAppPurchasePairs(html, sourceUrl = "") {
   }
 
   return output;
+}
+
+function appStoreRequestHeaders(region) {
+  const countryCode = String(region.countryCode || "").toUpperCase();
+  const storefrontId = APPLE_STOREFRONT_IDS[countryCode];
+  if (!storefrontId) return {};
+
+  return {
+    "x-apple-store-front": `${storefrontId},29`,
+  };
+}
+
+function assertExpectedAppStorePage(html, app, region, sourceUrl) {
+  const appStoreId = String(app.appStoreId || "");
+  const expectedRegion = String(region.storefrontCode || region.countryCode || "").toLowerCase();
+  const hasExpectedApp =
+    appStoreId &&
+    (html.includes(`"id":"${appStoreId}"`) ||
+      html.includes(`"adamId":"${appStoreId}"`) ||
+      html.includes(`appAdamId=${appStoreId}`) ||
+      html.includes(`/id${appStoreId}`));
+  const looksLikeWrongStorefront =
+    html.includes("/iphone/today") ||
+    html.includes(`"pageType":"Today"`) ||
+    (expectedRegion && html.includes(`"storeFront":"cn"`) && expectedRegion !== "cn");
+
+  if (!hasExpectedApp || looksLikeWrongStorefront) {
+    throw new Error(`App Store returned an unrelated page for ${app.slug}/${region.countryCode}: ${sourceUrl}`);
+  }
+}
+
+function extractAddOnPurchaseItems(html, sourceUrl) {
+  const output = [];
+  let searchFrom = 0;
+
+  while (searchFrom < html.length) {
+    const arrayText = extractJsonArrayAfterKey(html, '"addOns"', searchFrom);
+    if (!arrayText) break;
+    searchFrom = arrayText.endIndex;
+
+    try {
+      const addOns = JSON.parse(arrayText.value);
+      for (const addOn of addOns) {
+        const title = normalizePriceText(String(addOn?.name || ""));
+        const priceText = normalizePriceText(String(addOn?.price || ""));
+        if (!title || !looksLikePrice(priceText)) continue;
+
+        output.push({
+          title,
+          priceText,
+          sourceUrl,
+          rawSnippetHash: hashSnippet(`${title} ${priceText} ${addOn?.buyParams || ""}`),
+        });
+      }
+    } catch {
+      // Keep the older text-pair parser as a fallback when an embedded blob is incomplete.
+    }
+  }
+
+  return output;
+}
+
+function extractJsonArrayAfterKey(text, key, fromIndex = 0) {
+  const keyIndex = text.indexOf(key, fromIndex);
+  if (keyIndex < 0) return null;
+  const colonIndex = text.indexOf(":", keyIndex + key.length);
+  if (colonIndex < 0) return null;
+  const startIndex = text.indexOf("[", colonIndex + 1);
+  if (startIndex < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "[") depth += 1;
+    if (char === "]") {
+      depth -= 1;
+      if (depth === 0) {
+        return {
+          value: text.slice(startIndex, index + 1),
+          endIndex: index + 1,
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
 function scoreCandidate(rawItem, rule, region, fx) {
@@ -1105,6 +1402,7 @@ function normalizeOptions(options) {
   return {
     ...options,
     all: truthyOption(options.all),
+    fxOnly: truthyOption(options.fxOnly ?? options["fx-only"]),
     dryRun: truthyOption(options.dryRun ?? options["dry-run"]),
     post: truthyOption(options.post),
     db: truthyOption(options.db),
@@ -1117,6 +1415,25 @@ function truthyOption(value) {
 }
 
 function printSummary(result) {
+  if (result.source?.kind === "official_price_fx_refresh") {
+    console.log(
+      [
+        `Official price FX refresh ${result.run.status}.`,
+        `regions=${result.run.regionCount}`,
+        `currencies=${result.scope.currencies.length}`,
+        `fx_rates=${result.run.fxRateCount}`,
+        `current_prices=${result.run.currentPriceCount || 0}`,
+        `updated=${result.run.updatedCurrentPriceCount || 0}`,
+        `skipped=${result.run.skippedCurrentPriceCount || 0}`,
+      ].join(" "),
+    );
+    if (result.source.fxFallback) {
+      const fallbackLabel = result.source.fxFallbackGeneratedAt ? `local snapshot ${result.source.fxFallbackGeneratedAt}` : result.source.fxSource;
+      console.log(`FX fallback used: ${result.fx.date} from ${fallbackLabel} (${result.source.fxFallbackReason})`);
+    }
+    return;
+  }
+
   console.log(
     [
       `Official price collection ${result.run.status}.`,

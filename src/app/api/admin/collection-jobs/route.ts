@@ -8,6 +8,7 @@ import { z } from "zod";
 const schema = z.object({
   jobType: z.enum(["all", "source", "official_prices", "api_models"]).default("source"),
   sourceIds: z.array(z.string().min(1)).optional(),
+  officialMode: z.enum(["weekly_full", "fx_only"]).optional(),
   priority: z.number().int().min(0).max(100).default(10),
   maxAttempts: z.number().int().min(1).max(5).default(1),
 });
@@ -45,16 +46,20 @@ export async function POST(request: Request) {
 
     const rows = sourceIds.map((sourceId) => {
       const source = sourceId ? sourceById.get(sourceId) : null;
+      const result = payload.jobType === "official_prices" && payload.officialMode
+        ? { officialMode: payload.officialMode }
+        : null;
       return {
-        id: stableId("collection-job", payload.jobType, sourceId || "all", now),
+        id: stableId("collection-job", payload.jobType, sourceId || "all", payload.officialMode || "default", now),
         job_type: payload.jobType,
         source_id: sourceId,
-        source_name: source?.name || collectionJobFallbackName(payload.jobType, sourceId),
+        source_name: source?.name || collectionJobFallbackName(payload.jobType, sourceId, payload.officialMode),
         status: "pending",
         priority: payload.priority,
         attempts: 0,
         max_attempts: payload.maxAttempts,
         requested_by: "admin",
+        result,
         created_at: now,
         updated_at: now,
       };
@@ -82,9 +87,13 @@ export async function POST(request: Request) {
   }
 }
 
-function collectionJobFallbackName(jobType: "all" | "source" | "official_prices" | "api_models", sourceId: string | null): string | null {
+function collectionJobFallbackName(
+  jobType: "all" | "source" | "official_prices" | "api_models",
+  sourceId: string | null,
+  officialMode?: "weekly_full" | "fx_only",
+): string | null {
   if (jobType === "all") return "全部渠道";
-  if (jobType === "official_prices") return "官方地区价";
+  if (jobType === "official_prices") return officialMode === "fx_only" ? "官方地区价汇率刷新" : "官方地区价周全量";
   if (jobType === "api_models") return "API 模型";
   return sourceId;
 }

@@ -1,4 +1,14 @@
 {
+  "crons": [
+    {
+      "path": "/api/cron/official-prices",
+      "schedule": "10 18 * * *"
+    },
+    {
+      "path": "/api/cron/official-prices-weekly",
+      "schedule": "30 18 * * 0"
+    }
+  ],
   "redirects": [
     {
       "source": "/(.*)",
