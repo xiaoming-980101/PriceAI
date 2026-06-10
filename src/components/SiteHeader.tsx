@@ -26,15 +26,21 @@ export function SiteHeader({
 }) {
   const pathname = usePathname();
   const aboutActive = pathname.startsWith("/about");
+  const desktopCenterNavClassName = logoCompact
+    ? "hidden"
+    : "hidden items-center rounded-full bg-[#e4e9ea] p-1 text-sm font-semibold text-[#5a6061] min-[1740px]:flex";
+  const secondaryNavWrapperClassName = logoCompact
+    ? "border-t border-[#dfe4e5] px-5 pb-3 sm:px-8"
+    : "border-t border-[#dfe4e5] px-5 pb-3 sm:px-8 min-[1740px]:hidden";
 
   return (
     <header>
-      <div className={`relative mx-auto flex ${maxWidthClassName} items-center justify-between gap-4 px-5 py-4 sm:px-8`}>
-        <Link href="/" aria-label="PriceAI 首页" className="relative z-10 shrink-0">
+      <div className={`mx-auto grid ${maxWidthClassName} grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:gap-4 sm:px-8`}>
+        <Link href="/" aria-label="PriceAI 首页" className="col-start-1 row-start-1 min-w-0 justify-self-start">
           <AppLogo compact={logoCompact} />
         </Link>
 
-        <nav className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center rounded-full bg-[#e4e9ea] p-1 text-sm font-semibold text-[#5a6061] xl:flex">
+        <nav className={`${desktopCenterNavClassName} col-start-2 row-start-1`}>
           {navItems.map((item) => {
             const active = activeSection ? item.key === activeSection : item.match(pathname);
 
@@ -55,10 +61,10 @@ export function SiteHeader({
           })}
         </nav>
 
-        <div className="relative z-10 flex min-w-0 items-center justify-end gap-2 sm:gap-3">
+        <div className="col-start-2 row-start-1 flex min-w-0 items-center justify-end gap-1.5 justify-self-end sm:col-start-3 sm:gap-3">
           <Link
             href="/about"
-            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full px-3.5 text-sm font-semibold shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:-translate-y-0.5 ${
+            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center gap-0 rounded-full px-0 text-sm font-semibold shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:-translate-y-0.5 sm:h-10 sm:w-auto sm:gap-2 sm:px-3.5 ${
               aboutActive
                 ? "bg-[#2d3435] text-[#f8f8f8]"
                 : "bg-white text-[#2d3435] hover:bg-[#f5f7f7] hover:text-[#202829]"
@@ -74,7 +80,7 @@ export function SiteHeader({
         </div>
       </div>
 
-      <div className="border-t border-[#dfe4e5] px-5 pb-3 sm:px-8 xl:hidden">
+      <div className={secondaryNavWrapperClassName}>
         <nav className={`mx-auto flex ${maxWidthClassName} gap-2 overflow-x-auto pt-3 text-sm font-semibold text-[#5a6061]`}>
           {navItems.map((item) => {
             const active = activeSection ? item.key === activeSection : item.match(pathname);
