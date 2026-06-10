@@ -84,3 +84,20 @@ export function formatRelativeTime(value: string | null | undefined): string {
     minute: "2-digit",
   }).format(new Date(value));
 }
+
+export function formatDateMinute(value: string | null | undefined): string {
+  if (!value) return "未记录";
+
+  const text = value.trim();
+  const isoMatch = text.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]} ${isoMatch[2]}:${isoMatch[3]}`;
+
+  const dateMatch = text.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}):(\d{2}))?/);
+  if (dateMatch) return dateMatch[2] ? `${dateMatch[1]} ${dateMatch[2]}:${dateMatch[3]}` : dateMatch[1];
+
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text;
+
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}

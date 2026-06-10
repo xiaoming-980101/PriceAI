@@ -21,6 +21,7 @@ import {
   type ApiProviderType,
 } from "@/lib/api-models";
 import { getApiModelDataset } from "@/lib/api-models-db";
+import { formatDateMinute } from "@/lib/utils";
 
 export const dynamicParams = true;
 export const revalidate = 1800;
@@ -365,5 +366,5 @@ function formatCacheApiPrice(price: ApiModelOfferWithRelations["cacheReadPrice"]
 }
 
 function formatDatasetDate(value: string) {
-  return value.includes("T") ? value.slice(0, 10) : value;
+  return formatDateMinute(value);
 }

@@ -37,8 +37,9 @@ import {
   type ApiProviderSummary,
   type ApiProviderType,
 } from "@/lib/api-models";
+import { formatDateMinute } from "@/lib/utils";
 
-const typeFilters = ["all", "official", "subscription", "free"] as const;
+const typeFilters = ["all", "free", "official", "subscription"] as const;
 const apiScopeOptions = ["models", "offers", "providers"] as const;
 const apiCurrencyOptions = ["CNY", "USD"] as const;
 const apiSortOptions = ["recommended", "price", "updated", "channels"] as const;
@@ -884,7 +885,7 @@ function ApiModelSummaryTable({
                     <p className="mt-1 text-xs leading-5 text-[#5a6061]">{primaryOffer ? formatApiDisplayText(primaryOffer.freeOrPlan) : "保留来源，等待补充报价"}</p>
                   </td>
                   <td className="max-w-[270px] px-5 py-4 text-sm leading-6 text-[#5a6061]">{primaryOffer ? formatApiDisplayText(primaryOffer.limitSummary) : "未公开固定 RPM/TPM，以官方控制台为准。"}</td>
-                  <td className="px-5 py-4 text-[#5a6061]">{summary.latestUpdatedAt}</td>
+                  <td className="px-5 py-4 text-[#5a6061]">{formatDatasetDate(summary.latestUpdatedAt)}</td>
                   <td className="w-[120px] px-5 py-4 text-center">
                     <Link
                       href={href}
@@ -963,7 +964,7 @@ function ApiProviderSummaryTable({
                     )}
                   </td>
                   <td className="max-w-[270px] px-5 py-4 text-sm leading-6 text-[#5a6061]">{formatApiDisplayText(summary.primaryPlan?.limitSummary ?? provider.limitSummary)}</td>
-                  <td className="px-5 py-4 text-[#5a6061]">{summary.latestUpdatedAt}</td>
+                  <td className="px-5 py-4 text-[#5a6061]">{formatDatasetDate(summary.latestUpdatedAt)}</td>
                   <td className="w-[120px] px-5 py-4 text-center">
                     <Link
                       href={href}
@@ -1321,7 +1322,7 @@ function pickParam<T extends string>(value: string, options: readonly T[], fallb
 }
 
 function formatDatasetDate(value: string) {
-  return value.includes("T") ? value.slice(0, 10) : value;
+  return formatDateMinute(value);
 }
 
 function scopeCountLabel(scopeMode: ScopeMode) {
@@ -1463,10 +1464,10 @@ function compareOptionalNumber(a: number | null | undefined, b: number | null | 
 
 function providerTypeRank(type: ApiProviderType) {
   return {
-    official: 0,
-    subscription: 1,
-    router: 2,
-    free: 3,
+    free: 0,
+    official: 1,
+    subscription: 2,
+    router: 3,
   }[type];
 }
 
