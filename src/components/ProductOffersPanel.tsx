@@ -21,7 +21,6 @@ type ProductOffersResponse = {
 const OFFER_PAGE_SIZE = 80;
 const PRODUCT_OFFERS_CACHE_TTL_MS = 2 * 60 * 1000;
 const TELEGRAM_COMMUNITY_URL = "https://t.me/priceaicc";
-const SOURCE_TITLE_EXPAND_THRESHOLD = 42;
 const productOffersMemoryCache = new Map<string, ProductOffersResponse>();
 
 export function ProductOffersPanel({
@@ -353,18 +352,56 @@ function TableHead({ children, className = "" }: { children: React.ReactNode; cl
 
 function OfferSourceTitle({ title, mode }: { title: string; mode: "table" | "card" }) {
   const [expanded, setExpanded] = useState(false);
-  const canExpand = title.trim().length > SOURCE_TITLE_EXPAND_THRESHOLD;
+  const [canExpand, setCanExpand] = useState(false);
+  const titleRef = useRef<HTMLElement | null>(null);
+  const setTitleNode = useCallback((node: HTMLElement | null) => {
+    titleRef.current = node;
+  }, []);
+
+  useEffect(() => {
+    if (expanded) return;
+
+    const node = titleRef.current;
+    if (!node) {
+      setCanExpand(false);
+      return;
+    }
+
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        setCanExpand(node.scrollHeight > node.clientHeight + 1);
+      });
+    };
+
+    measure();
+
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    resizeObserver?.observe(node);
+    window.addEventListener("resize", measure);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [canExpand, expanded, mode, title]);
 
   if (!canExpand) {
     if (mode === "table") {
       return (
-        <span className="block text-[#2d3435]" title={title} aria-label={`原始商品名：${title}`}>
+        <span ref={setTitleNode} className="block line-clamp-2 leading-6 text-[#2d3435]" aria-label={`原始商品名：${title}`}>
           {title}
         </span>
       );
     }
 
-    return <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#5a6061]">{title}</p>;
+    return (
+      <p ref={setTitleNode} className="mt-1 line-clamp-2 text-sm leading-6 text-[#5a6061]">
+        {title}
+      </p>
+    );
   }
 
   if (mode === "table") {
@@ -374,10 +411,9 @@ function OfferSourceTitle({ title, mode }: { title: string; mode: "table" | "car
         onClick={() => setExpanded((current) => !current)}
         aria-expanded={expanded}
         aria-label={`${expanded ? "收起" : "展开"}原始商品名：${title}`}
-        title={title}
         className="group/title block w-full rounded-md text-left text-[#2d3435] transition hover:text-[#202829] focus:outline-none focus:ring-2 focus:ring-[#adb3b4]/30"
       >
-        <span className={expanded ? "block whitespace-normal break-words leading-6" : "line-clamp-2 leading-6"}>
+        <span ref={setTitleNode} className={expanded ? "block whitespace-normal break-words leading-6" : "line-clamp-2 leading-6"}>
           {title}
         </span>
         <span className={`mt-1 items-center gap-1 text-xs font-semibold text-[#47657a] ${
@@ -395,10 +431,10 @@ function OfferSourceTitle({ title, mode }: { title: string; mode: "table" | "car
       type="button"
       onClick={() => setExpanded((current) => !current)}
       aria-expanded={expanded}
-      title={title}
+      aria-label={`${expanded ? "收起" : "展开"}原始商品名：${title}`}
       className="mt-1 block w-full rounded-md text-left text-sm leading-6 text-[#5a6061] transition hover:text-[#2d3435] focus:outline-none focus:ring-2 focus:ring-[#adb3b4]/30"
     >
-      <span className={expanded ? "block" : "line-clamp-2"}>{title}</span>
+      <span ref={setTitleNode} className={expanded ? "block" : "line-clamp-2"}>{title}</span>
       <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-[#47657a]">
         {expanded ? "收起" : "展开完整名称"}
         {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
