@@ -65,6 +65,8 @@ export function ProductOffersPanel({
   const offerExcludeQueryKey = offerExcludeQuery.trim();
   const initialFilterKey = normalizedInitialFilterTags.join(",");
   const initialCacheKey = productOffersCacheKey(productId, 0, normalizedInitialFilterTags, normalizedInitialQuery, normalizedInitialExcludeQuery);
+  const activeCacheKey = productOffersCacheKey(productId, 0, selectedFilterTags, offerQueryKey, offerExcludeQueryKey);
+  const activeCacheKeyRef = useRef(activeCacheKey);
   const cachedInitialData = newestGeneratedDataset(productOffersMemoryCache.get(initialCacheKey), initialData);
   const [data, setData] = useState<ProductOffersResponse | null>(cachedInitialData);
   const [loading, setLoading] = useState(!cachedInitialData);
@@ -74,7 +76,33 @@ export function ProductOffersPanel({
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const filterTags = parseOfferFilterTags(selectedFilterTags);
+    activeCacheKeyRef.current = activeCacheKey;
+  }, [activeCacheKey]);
+
+  useEffect(() => {
+    const urlFilters = readOfferFiltersFromUrl();
+    if (!urlFilters) return;
+
+    const nextFilterTags = parseOfferFilterTags(urlFilters.tags);
+    const nextQuery = normalizeOfferSearchQuery(urlFilters.query);
+    const nextExcludeQuery = normalizeOfferSearchQuery(urlFilters.excludeQuery, 160);
+    const hasUrlFilters = nextFilterTags.length > 0 || Boolean(nextQuery || nextExcludeQuery);
+    if (!hasUrlFilters) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      setSelectedFilterTags(nextFilterTags);
+      setQueryInput(nextQuery);
+      setExcludeInput(nextExcludeQuery);
+      setOfferQuery(nextQuery);
+      setOfferExcludeQuery(nextExcludeQuery);
+      setSearchOpen(true);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, []);
+
+  useEffect(() => {
+    const filterTags = parseOfferFilterTags(selectedFilterKey);
     const query = normalizeOfferSearchQuery(offerQuery);
     const excludeQuery = normalizeOfferSearchQuery(offerExcludeQuery, 160);
     const cacheKey = productOffersCacheKey(productId, 0, filterTags, query, excludeQuery);
@@ -103,6 +131,7 @@ export function ProductOffersPanel({
       } else {
         setLoading(true);
       }
+      setPaging(false);
 
       const timeout = createTimeoutSignal();
       cancelRefresh = timeout.cancel;
@@ -144,7 +173,6 @@ export function ProductOffersPanel({
     offerQuery,
     productId,
     selectedFilterKey,
-    selectedFilterTags,
   ]);
 
   const offers = data?.offers ?? [];
@@ -158,13 +186,16 @@ export function ProductOffersPanel({
     const filterTags = parseOfferFilterTags(selectedFilterTags);
     const query = normalizeOfferSearchQuery(offerQuery);
     const excludeQuery = normalizeOfferSearchQuery(offerExcludeQuery, 160);
+    const requestCacheKey = productOffersCacheKey(productId, 0, filterTags, query, excludeQuery);
 
     setPaging(true);
     setError(null);
 
     try {
       const nextPage = await fetchProductOfferPage(productId, offers.length, filterTags, query, excludeQuery);
+      if (activeCacheKeyRef.current !== requestCacheKey) return;
       setData((current) => {
+        if (activeCacheKeyRef.current !== requestCacheKey) return current;
         if (!current) return nextPage;
 
         const seen = new Set(current.offers.map((offer) => offer.id));
@@ -184,9 +215,10 @@ export function ProductOffersPanel({
         return mergedData;
       });
     } catch (currentError) {
+      if (activeCacheKeyRef.current !== requestCacheKey) return;
       setError(currentError instanceof Error ? currentError.message : "报价加载失败");
     } finally {
-      setPaging(false);
+      if (activeCacheKeyRef.current === requestCacheKey) setPaging(false);
     }
   }, [data, offerExcludeQuery, offerQuery, offers.length, paging, productId, selectedFilterTags, total]);
 
@@ -246,7 +278,7 @@ export function ProductOffersPanel({
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="mt-6 rounded-lg bg-[#fff7e8] px-5 py-4 text-sm font-medium text-[#6a4b16]">
         {error}
@@ -258,6 +290,9 @@ export function ProductOffersPanel({
     <>
       {data?.degraded ? (
         <DegradedBanner message={data.message} />
+      ) : null}
+      {error ? (
+        <InlineErrorBanner message={error} />
       ) : null}
       <OfferFilterBar
         facets={filterFacets}
@@ -321,6 +356,14 @@ function DegradedBanner({ message }: { message?: string | null }) {
   );
 }
 
+function InlineErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="mt-4 rounded-lg bg-[#fff7e8] px-4 py-3 text-sm font-medium text-[#6a4b16] ring-1 ring-[#efdfbd]">
+      {message}。已保留当前报价，可稍后重试或切换筛选条件。
+    </div>
+  );
+}
+
 async function fetchProductOfferPage(
   productId: string,
   offset: number,
@@ -357,6 +400,17 @@ function productOffersCacheKey(
 
 function normalizeOfferSearchQuery(value: string, limit = 80): string {
   return value.trim().slice(0, limit);
+}
+
+function readOfferFiltersFromUrl(): { tags: string | null; query: string; excludeQuery: string } | null {
+  if (typeof window === "undefined") return null;
+
+  const params = new URL(window.location.href).searchParams;
+  return {
+    tags: params.get("tags"),
+    query: params.get("q") || "",
+    excludeQuery: params.get("exclude") || "",
+  };
 }
 
 function syncOfferFiltersToUrl(filterTags: OfferFilterTagId[], query: string, excludeQuery: string) {

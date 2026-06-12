@@ -152,6 +152,7 @@ export function PriceExplorer({
   const [offersError, setOffersError] = useState<string | null>(null);
   const [feedbackRow, setFeedbackRow] = useState<PlatformOfferRow | null>(null);
   const offerLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const activeOfferQueryRef = useRef("");
   const isDesktopViewport = useMediaQuery("(min-width: 768px)");
   const platformTabs = useMemo<CategoryTabItem[]>(
     () => ["全部", ...platformOptions].map((item) => ({
@@ -298,6 +299,10 @@ export function PriceExplorer({
   );
 
   useEffect(() => {
+    activeOfferQueryRef.current = offerQueryString;
+  }, [offerQueryString]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => setEffectiveQuery(query), 250);
     return () => window.clearTimeout(timer);
   }, [query]);
@@ -433,6 +438,7 @@ export function PriceExplorer({
     if (!showingOffers) return;
 
     const controller = new AbortController();
+    const requestQueryString = offerQueryString;
     const cacheKey = offerListCacheKey(offerQueryString, 0);
 
     async function loadOffers() {
@@ -452,16 +458,20 @@ export function PriceExplorer({
       setOffersError(null);
 
       try {
-        const nextResponse = await fetchOfferPage(offerQueryString, 0, controller.signal);
+        const nextResponse = await fetchOfferPage(requestQueryString, 0, controller.signal);
+        if (activeOfferQueryRef.current !== requestQueryString) return;
         offerListMemoryCache.set(cacheKey, nextResponse);
         writeSessionCache(cacheKey, nextResponse);
         setOfferResponse(nextResponse);
       } catch (error) {
         if (controller.signal.aborted) return;
+        if (activeOfferQueryRef.current !== requestQueryString) return;
         setOffersError(error instanceof Error ? error.message : "报价加载失败");
         if (!cachedOffers) setOfferResponse(null);
       } finally {
-        if (!controller.signal.aborted) setOffersLoading(false);
+        if (!controller.signal.aborted && activeOfferQueryRef.current === requestQueryString) {
+          setOffersLoading(false);
+        }
       }
     }
 
@@ -475,10 +485,13 @@ export function PriceExplorer({
     if (platformOffers.length >= offerResponse.total) return;
 
     setOffersPaging(true);
+    const requestQueryString = offerQueryString;
 
     try {
-      const nextPage = await fetchOfferPage(offerQueryString, platformOffers.length);
+      const nextPage = await fetchOfferPage(requestQueryString, platformOffers.length);
+      if (activeOfferQueryRef.current !== requestQueryString) return;
       setOfferResponse((current) => {
+        if (activeOfferQueryRef.current !== requestQueryString) return current;
         if (!current) return nextPage;
 
         const seen = new Set(current.rows.map((row) => row.offer.id));
@@ -498,9 +511,10 @@ export function PriceExplorer({
         return mergedResponse;
       });
     } catch (error) {
+      if (activeOfferQueryRef.current !== requestQueryString) return;
       setOffersError(error instanceof Error ? error.message : "报价加载失败");
     } finally {
-      setOffersPaging(false);
+      if (activeOfferQueryRef.current === requestQueryString) setOffersPaging(false);
     }
   }, [offerQueryString, offerResponse, offersLoading, offersPaging, platformOffers.length, showingOffers]);
 
@@ -791,14 +805,19 @@ export function PriceExplorer({
         ) : null}
 
         {showingOffers ? (
-          offersLoading ? (
+          offersLoading && !offerResponse ? (
             <EmptyState text="正在加载报价" />
-          ) : offersError ? (
+          ) : offersError && !platformOffers.length ? (
             <EmptyState text={offersError} />
           ) : platformOffers.length ? (
             <>
               {offerResponse?.degraded ? (
                 <DegradedBanner message={offerResponse.message} className="mb-4" />
+              ) : null}
+              {offersError ? (
+                <div className="mb-4 rounded-lg bg-[#fff7e8] px-4 py-3 text-sm text-[#6a4b16] shadow-[0_16px_45px_rgba(45,52,53,0.04)] ring-1 ring-[#efdfbd]">
+                  {offersError}。已保留当前报价，可稍后重试或切换筛选条件。
+                </div>
               ) : null}
               <PlatformOfferTable rows={platformOffers} onFeedback={setFeedbackRow} />
               {hasMoreOffers ? (

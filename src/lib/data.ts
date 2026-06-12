@@ -100,6 +100,7 @@ let dashboardDataPromise: Promise<DashboardData> | null = null;
 let adminSummaryCache: { expiresAt: number; value: AdminSummary } | null = null;
 let adminSummaryPromise: Promise<AdminSummary> | null = null;
 const productOffersCache = new Map<string, { expiresAt: number; value: Awaited<ReturnType<typeof loadPublicProductOffers>> }>();
+const productOfferFacetsCache = new Map<string, { expiresAt: number; value: OfferFilterTagFacet[] }>();
 
 type OfferListFilters = {
   platform?: string | null;
@@ -140,6 +141,7 @@ export function clearPublicDataCache(): void {
   dashboardDataPromise = null;
   clearAdminDataCache();
   productOffersCache.clear();
+  productOfferFacetsCache.clear();
 }
 
 export function clearAdminDataCache(): void {
@@ -1036,8 +1038,7 @@ async function getPublicProductOffersFromDatabase(
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
-  const filterFacets = await getPublicProductOfferFilterFacetsFromDatabase(id);
-  if (!filterFacets) return null;
+  const filterFacetsPromise = getPublicProductOfferFilterFacetsFromDatabase(id);
   const hasServerFilters = filters.filterTags.length > 0 || filters.query.length > 0 || filters.excludeQuery.length > 0;
   const rpcName = hasServerFilters
     ? "list_public_product_offers_page_v2"
@@ -1063,6 +1064,7 @@ async function getPublicProductOffersFromDatabase(
     return null;
   }
 
+  const filterFacets = await filterFacetsPromise ?? [];
   const rows = ((data || []) as unknown as Record<string, unknown>[]);
   const offers = rows.map(mapRawOffer);
   const total = rows.length ? Number(rows[0].total_count || rows.length) : 0;
@@ -1082,6 +1084,10 @@ async function getPublicProductOffersFromDatabase(
 async function getPublicProductOfferFilterFacetsFromDatabase(id: string): Promise<OfferFilterTagFacet[] | null> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
+  const cacheKey = `facets:${id}`;
+  const now = Date.now();
+  const cached = productOfferFacetsCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.value;
 
   const { data, error } = await supabase.rpc("list_public_product_offer_filter_facets", {
     p_product_id: id,
@@ -1095,7 +1101,21 @@ async function getPublicProductOfferFilterFacetsFromDatabase(id: string): Promis
   const rows = (data || []) as Array<Record<string, unknown>>;
   const counts = new Map(rows.map((row) => [String(row.tag_id), Number(row.offer_count || 0)]));
 
-  return buildOfferFilterFacetsFromCounts(counts);
+  const facets = buildOfferFilterFacetsFromCounts(counts);
+  productOfferFacetsCache.set(cacheKey, {
+    expiresAt: Date.now() + PRODUCT_OFFERS_CACHE_TTL_MS,
+    value: facets,
+  });
+  if (productOfferFacetsCache.size > 120) {
+    const expiredAt = Date.now();
+    for (const [key, entry] of productOfferFacetsCache) {
+      if (entry.expiresAt <= expiredAt || productOfferFacetsCache.size > 120) {
+        productOfferFacetsCache.delete(key);
+      }
+    }
+  }
+
+  return facets;
 }
 
 function buildOfferFilterFacetsFromCounts(counts: Map<string, number>): OfferFilterTagFacet[] {
