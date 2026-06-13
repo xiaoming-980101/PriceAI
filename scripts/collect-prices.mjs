@@ -16,7 +16,7 @@ const DEFAULT_LIANDONG_SHOP_BULK_LIMIT = 20;
 const DEFAULT_LIANDONG_SHOP_BULK_DELAY_MS = 15_000;
 const DEFAULT_LIANDONG_SHOP_BREAKER_MINUTES = 30;
 const DEFAULT_LIANDONG_SHOP_HTTP_403_COOLDOWN_MINUTES = 5;
-const DEFAULT_LIANDONG_SHOP_HTTP_403_THRESHOLD = 2;
+const DEFAULT_LIANDONG_SHOP_HTTP_403_THRESHOLD = 3;
 const DEFAULT_PAGE_DELAY_MS = 300;
 const DEFAULT_CONCURRENCY = 1;
 const DEFAULT_FLUSH_SOURCE_COUNT = 20;
@@ -73,7 +73,14 @@ export async function runPriceCollection(options = {}) {
       async (group) => {
         const results = [];
         for (const target of group.targets) {
-          results.push(await collectOneTarget(target, options, logger, lockOwner, familyState, writeQueue));
+          const result = await collectOneTarget(target, options, logger, lockOwner, familyState, writeQueue);
+          results.push(result);
+
+          const familyPause = collectionFamilyRunPauseReason(target, familyState);
+          if (familyPause) {
+            logger?.log(`Paused ${familyPause.label}: ${familyPause.message}`);
+            break;
+          }
         }
         return results;
       },
@@ -547,6 +554,8 @@ async function collectTargetWithRetries(target, options = {}, logger = null) {
     }
 
     if (attempt < maxAttempts) {
+      if (shouldStopRetryingTarget(target, lastError)) break;
+
       const waitMs = retryDelayMs(attempt);
       logger?.log(`Retrying ${target.sourceName} in ${waitMs}ms (${attempt + 1}/${maxAttempts})...`);
       await delay(waitMs);
@@ -2346,6 +2355,29 @@ function recordCollectionFamilyResult(target, state, result = {}) {
   );
 }
 
+function collectionFamilyRunPauseReason(target, state) {
+  const family = state.enabled ? collectionFamilyForTarget(target) : null;
+  if (!family) return null;
+
+  const record = collectionFamilyRecord(state, family);
+  const now = Date.now();
+  if (record.breakerUntil && record.breakerUntil > now) {
+    return {
+      label: family.label,
+      message: `已触发风控熔断，本轮停止继续请求；约 ${Math.ceil((record.breakerUntil - now) / 60_000)} 分钟后再试。`,
+    };
+  }
+
+  if (record.http403CooldownUntil && record.http403CooldownUntil > now) {
+    return {
+      label: family.label,
+      message: `连续多个店铺返回 HTTP 403，本轮停止继续请求；约 ${Math.ceil((record.http403CooldownUntil - now) / 60_000)} 分钟后再试。`,
+    };
+  }
+
+  return null;
+}
+
 function collectionFamilyRecord(state, family) {
   const existing = state.records.get(family.key);
   if (existing) return existing;
@@ -2427,13 +2459,17 @@ function liandongShopHttp403ThresholdFor(options = {}) {
 
 function http403CountForResult(result = {}) {
   const attempts = Array.isArray(result.attempts) ? result.attempts : [];
-  const count = attempts.filter((attempt) => isHttp403Message(attempt?.message)).length;
-  if (count > 0) return count;
+  if (attempts.some((attempt) => isHttp403Message(attempt?.message))) return 1;
   return isHttp403Message(result.message) ? 1 : 0;
 }
 
 function isHttp403Message(message) {
   return /HTTP\s*403|returned HTTP 403|denied by ip_access_rule|ip_access_rule/i.test(String(message || ""));
+}
+
+function shouldStopRetryingTarget(target, error) {
+  if (!collectionFamilyForTarget(target)) return false;
+  return isHttp403Message(errorMessage(error));
 }
 
 function isChallengeMessage(message) {

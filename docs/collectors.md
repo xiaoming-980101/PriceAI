@@ -2,6 +2,8 @@
 
 PriceAI 的采集目标是从原站读取真实商品标题、价格、库存状态和购买链接，并写入 `raw_offers`。
 
+如果需要先理解整体架构、数据写回链路、本机和云服务器风控差异，请先阅读：[PriceAI 采集系统总览](./collection-system.md)。
+
 ## 采集方式
 
 | 方式 | 适用场景 |
@@ -29,7 +31,8 @@ npm run collect:prices -- --all --post
 默认写入策略：
 
 - 成功采集的来源先进入写入队列，每 `20` 个来源 flush 一次，或每 `120` 秒 flush 一次，哪个先到用哪个。
-- 采集失败的来源仍然立即写入失败日志，方便后台及时看到错误原因。
+- 成功写回时会带上来源本次 `collectedAt`，后台用它刷新报价的 `verified_at` / `last_seen_at`；即使价格没变，前台也能显示这条报价最近确认过。
+- 采集失败、空结果失败和跳过采集的来源仍然立即写入日志，方便后台及时看到错误原因。
 - 单个来源报价过多时，仍会按 `--post-batch-size` 拆成多段写入，并保留最后一段的完整快照语义。
 - 进程结束前会强制 final flush，避免尾批成功数据滞留在本地。
 
@@ -159,7 +162,7 @@ npm run collect:prices -- --all --post --liandong-shop-limit 10 --liandong-shop-
 
 当某个 `shopApi` 主域对固定 VPS IP 风控较强时，可以临时换一台云服务器作为轻量采集节点。新机器不需要 clone PriceAI 仓库，也不需要安装 Supabase 配置；只要有 Node.js 18+ 和 `curl`，执行一行命令即可从 PriceAI 拉取采集任务、采集、再回传结果。
 
-先 dry-run 验证该 IP 能否访问 `shopApi` 渠道：
+先 dry-run 验证该 IP 能否访问 `shopApi` / 链动小铺类渠道：
 
 ```bash
 curl -fsSL https://priceai.cc/priceai-edge-collector.sh | env \
