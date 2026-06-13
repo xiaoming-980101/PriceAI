@@ -566,27 +566,27 @@ export function PriceExplorer({
         <div className="mb-6 space-y-4 md:mb-9 md:space-y-5">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
             <div className="min-w-0">
-              <div className="flex items-start justify-between gap-3">
-                <h1 className="min-w-0 font-serif text-2xl font-semibold tracking-normal text-[#202829] md:text-4xl">
-                  {title}
-                </h1>
+              <h1 className="min-w-0 font-serif text-2xl font-semibold tracking-normal text-[#202829] md:text-4xl">
+                {title}
+              </h1>
+              <div className="mt-3 flex items-center justify-between gap-3 md:mt-4">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 text-[0.72rem] font-medium text-[#5a6061] md:gap-3">
+                  <span>
+                    最近更新：{dataLoading ? "正在同步" : <RelativeTime value={explorerData.generatedAt} />}
+                  </span>
+                  <span className="h-1 w-1 rounded-full bg-[#adb3b4]" />
+                  <span>{dataLoading && !showingOffers ? "正在加载" : resultCount} {showingOffers ? "条报价" : "个商品"}</span>
+                  <span className="hidden h-1 w-1 rounded-full bg-[#adb3b4] md:inline-block" />
+                  <span className="hidden md:inline">主价格优先取有货最低价，缺货会明显标注</span>
+                </div>
                 <button
                   type="button"
                   onClick={openSubmission}
-                  className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#2d3435] px-3.5 text-sm font-semibold text-[#f8f8f8] shadow-[0_14px_40px_rgba(45,52,53,0.16)] md:hidden"
+                  className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#2d3435] px-3.5 text-sm font-semibold text-[#f8f8f8] shadow-[0_12px_30px_rgba(45,52,53,0.14)] md:hidden"
                 >
-                  <Plus size={16} />
+                  <Plus size={15} />
                   提交
                 </button>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-[0.72rem] font-medium text-[#5a6061] md:mt-4 md:gap-3">
-                <span>
-                  最近更新：{dataLoading ? "正在同步" : <RelativeTime value={explorerData.generatedAt} />}
-                </span>
-                <span className="h-1 w-1 rounded-full bg-[#adb3b4]" />
-                <span>{dataLoading && !showingOffers ? "正在加载" : resultCount} {showingOffers ? "条报价" : "个商品"}</span>
-                <span className="hidden h-1 w-1 rounded-full bg-[#adb3b4] md:inline-block" />
-                <span className="hidden md:inline">主价格优先取有货最低价，缺货会明显标注</span>
               </div>
               <p className="mt-3 hidden max-w-[78ch] text-sm leading-7 text-[#5a6061] md:block">
                 PriceAI 聚合 AI 订阅卡网渠道、官方地区价和模型 API 渠道报价。本站不卖货、不担保，价格仅供参考，实际交易和售后规则以原平台为准。
@@ -1183,7 +1183,7 @@ function ExplorerMetrics({
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap xl:max-w-[560px] xl:justify-end">
+    <div className="hidden gap-2 md:grid md:grid-cols-2 xl:flex xl:flex-wrap xl:max-w-[560px] xl:justify-end">
       {metrics.map((metric) => (
         <div
           key={metric.label}

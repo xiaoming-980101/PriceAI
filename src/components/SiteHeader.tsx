@@ -157,28 +157,26 @@ function MobileModuleDrawer({
       }}
     >
       <aside
-        className="flex h-full w-[min(82vw,320px)] flex-col bg-[var(--color-panel)] px-4 py-5 shadow-[var(--shadow-floating)] ring-1 ring-[var(--color-border-soft)]"
+        className="flex h-full w-[min(80vw,312px)] flex-col bg-[var(--color-panel)] px-3 py-4 shadow-[var(--shadow-floating)] ring-1 ring-[var(--color-border-soft)]"
         role="dialog"
         aria-modal="true"
         aria-label="模块导航"
       >
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-base font-bold text-[var(--color-text-primary)]">PriceAI</div>
-            <div className="mt-1 text-xs font-medium text-[var(--color-text-muted)]">选择功能模块</div>
-          </div>
+        <div className="mb-4 flex items-center justify-between gap-3 px-1">
+          <Link href="/" aria-label="PriceAI 首页" className="min-w-0 shrink-0" onClick={onClose}>
+            <AppLogo compact />
+          </Link>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface)] text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface)] text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
             aria-label="关闭模块导航"
           >
             <X size={17} />
           </button>
         </div>
 
-        <div className="mb-2 px-1 text-xs font-semibold text-[var(--color-text-soft)]">功能模块</div>
-        <nav className="space-y-1.5" aria-label="移动端模块导航">
+        <nav className="space-y-1" aria-label="移动端模块导航">
           {navItems.map((item) => {
             const active = item.key === activeKey;
 
@@ -187,31 +185,28 @@ function MobileModuleDrawer({
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
-                className={`flex h-12 items-center justify-between rounded-lg px-3 text-sm font-semibold transition ${
+                className={`flex h-11 items-center justify-between rounded-lg px-3 text-sm font-semibold transition ${
                   active
-                    ? "bg-[var(--color-primary)] text-[var(--color-text-on-primary)]"
+                    ? "bg-[var(--color-surface-selected)] text-[var(--color-text-primary)]"
                     : "text-[var(--color-text-body)] hover:bg-[var(--color-surface-hover)]"
                 }`}
                 aria-current={active ? "page" : undefined}
               >
                 <span>{item.label}</span>
-                <span className={active ? "text-[var(--color-text-on-primary)] opacity-70" : "text-[var(--color-text-soft)]"}>
-                  {active ? "当前" : item.mobileLabel}
-                </span>
+                {active ? <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-brand)]" aria-hidden="true" /> : null}
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-6 border-t border-[var(--color-border-soft)] pt-4">
-          <div className="mb-2 px-1 text-xs font-semibold text-[var(--color-text-soft)]">更多入口</div>
-          <div className="space-y-1.5">
+        <div className="mt-4 border-t border-[var(--color-border-soft)] pt-3">
+          <div className="space-y-1">
             <Link
               href="/about"
               onClick={onClose}
-              className={`flex h-12 items-center justify-between rounded-lg px-3 text-sm font-semibold transition ${
+              className={`flex h-11 items-center justify-between rounded-lg px-3 text-sm font-semibold transition ${
                 aboutActive
-                  ? "bg-[var(--color-primary)] text-[var(--color-text-on-primary)]"
+                  ? "bg-[var(--color-surface-selected)] text-[var(--color-text-primary)]"
                   : "text-[var(--color-text-body)] hover:bg-[var(--color-surface-hover)]"
               }`}
               aria-current={aboutActive ? "page" : undefined}
@@ -220,12 +215,12 @@ function MobileModuleDrawer({
                 <Info size={17} />
                 关于 PriceAI
               </span>
-              {aboutActive ? <span className="text-[var(--color-text-on-primary)] opacity-70">当前</span> : null}
+              {aboutActive ? <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-brand)]" aria-hidden="true" /> : null}
             </Link>
             <button
               type="button"
               onClick={onFeedback}
-              className="flex h-12 w-full items-center justify-between rounded-lg px-3 text-left text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
+              className="flex h-11 w-full items-center justify-between rounded-lg px-3 text-left text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
             >
               <span className="inline-flex items-center gap-3">
                 <MessageCircle size={17} />
@@ -236,7 +231,7 @@ function MobileModuleDrawer({
               href={telegramUrl}
               target="_blank"
               rel="noreferrer"
-              className="flex h-12 items-center justify-between rounded-lg px-3 text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
+              className="flex h-11 items-center justify-between rounded-lg px-3 text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
               onClick={onClose}
             >
               <span className="inline-flex items-center gap-3">
@@ -249,7 +244,7 @@ function MobileModuleDrawer({
               href={githubUrl}
               target="_blank"
               rel="noreferrer"
-              className="flex h-12 items-center justify-between rounded-lg px-3 text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
+              className="flex h-11 items-center justify-between rounded-lg px-3 text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
               onClick={onClose}
             >
               <span className="inline-flex items-center gap-3">
@@ -259,10 +254,6 @@ function MobileModuleDrawer({
               <ExternalLink size={14} className="text-[var(--color-text-soft)]" />
             </a>
           </div>
-        </div>
-
-        <div className="mt-auto rounded-lg bg-[var(--color-surface)] px-3 py-3 text-xs leading-5 text-[var(--color-text-muted)]">
-          当前页面里的平台、搜索、排序和筛选继续在内容区操作。
         </div>
       </aside>
     </div>,
