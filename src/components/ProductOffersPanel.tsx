@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, ExternalLink, Flag, Search, X } from "lucide-react";
+import { ExternalLink, Flag, Search, X } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { isAvailable } from "@/lib/catalog";
 import { trackAnalyticsEvent } from "@/lib/analytics";
@@ -708,61 +708,18 @@ function TableHead({ children, className = "" }: { children: React.ReactNode; cl
 }
 
 function OfferSourceTitle({ title, mode }: { title: string; mode: "table" | "card" }) {
-  const [expanded, setExpanded] = useState(false);
-  const canExpand = title.length > (mode === "table" ? 42 : 34);
-
-  if (!canExpand) {
-    if (mode === "table") {
-      return (
-        <span className="block line-clamp-2 leading-6 text-[#2d3435]" aria-label={`原始商品名：${title}`}>
-          {title}
-        </span>
-      );
-    }
-
-    return (
-      <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#5a6061]">
-        {title}
-      </p>
-    );
-  }
-
   if (mode === "table") {
     return (
-      <button
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-        aria-expanded={expanded}
-        aria-label={`${expanded ? "收起" : "展开"}原始商品名：${title}`}
-        className="group/title block w-full rounded-md text-left text-[#2d3435] transition hover:text-[#202829] focus:outline-none focus:ring-2 focus:ring-[#adb3b4]/30"
-      >
-        <span className={expanded ? "block whitespace-normal break-words leading-6" : "line-clamp-2 leading-6"}>
-          {title}
-        </span>
-        <span className={`mt-1 items-center gap-1 text-xs font-semibold text-[#47657a] ${
-          expanded ? "inline-flex" : "hidden group-hover/row:inline-flex group-focus-visible/title:inline-flex"
-        }`}>
-          {expanded ? "收起" : "更多"}
-          {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </span>
-      </button>
+      <span className="block line-clamp-2 leading-6 text-[#2d3435]" title={title} aria-label={`原始商品名：${title}`}>
+        {title}
+      </span>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => setExpanded((current) => !current)}
-      aria-expanded={expanded}
-      aria-label={`${expanded ? "收起" : "展开"}原始商品名：${title}`}
-      className="mt-1 block w-full rounded-md text-left text-sm leading-6 text-[#5a6061] transition hover:text-[#2d3435] focus:outline-none focus:ring-2 focus:ring-[#adb3b4]/30"
-    >
-      <span className={expanded ? "block" : "line-clamp-2"}>{title}</span>
-      <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-[#47657a]">
-        {expanded ? "收起" : "展开完整名称"}
-        {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-      </span>
-    </button>
+    <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#5a6061]" title={title}>
+      {title}
+    </p>
   );
 }
 
