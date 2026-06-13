@@ -26,14 +26,16 @@ const feedbackTypes: Array<{ value: FeedbackType; label: string }> = [
   { value: "other", label: "其他" },
 ];
 
-type HeaderActionLabelFrom = "sm" | "2xl";
+type HeaderActionLabelFrom = "sm" | "2xl" | "never";
 
 function getLabelClassName(compact: boolean, labelFrom: HeaderActionLabelFrom) {
   if (!compact) return undefined;
+  if (labelFrom === "never") return "hidden";
   return labelFrom === "2xl" ? "hidden 2xl:inline" : "hidden sm:inline";
 }
 
 function getExternalIconClassName(labelFrom: HeaderActionLabelFrom) {
+  if (labelFrom === "never") return "hidden";
   return labelFrom === "2xl" ? "hidden 2xl:block" : "hidden sm:block";
 }
 
@@ -42,6 +44,7 @@ function getCompactButtonClassName(
   smExpandedPaddingClassName: string,
   ultraWideExpandedPaddingClassName: string,
 ) {
+  if (labelFrom === "never") return "h-10 w-10 gap-0 px-0";
   return labelFrom === "2xl"
     ? `h-9 w-9 gap-0 px-0 2xl:h-10 2xl:w-auto 2xl:gap-2 ${ultraWideExpandedPaddingClassName}`
     : `h-9 w-9 gap-0 px-0 sm:h-10 sm:w-auto sm:gap-2 ${smExpandedPaddingClassName}`;
@@ -132,12 +135,12 @@ export function TelegramLink({
         className="h-5 w-5 shrink-0 object-contain"
       />
       <span className={getLabelClassName(compact, labelFrom)}>交流群</span>
-      <ExternalLink size={14} className={labelFrom === "2xl" ? "hidden 2xl:block" : "hidden md:block"} />
+      <ExternalLink size={14} className={labelFrom === "never" ? "hidden" : labelFrom === "2xl" ? "hidden 2xl:block" : "hidden md:block"} />
     </a>
   );
 }
 
-function FeedbackDialog({ onClose }: { onClose: () => void }) {
+export function FeedbackDialog({ onClose }: { onClose: () => void }) {
   const titleId = useId();
   const [type, setType] = useState<FeedbackType>("feature");
   const [message, setMessage] = useState("");
