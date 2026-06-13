@@ -460,18 +460,23 @@ async function fetchJson(url, init = {}) {
 }
 
 async function postJson(url, body, referer) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      ...defaultHeaders(referer || url),
-      "content-type": "application/json",
-      accept: "application/json, text/plain, */*",
-      visitorid: `edge${Math.random().toString(36).slice(2, 10)}`,
-      referer: referer || url,
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(20_000),
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...defaultHeaders(referer || url),
+        "content-type": "application/json",
+        accept: "application/json, text/plain, */*",
+        visitorid: `edge${Math.random().toString(36).slice(2, 10)}`,
+        referer: referer || url,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (error) {
+    throw new Error(`${url} fetch failed: ${errorMessage(error)}`);
+  }
 
   const text = await response.text();
   if (!response.ok) {
@@ -690,5 +695,13 @@ function delay(ms) {
 }
 
 function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause;
+  if (cause && typeof cause === "object") {
+    const causeRecord = cause;
+    const code = typeof causeRecord.code === "string" ? causeRecord.code : "";
+    const message = typeof causeRecord.message === "string" ? causeRecord.message : "";
+    if (code || message) return [error.message, code, message].filter(Boolean).join(": ");
+  }
+  return error.message;
 }
