@@ -7,17 +7,17 @@ export function AppLogo({ compact = false }: { compact?: boolean }) {
           aria-hidden="true"
           className={compact ? "h-8 w-8" : "h-8 w-8 sm:h-10 sm:w-10"}
         >
-          <circle cx="28" cy="28" r="20" fill="#f8fbf9" stroke="#202829" strokeWidth="5" />
+          <circle cx="28" cy="28" r="20" fill="var(--color-logo-lens-bg)" stroke="currentColor" strokeWidth="5" />
           <path
             d="M15 33L23 25L30 30L41 19"
             fill="none"
-            stroke="#45bf78"
+            stroke="var(--color-brand)"
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth="5"
           />
-          <circle cx="41" cy="19" r="3.6" fill="#45bf78" />
-          <path d="M43 43L56 56" stroke="#202829" strokeLinecap="round" strokeWidth="7" />
+          <circle cx="41" cy="19" r="3.6" fill="var(--color-brand)" />
+          <path d="M43 43L56 56" stroke="currentColor" strokeLinecap="round" strokeWidth="7" />
         </svg>
       </span>
       <span className="flex min-w-0 flex-col leading-none">

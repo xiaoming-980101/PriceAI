@@ -9,6 +9,8 @@ type Status = "idle" | "submitting" | "success" | "error";
 
 const MAX_BATCH_SIZE = 10;
 const TELEGRAM_COMMUNITY_URL = "https://t.me/priceaicc";
+const fieldControlClassName =
+  "w-full rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-raised)] px-3 text-sm text-[var(--color-text-body)] outline-none transition placeholder:text-[var(--color-text-placeholder)] focus:border-[var(--color-brand)] focus:ring-2 focus:ring-[#45bf78]/15";
 
 export function SubmissionFloater() {
   const [open, setOpen] = useState(false);
@@ -116,11 +118,11 @@ export function SubmissionFloater() {
     <>
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#202829]/30 px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-overlay)] px-4 backdrop-blur-sm"
           onClick={close}
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-[0_30px_80px_rgba(45,52,53,0.18)]"
+            className="w-full max-w-md rounded-2xl bg-[var(--color-panel)] p-6 shadow-[var(--shadow-floating)] ring-1 ring-[var(--color-border-soft)]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between">
@@ -133,7 +135,8 @@ export function SubmissionFloater() {
               <button
                 type="button"
                 onClick={close}
-                className="rounded-full p-1 text-[#5a6061] hover:bg-stone-100"
+                className="rounded-full p-1 text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                aria-label="关闭提交渠道窗口"
               >
                 <X size={18} />
               </button>
@@ -141,7 +144,7 @@ export function SubmissionFloater() {
 
             {status === "success" ? (
               <div className="mt-5 space-y-3">
-                <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                <div className="flex items-start gap-2 rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-success-bg)] px-4 py-3 text-sm text-[var(--color-success-text)]">
                   <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
                   <span>{message}</span>
                 </div>
@@ -170,11 +173,11 @@ export function SubmissionFloater() {
                     value={urlsText}
                     onChange={(event) => setUrlsText(event.target.value)}
                     placeholder={"每行一个店铺入口链接，也可以直接粘贴一整段文字\nhttps://example.com/\nhttps://example.com/shop/demo"}
-                    className="w-full resize-y rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-[#2d3435]"
+                    className={`${fieldControlClassName} resize-y py-2`}
                   />
                 </Field>
                 {urlsText.trim() ? (
-                  <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-[#5a6061]">
+                  <div className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
                     已识别 {parsed.urls.length} 个链接
                     {parsed.duplicateCount > 0 ? `，已去重 ${parsed.duplicateCount} 个重复链接` : ""}
                     {parsed.urls.length > MAX_BATCH_SIZE ? `。单次最多 ${MAX_BATCH_SIZE} 个，请分批提交。` : "。"}
@@ -186,7 +189,7 @@ export function SubmissionFloater() {
                     type="text"
                     maxLength={200}
                     placeholder="如未填写会从域名生成"
-                    className="h-10 w-full rounded-lg border border-stone-300 bg-stone-50 px-3 text-sm outline-none focus:border-[#2d3435]"
+                    className={`${fieldControlClassName} h-10`}
                   />
                 </Field>
                 <Field label="联系方式（可选）">
@@ -195,7 +198,7 @@ export function SubmissionFloater() {
                     type="text"
                     maxLength={200}
                     placeholder="邮箱 / TG / 其它"
-                    className="h-10 w-full rounded-lg border border-stone-300 bg-stone-50 px-3 text-sm outline-none focus:border-[#2d3435]"
+                    className={`${fieldControlClassName} h-10`}
                   />
                 </Field>
                 <Field label="备注（可选）">
@@ -204,7 +207,7 @@ export function SubmissionFloater() {
                     rows={3}
                     maxLength={500}
                     placeholder="价格特点、库存稳定度、注意事项..."
-                    className="w-full resize-y rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-[#2d3435]"
+                    className={`${fieldControlClassName} resize-y py-2`}
                   />
                 </Field>
 
@@ -218,7 +221,7 @@ export function SubmissionFloater() {
                 />
 
                 {status === "error" && message ? (
-                  <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                  <p className="rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-danger-bg)] px-3 py-2 text-xs text-[var(--color-danger-text)]">
                     {message}
                   </p>
                 ) : null}
@@ -226,7 +229,7 @@ export function SubmissionFloater() {
                 <button
                   type="submit"
                   disabled={status === "submitting"}
-                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#2d3435] text-sm font-semibold text-white transition hover:bg-[#1f2526] disabled:opacity-60"
+                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-text-on-primary)] transition hover:bg-[var(--color-primary-hover)] disabled:opacity-60"
                 >
                   {status === "submitting" ? (
                     <Loader2 size={16} className="animate-spin" />
