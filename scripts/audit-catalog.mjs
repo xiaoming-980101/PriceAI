@@ -96,6 +96,7 @@ function buildSuspiciousChecks(items) {
     "google-phone-verification",
     "paypal-phone-verification",
     "phone-verification",
+    "identity-verification",
   ]);
   const aiProductIds = new Set([
     "chatgpt-free-account",
@@ -189,6 +190,42 @@ function buildSuspiciousChecks(items) {
         /(team|团队|席位|1\.25\s*x|1\.25\s*倍|6\.25\s*x|6\.25\s*倍)/i.test(offer.normalizedTitle),
     },
     {
+      key: "claude_account_maybe_team_seat",
+      label: "Claude 普号中疑似 Team Seat",
+      expected: "claude-team-standard/claude-team-premium",
+      filter: (offer) =>
+        offer.nextProductId === "claude-account" &&
+        /claude|克劳德/i.test(offer.normalizedTitle) &&
+        /(standard\s*seat|premium\s*seat|team|团队|席位|seat|1\.25\s*x|1\.25\s*倍|6\.25\s*x|6\.25\s*倍)/i.test(offer.normalizedTitle),
+    },
+    {
+      key: "claude_account_maybe_max",
+      label: "Claude 普号中疑似 Max 商品",
+      expected: "claude-max-5x/claude-max-20x",
+      filter: (offer) =>
+        offer.nextProductId === "claude-account" &&
+        /claude|克劳德/i.test(offer.normalizedTitle) &&
+        /max|20\s*[x✕✖×]|5\s*[x✕✖×]|20\s*倍|5\s*倍/.test(offer.normalizedTitle),
+    },
+    {
+      key: "claude_account_maybe_verification",
+      label: "Claude 普号中疑似 KYC / 真人验证",
+      expected: "identity-verification",
+      filter: (offer) =>
+        offer.nextProductId === "claude-account" &&
+        /claude|克劳德/i.test(offer.normalizedTitle) &&
+        isStandaloneIdentityVerificationTitle(offer.normalizedTitle),
+    },
+    {
+      key: "claude_account_maybe_recharge",
+      label: "Claude 普号中疑似充值 / 订阅服务",
+      expected: "claude-pro-month",
+      filter: (offer) =>
+        offer.nextProductId === "claude-account" &&
+        /claude|克劳德/i.test(offer.normalizedTitle) &&
+        /(充值|直充|代充|续费|订阅|月卡|卡密|激活码|cdk)/i.test(offer.normalizedTitle),
+    },
+    {
       key: "ultra_maybe_gemini_pro",
       label: "Ultra 中疑似 Gemini Pro",
       expected: "gemini-pro-year/gemini-pro-recharge",
@@ -268,6 +305,10 @@ function buildSuspiciousChecks(items) {
 }
 
 function isStandaloneVerificationTitle(value) {
+  if (isStandaloneIdentityVerificationTitle(value)) {
+    return true;
+  }
+
   if (/(接码\s*自助|接码自助|手机接码\s*自助|实卡接码|实体卡接码|单次接码|一次性接码|sms\s*接码|短信\s*接码)/i.test(value)) {
     return true;
   }
@@ -281,6 +322,12 @@ function isStandaloneVerificationTitle(value) {
   }
 
   return false;
+}
+
+function isStandaloneIdentityVerificationTitle(value) {
+  if (!/(kyc|人脸验证|真人认证|实名认证|(^|[^a-z])persona([^a-z]|$))/i.test(value)) return false;
+
+  return !/(成品号|成品账号|账号|账户|子号|max|pro|team|plus|会员|订阅|月卡|年卡|已过\s*kyc|以过\s*kyc|免\s*过?\s*kyc|过\s*kyc|已完成\s*kyc)/i.test(value);
 }
 
 function isAccountBundleTitle(value) {

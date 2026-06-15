@@ -349,6 +349,16 @@ export const canonicalCatalog: CanonicalProduct[] = [
     aliases: ["接码", "手机接码", "短信验证", "验证码", "一次性接码", "手机号验证", "通用接码"],
   },
   {
+    id: "identity-verification",
+    slug: "identity-verification",
+    displayName: "真人 / KYC 验证",
+    platform: "接码",
+    productType: "接码/验证",
+    spec: "KYC / 真人验证",
+    summary: "Claude、ChatGPT 或其他平台的人脸、实名、Persona、KYC 等人工验证服务。",
+    aliases: ["kyc", "真人认证", "实名认证", "人脸验证", "persona"],
+  },
+  {
     id: "cursor-account",
     slug: "cursor-account",
     displayName: "Cursor 账号",
@@ -579,15 +589,15 @@ function classifyOfferByTitle(
       return getCanonicalProduct("claude-team-standard");
     }
 
-    if (matches(value, ["20x", "x20", "20×", "max 20", "max x20"])) {
+    if (isClaudeMax20Product(value)) {
       return getCanonicalProduct("claude-max-20x");
     }
 
-    if (matches(value, ["5x", "x5", "5×", "max 5", "max x5"])) {
+    if (isClaudeMax5Product(value)) {
       return getCanonicalProduct("claude-max-5x");
     }
 
-    if (matches(value, ["pro", "尼区", "月卡", "直充", "代充", "激活码", "卡密"])) {
+    if (matches(value, ["pro", "尼区", "月卡", "直充", "代充", "充值", "续费", "订阅", "激活码", "卡密"])) {
       return getCanonicalProduct("claude-pro-month");
     }
 
@@ -876,7 +886,8 @@ function normalizeTitle(title: string): string {
     .toLowerCase()
     .replace(/美國/g, "美国")
     .replace(/虛擬/g, "虚拟")
-    .replace(/[×]/g, "x")
+    .replace(/[×✕✖✘]/g, "x")
+    .replace(/[\ufe0e\ufe0f]/g, "")
     .replace(/[｜|/【】[\]()（）,，:：\-_/]+/g, " ")
     .replace(/gptplus/g, "gpt plus")
     .replace(/plus月卡/g, "plus 月卡")
@@ -1010,6 +1021,10 @@ function isBundledVerificationAccount(value: string): boolean {
 }
 
 function isStandaloneVerificationService(value: string): boolean {
+  if (isIdentityVerificationService(value)) {
+    return true;
+  }
+
   if (matches(value, ["接码自助", "接码 自助", "接码自助卡密", "手机接码自助", "手机接码 自助"])) {
     return true;
   }
@@ -1071,6 +1086,45 @@ function isStandaloneVerificationService(value: string): boolean {
   }
 
   return false;
+}
+
+function isIdentityVerificationService(value: string): boolean {
+  if (!hasIdentityVerificationSignal(value)) return false;
+  return !hasIdentityVerificationBundleSignal(value);
+}
+
+function hasIdentityVerificationSignal(value: string): boolean {
+  return matches(value, ["kyc", "人脸验证", "真人认证", "实名认证"]) || /(^|[^a-z])persona([^a-z]|$)/.test(value);
+}
+
+function hasIdentityVerificationBundleSignal(value: string): boolean {
+  return matches(value, [
+    "成品号",
+    "成品账号",
+    "账号",
+    "账户",
+    "子号",
+    "max",
+    "pro",
+    "team",
+    "plus",
+    "会员",
+    "订阅",
+    "月卡",
+    "年卡",
+    "已过kyc",
+    "已过 kyc",
+    "以过kyc",
+    "以过 kyc",
+    "免kyc",
+    "免 kyc",
+    "免过kyc",
+    "免过 kyc",
+    "过kyc",
+    "过 kyc",
+    "已完成kyc",
+    "已完成 kyc",
+  ]);
 }
 
 function hasAccountBundleSignal(value: string): boolean {
@@ -1148,6 +1202,7 @@ function isEmailAccountWithVerificationNote(value: string): boolean {
 }
 
 function classifyVerificationService(value: string): string {
+  if (isIdentityVerificationService(value)) return "identity-verification";
   if (matches(value, ["paypal"])) return "paypal-phone-verification";
   if (matches(value, ["google", "谷歌", "gmail", "gemini", "pixel"])) return "google-phone-verification";
   if (matches(value, ["openai", "chatgpt", "gpt", "codex"])) return "openai-phone-verification";
@@ -1389,21 +1444,27 @@ function isClaudeProduct(value: string): boolean {
 
 function isClaudeMax20Product(value: string): boolean {
   if (matches(value, ["chatgpt", "gpt", "openai", "gemini", "grok"])) return false;
-  if (!matches(value, ["max"])) return false;
+  const hasClaudeSignal = isClaudeProduct(value);
+  const hasMaxSignal = matches(value, ["max"]);
+  if (!hasClaudeSignal && !hasMaxSignal) return false;
 
-  return matches(value, ["max20", "max 20", "20x", "x20", "20倍"]);
+  if (matches(value, ["max20", "max 20", "20x", "x20", "20倍", "20 max", "20x max", "20xmax"])) return true;
+  return hasMaxSignal && /(?:max.*200|200\s*(?:usd|刀|美金|美元|订阅))/.test(value);
 }
 
 function isClaudeMax5Product(value: string): boolean {
   if (matches(value, ["chatgpt", "gpt", "openai", "gemini", "grok"])) return false;
-  if (!matches(value, ["max"])) return false;
+  const hasClaudeSignal = isClaudeProduct(value);
+  const hasMaxSignal = matches(value, ["max"]);
+  if (!hasClaudeSignal && !hasMaxSignal) return false;
   if (isClaudeMax20Product(value)) return false;
 
-  return matches(value, ["max5", "max 5", "5x", "x5", "5倍"]);
+  if (matches(value, ["max5", "max 5", "5x", "x5", "5倍", "5 max", "5x max", "5xmax"])) return true;
+  return hasMaxSignal && /(?:max.*100|100\s*(?:usd|刀|美金|美元|订阅))/.test(value);
 }
 
 function isClaudeTeamProduct(value: string): boolean {
-  return isClaudeProduct(value) && matches(value, ["team", "团队", "席位"]);
+  return isClaudeProduct(value) && matches(value, ["team", "团队", "席位", "seat"]);
 }
 
 function isClaudeTeamPremium(value: string): boolean {
@@ -1425,8 +1486,9 @@ function isClaudeTeamPremium(value: string): boolean {
 
 function isClaudeTeamStandard(value: string): boolean {
   if (!isClaudeTeamProduct(value)) return false;
+  if (isClaudeTeamPremium(value)) return false;
 
-  return true;
+  return matches(value, ["team", "团队", "席位", "seat", "standard", "标准", "1.25x", "1.25 x", "1.25倍", "1.25 倍"]);
 }
 
 function isGeminiProduct(value: string): boolean {
