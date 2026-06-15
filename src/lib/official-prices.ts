@@ -395,14 +395,6 @@ function getOfficialPricesDatasetIndex(dataset: OfficialPricesDatasetShape): Off
   return index;
 }
 
-function getOfficialPriceRowsFromDataset(
-  dataset: OfficialPricesDatasetShape,
-  appSlug: OfficialPriceAppSlug,
-  planSlug: string,
-) {
-  return [...(getOfficialPricesDatasetIndex(dataset).rowsByPlanKey.get(officialPlanKey(appSlug, planSlug)) || [])];
-}
-
 function officialPlanKey(appSlug: OfficialPriceAppSlug, planSlug: string) {
   return `${appSlug}/${planSlug}`;
 }

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   CLOUDFLARE_BUILD_REQUIRED_ENV,
@@ -9,9 +10,16 @@ import {
 loadCloudflareLocalEnv();
 assertRequiredEnv(CLOUDFLARE_BUILD_REQUIRED_ENV, "Cloudflare build env");
 
+cleanGeneratedPath(".next/cache/fetch-cache");
+cleanGeneratedPath(".open-next/cache");
 run("OpenNext Cloudflare build", localBin("opennextjs-cloudflare"), ["build"]);
 run("OpenNext cache validation", process.execPath, ["scripts/verify-cloudflare-build-cache.mjs"]);
 run("OpenNext env sanitization", process.execPath, ["scripts/sanitize-opennext-env.mjs"]);
+
+function cleanGeneratedPath(path) {
+  rmSync(path, { recursive: true, force: true });
+  console.log(`Cleaned generated cache: ${path}`);
+}
 
 function run(label, command, args) {
   console.log(`\n> ${label}`);

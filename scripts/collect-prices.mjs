@@ -219,7 +219,7 @@ async function collectOneTarget(target, options, logger, lockOwner, familyState,
   if (familySkip) {
     logger?.log(`\n==> ${target.sourceName} [${target.kind}]`);
     logger?.log(`Skipped: ${familySkip.message}`);
-    await postSkippedCrawlLog(target, familySkip, options, writeQueue, logger);
+    await postSkippedCrawlLog(target, familySkip, options, logger);
     return skipped(familySkip.message);
   }
 
@@ -1723,7 +1723,7 @@ async function postCrawlLogBatched(target, offers, status, message, options = {}
   return { ok: true, successCount, writtenCount, unchangedCount, refreshedCount };
 }
 
-async function postSkippedCrawlLog(target, skip, options = {}, writeQueue = null, logger = null) {
+async function postSkippedCrawlLog(target, skip, options = {}, logger = null) {
   if (!options.post) return;
 
   await postCrawlLogBatched(target, [], "skipped", skip.message, options, {

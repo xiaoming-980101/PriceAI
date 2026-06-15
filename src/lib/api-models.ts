@@ -1994,19 +1994,6 @@ function buildApiProviderSummary(provider: ApiProvider, scope: ApiModelScope, da
   };
 }
 
-function withOfferRelations(offer: ApiModelOffer, dataset: ApiModelDataset): ApiModelOfferWithRelations | null {
-  const index = getApiModelDatasetIndex(dataset);
-  const model = index.modelById.get(offer.modelId) ?? null;
-  const provider = index.providerById.get(offer.providerId) ?? null;
-  if (!model || !provider) return null;
-
-  return {
-    ...offer,
-    model,
-    provider,
-  };
-}
-
 function offer(
   id: string,
   modelId: string,
