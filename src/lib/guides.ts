@@ -125,6 +125,14 @@ export const guideEntries: GuideEntry[] = [
     tags: ["ChatGPT", "Plus", "Pro", "Team", "CDK"],
     intent: "专门比较 ChatGPT 的各种获取方式。",
   },
+  {
+    title: "API 中转站怎么比较",
+    description: "理解 API 中转站、充值系数、模型倍率、综合倍率、号池来源和小额试用风险。",
+    href: "/guides/api-transit",
+    categoryId: "channels",
+    tags: ["API 中转", "Claude", "GPT", "倍率", "号池"],
+    intent: "准备选择 API 中转站前，先理解价格口径、稳定性和风险提示。",
+  },
 ];
 
 export const guideReadingPaths: GuideReadingPath[] = [
@@ -199,6 +207,11 @@ export const guideReadingPaths: GuideReadingPath[] = [
         href: "/guides/chatgpt-subscription-options",
         label: "再分清 ChatGPT 商品",
         description: "区分 Plus、Pro、Team、成品号、代充、CDK 和 API/CDK。",
+      },
+      {
+        href: "/guides/api-transit",
+        label: "理解 API 中转站",
+        description: "如果要给工具接模型，先看充值系数、综合倍率、号池和稳定性。",
       },
       {
         href: "/?stock=available",

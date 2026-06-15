@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { getStations } from "@/lib/api-transit";
 import { getApiModelSummaries, getApiProviderSummaries } from "@/lib/api-models";
 import { getApiModelDataset } from "@/lib/api-models-db";
 import { getExplorerData } from "@/lib/data";
@@ -11,9 +12,10 @@ const siteUrl = "https://priceai.cc";
 export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [data, apiDataset] = await Promise.all([
+  const [data, apiDataset, transitStations] = await Promise.all([
     getExplorerData(),
     getApiModelDataset(),
+    getStations(),
   ]);
   const now = new Date();
 
@@ -41,6 +43,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.75,
+    },
+    {
+      url: `${siteUrl}/api-transit`,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.72,
+    },
+    {
+      url: `${siteUrl}/api-transit/models`,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.62,
+    },
+    {
+      url: `${siteUrl}/api-transit/submit`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.5,
     },
     ...platformPageConfigList.map((platform) => ({
       url: `${siteUrl}/platforms/${platform.slug}`,
@@ -108,6 +128,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.74,
     },
+    {
+      url: `${siteUrl}/guides/api-transit`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.72,
+    },
   ];
 
   const productRoutes: MetadataRoute.Sitemap = data.products
@@ -140,5 +166,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticRoutes, ...productRoutes, ...officialPriceRoutes, ...apiModelRoutes, ...apiProviderRoutes];
+  const transitRoutes: MetadataRoute.Sitemap = transitStations.map((station) => ({
+    url: `${siteUrl}/api-transit/${station.slug}`,
+    lastModified: station.lastUpdatedAt ? new Date(station.lastUpdatedAt) : now,
+    changeFrequency: "daily",
+    priority: 0.55,
+  }));
+
+  return [...staticRoutes, ...productRoutes, ...officialPriceRoutes, ...apiModelRoutes, ...apiProviderRoutes, ...transitRoutes];
 }

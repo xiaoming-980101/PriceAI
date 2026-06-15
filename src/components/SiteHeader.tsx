@@ -14,6 +14,7 @@ const navItems = [
   { key: "channels", href: "/", label: "卡网渠道", mobileLabel: "卡网", match: (pathname: string) => pathname === "/" || pathname.startsWith("/products") },
   { key: "official", href: "/official-prices", label: "官方订阅", mobileLabel: "订阅", match: (pathname: string) => pathname.startsWith("/official-prices") },
   { key: "api", href: "/api-models", label: "模型 API", mobileLabel: "API", match: (pathname: string) => pathname.startsWith("/api-models") },
+  { key: "transit", href: "/api-transit", label: "中转 API", mobileLabel: "中转", match: (pathname: string) => pathname.startsWith("/api-transit") },
   { key: "guides", href: "/guides", label: "指南", mobileLabel: "指南", match: (pathname: string) => pathname.startsWith("/guides") },
 ];
 
