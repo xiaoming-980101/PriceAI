@@ -1,11 +1,8 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { Metadata } from "next";
 import { compileMDX } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 import { z } from "zod";
-
-const contentRoot = path.join(process.cwd(), "content", "guides");
+import { mdxGuideSources } from "@/lib/generated-mdx-guides";
 
 const frontmatterSchema = z.object({
   title: z.string(),
@@ -33,8 +30,10 @@ const frontmatterSchema = z.object({
 export type MdxGuideFrontmatter = z.infer<typeof frontmatterSchema>;
 
 export async function readMdxGuide(slug: string) {
-  const filePath = path.join(contentRoot, `${slug}.mdx`);
-  const source = await fs.readFile(filePath, "utf8");
+  const source = mdxGuideSources[slug as keyof typeof mdxGuideSources];
+  if (!source) {
+    throw new Error(`Unknown MDX guide slug: ${slug}`);
+  }
   return source;
 }
 
