@@ -22,6 +22,7 @@
     "collect:performance": "node scripts/analyze-collector-performance.mjs",
     "collect:official": "node scripts/collect-official-prices.mjs",
     "collect:api-models": "node scripts/collect-api-models.mjs",
+    "collect:api-transit": "node scripts/collect-api-transit.mjs",
     "collect:worker": "node scripts/collect-worker.mjs",
     "import:api-models": "node scripts/import-api-models.mjs",
     "check:p2": "node scripts/p2-closeout-check.mjs",

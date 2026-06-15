@@ -49,6 +49,8 @@ function TransitSubmissionModal({
   onClose: () => void;
 }) {
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const title = mode === "submit" ? "提交一个 API 中转站" : "商家 / 总渠道商入驻";
   const description =
@@ -109,17 +111,45 @@ function TransitSubmissionModal({
               <CheckCircle2 className="h-4 w-4" />
               已记录
             </p>
-            <p className="mt-1">当前是本地 MVP 流程，正式接入后会进入待核验队列。</p>
+            <p className="mt-1">已进入 API 中转站待核验队列，审核通过后再进入公开榜单或监控池。</p>
           </div>
         ) : (
           <form
             className="mt-5 space-y-4"
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault();
-              setSubmitted(true);
+              setSubmitting(true);
+              setError(null);
+
+              const form = event.currentTarget;
+              const formData = new FormData(form);
+              const payload = buildSubmissionPayload(mode, formData);
+
+              try {
+                const response = await fetch("/api/api-transit-submissions", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify(payload),
+                });
+                const json = await response.json().catch(() => null);
+                if (!response.ok || !json?.ok) {
+                  throw new Error(json?.message || "提交失败，请稍后再试。");
+                }
+                setSubmitted(true);
+                form.reset();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "提交失败，请稍后再试。");
+              } finally {
+                setSubmitting(false);
+              }
             }}
           >
             {mode === "submit" ? <SubmitFields /> : <MerchantFields />}
+            {error ? (
+              <p className="rounded-lg bg-[#fbe9e7] px-3 py-2 text-xs leading-5 text-[#9b3328]">
+                {error}
+              </p>
+            ) : null}
             <p className="rounded-lg bg-[#fff7e8] px-3 py-2 text-xs leading-5 text-[#7a541b]">
               请不要提交 API Key、账号密码、Cookie、支付账户或任何能直接调用模型的密钥。
             </p>
@@ -133,10 +163,11 @@ function TransitSubmissionModal({
               </button>
               <button
                 type="submit"
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#2d3435] px-5 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526]"
+                disabled={submitting}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#2d3435] px-5 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Send className="h-4 w-4" />
-                {mode === "submit" ? "提交到待核验" : "提交入驻意向"}
+                {submitting ? "提交中..." : mode === "submit" ? "提交到待核验" : "提交入驻意向"}
               </button>
             </div>
           </form>
@@ -151,13 +182,13 @@ function SubmitFields() {
     <>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="渠道名称">
-          <input className={fieldClassName} placeholder="例如 MiCu API" />
+          <input className={fieldClassName} name="name" placeholder="例如 MiCu API" />
         </Field>
         <Field label="站点或 API 地址">
-          <input className={fieldClassName} placeholder="https://example.com" type="url" />
+          <input className={fieldClassName} name="url" placeholder="https://example.com" type="url" required />
         </Field>
         <Field label="你判断的渠道类型">
-          <select className={fieldClassName} defaultValue="不确定，交给平台核验">
+          <select className={fieldClassName} name="channelType" defaultValue="不确定，交给平台核验">
             <option>不确定，交给平台核验</option>
             <option>一手自建号池</option>
             <option>官方 API</option>
@@ -166,20 +197,21 @@ function SubmitFields() {
           </select>
         </Field>
         <Field label="看到的价格或倍率">
-          <input className={fieldClassName} placeholder="例如 Opus 4.6 0.2x / GPT 5.4 0.08x" />
+          <input className={fieldClassName} name="priceHint" placeholder="例如 Opus 4.6 0.2x / GPT 5.4 0.08x" />
         </Field>
       </div>
-      <OptionGroup label="支持模型" options={modelOptions} />
+      <OptionGroup label="支持模型" name="models" options={modelOptions} />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="售后或联系入口">
-          <input className={fieldClassName} placeholder="Telegram / QQ / 工单地址" />
+          <input className={fieldClassName} name="contact" placeholder="Telegram / QQ / 工单地址" />
         </Field>
         <Field label="你从哪里看到的">
-          <input className={fieldClassName} placeholder="朋友推荐 / 群聊 / 商家官网" />
+          <input className={fieldClassName} name="sourceHint" placeholder="朋友推荐 / 群聊 / 商家官网" />
         </Field>
       </div>
       <Field label="补充说明">
         <textarea
+          name="notes"
           className={`${fieldClassName} min-h-24 resize-y py-2 leading-6`}
           placeholder="例如是否充值过、是否遇到限速、是否怀疑二级上游"
         />
@@ -192,13 +224,19 @@ function MerchantFields() {
   return (
     <>
       <OptionGroup label="你的角色" type="radio" name="merchant-role" options={["总渠道商", "中转站商家", "个人渠道"]} />
-      <OptionGroup label="希望合作什么" options={["公开展示", "提供测试额度", "补充渠道资料", "纠错 / 申诉", "批发合作", "其他"]} />
+      <OptionGroup label="希望合作什么" name="cooperation" options={["公开展示", "提供测试额度", "补充渠道资料", "纠错 / 申诉", "批发合作", "其他"]} />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="站点名称或域名">
-          <input className={fieldClassName} placeholder="渠道名称 / 官网域名" />
+          <input className={fieldClassName} name="name" placeholder="渠道名称 / 官网域名" required />
+        </Field>
+        <Field label="站点或 API 地址">
+          <input className={fieldClassName} name="url" placeholder="https://example.com" type="url" required />
+        </Field>
+        <Field label="公开价格页">
+          <input className={fieldClassName} name="pricingUrl" placeholder="https://example.com/pricing" type="url" />
         </Field>
         <Field label="可接受合作规则">
-          <select className={fieldClassName} defaultValue="仅提交资料，不参与优选">
+          <select className={fieldClassName} name="commercialRule" defaultValue="仅提交资料，不参与优选">
             <option>仅提交资料，不参与优选</option>
             <option>按月展示费</option>
             <option>一次性保证金</option>
@@ -208,18 +246,20 @@ function MerchantFields() {
       </div>
       <OptionGroup
         label="准入资料准备情况"
+        name="admission"
         options={["可说明上游渠道", "可拆分 Pro / Plus / Max 池", "有固定售后入口", "接受异常下架机制", "可提供测试额度", "可提供历史稳定性证明"]}
       />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="联系渠道">
-          <input className={fieldClassName} placeholder="Telegram / 邮箱 / 企业微信" />
+          <input className={fieldClassName} name="contact" placeholder="Telegram / 邮箱 / 企业微信" />
         </Field>
         <Field label="大概供给规模">
-          <input className={fieldClassName} placeholder="例如日请求量、账号池数量、模型覆盖" />
+          <input className={fieldClassName} name="supplyScale" placeholder="例如日请求量、账号池数量、模型覆盖" />
         </Field>
       </div>
       <Field label="补充说明">
         <textarea
+          name="notes"
           className={`${fieldClassName} min-h-24 resize-y py-2 leading-6`}
           placeholder="例如是否一手、是否 sub to API、是否存在二级上游、售后 SLA"
         />
@@ -273,3 +313,31 @@ function OptionGroup({
 
 const fieldClassName =
   "h-11 w-full rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-sm text-[#202829] outline-none transition placeholder:text-[#9aa2a3] focus:border-[#2d3435]";
+
+function buildSubmissionPayload(mode: DialogMode, formData: FormData) {
+  const get = (name: string) => String(formData.get(name) || "").trim();
+  const getAll = (name: string) => formData.getAll(name).map((value) => String(value).trim()).filter(Boolean);
+  const notes = [
+    get("notes"),
+    get("priceHint") ? `价格线索：${get("priceHint")}` : "",
+    get("sourceHint") ? `来源：${get("sourceHint")}` : "",
+    get("supplyScale") ? `供给规模：${get("supplyScale")}` : "",
+  ].filter(Boolean).join("\n");
+
+  return {
+    type: mode === "merchant" ? "merchant" : "user",
+    name: get("name"),
+    url: get("url"),
+    pricingUrl: get("pricingUrl") || undefined,
+    contact: get("contact"),
+    notes,
+    models: getAll("models"),
+    meta: {
+      channelType: get("channelType") || null,
+      merchantRole: get("merchant-role") || null,
+      cooperation: getAll("cooperation"),
+      admission: getAll("admission"),
+      commercialRule: get("commercialRule") || null,
+    },
+  };
+}

@@ -1,0 +1,65 @@
+[
+  {
+    "id": "kksj-org",
+    "name": "KK API",
+    "websiteUrl": "https://api.kksj.org/",
+    "apiBaseUrl": "https://api.kksj.org/v1",
+    "pricingUrl": "https://api.kksj.org/pricing",
+    "pricingEndpointUrl": "https://api.kksj.org/api/pricing",
+    "collectorKind": "new_api_pricing"
+  },
+  {
+    "id": "smartaipro-cn",
+    "name": "Smartaipro",
+    "websiteUrl": "https://fast.smartaipro.cn/",
+    "apiBaseUrl": "https://fast.smartaipro.cn/v1",
+    "pricingUrl": "https://fast.smartaipro.cn/pricing",
+    "pricingEndpointUrl": "https://fast.smartaipro.cn/api/pricing",
+    "collectorKind": "new_api_pricing"
+  },
+  {
+    "id": "8yes-cc",
+    "name": "8Yes API",
+    "websiteUrl": "https://8yes.cc/",
+    "apiBaseUrl": "https://8yes.cc/v1",
+    "pricingUrl": "https://8yes.cc/pricing",
+    "pricingEndpointUrl": "https://8yes.cc/api/pricing",
+    "collectorKind": "new_api_pricing"
+  },
+  {
+    "id": "4router-net",
+    "name": "4Router",
+    "websiteUrl": "https://4router.net/",
+    "apiBaseUrl": "https://4router.net/v1",
+    "pricingUrl": "https://4router.net/pricing",
+    "pricingEndpointUrl": "https://4router.net/api/pricing",
+    "collectorKind": "new_api_pricing"
+  },
+  {
+    "id": "88996-cloud",
+    "name": "88996 Cloud",
+    "websiteUrl": "https://88996.cloud/",
+    "apiBaseUrl": "https://88996.cloud/v1",
+    "pricingUrl": "https://88996.cloud/pricing",
+    "pricingEndpointUrl": "https://88996.cloud/api/pricing",
+    "collectorKind": "new_api_pricing_v2"
+  },
+  {
+    "id": "180txt-cn",
+    "name": "180txt API",
+    "websiteUrl": "https://www.180txt.cn/",
+    "apiBaseUrl": "https://www.180txt.cn/v1",
+    "pricingUrl": "https://www.180txt.cn/pricing",
+    "pricingEndpointUrl": "https://www.180txt.cn/api/pricing",
+    "collectorKind": "new_api_pricing"
+  },
+  {
+    "id": "micuapi-ai",
+    "name": "MiCu API",
+    "websiteUrl": "https://www.micuapi.ai/",
+    "apiBaseUrl": "https://www.micuapi.ai/v1",
+    "pricingUrl": "https://www.micuapi.ai/pricing",
+    "pricingEndpointUrl": "https://www.micuapi.ai/api/pricing",
+    "collectorKind": "new_api_pricing"
+  }
+]

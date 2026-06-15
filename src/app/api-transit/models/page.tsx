@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { getStations } from "@/lib/api-transit";
+import { getTransitStations } from "@/lib/api-transit-db";
 import { SiteHeader } from "@/components/SiteHeader";
 import TransitModelExplorer from "@/components/TransitModelExplorer";
 import { TransitViewTabs } from "@/components/TransitViewTabs";
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 export const revalidate = 300;
 
 export default async function ApiTransitModelsPage() {
-  const stations = await getStations();
+  const stations = await getTransitStations();
 
   return (
     <div className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">

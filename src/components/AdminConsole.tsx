@@ -2139,6 +2139,13 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
           </div>
           {authed && (
             <div className="flex items-center gap-3">
+              <Link
+                href="/admin/api-transit"
+                className="hidden h-8 items-center gap-1.5 rounded-full border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#2d3435] transition-colors hover:bg-[#f2f4f4] md:inline-flex"
+              >
+                <TerminalSquare size={14} />
+                API 中转审核台
+              </Link>
               {summary.map((s) => (
                 <div key={s.label} className="hidden items-center gap-1.5 text-xs text-[#5a6061] sm:flex">
                   {s.icon}

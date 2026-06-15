@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getStations } from "@/lib/api-transit";
+import { getTransitStations } from "@/lib/api-transit-db";
 import { getApiModelSummaries, getApiProviderSummaries } from "@/lib/api-models";
 import { getApiModelDataset } from "@/lib/api-models-db";
 import { getExplorerData } from "@/lib/data";
@@ -15,7 +15,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [data, apiDataset, transitStations] = await Promise.all([
     getExplorerData(),
     getApiModelDataset(),
-    getStations(),
+    getTransitStations(),
   ]);
   const now = new Date();
 

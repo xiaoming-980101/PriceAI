@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getStations, getStationBySlug, ALLOWED_RETURN_KEYS } from "@/lib/api-transit";
+import { ALLOWED_RETURN_KEYS } from "@/lib/api-transit";
+import { getTransitStations, getTransitStationBySlug } from "@/lib/api-transit-db";
 import { sanitizeListReturnHref } from "@/lib/list-return";
 import { SiteHeader } from "@/components/SiteHeader";
 import TransitStationDetail from "@/components/TransitStationDetail";
@@ -10,7 +11,7 @@ export const revalidate = 300;
 export const dynamicParams = true;
 
 export async function generateStaticParams() {
-  const stations = await getStations();
+  const stations = await getTransitStations();
   return stations.map((s) => ({ slug: s.slug }));
 }
 
@@ -20,7 +21,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const station = await getStationBySlug(slug);
+  const station = await getTransitStationBySlug(slug);
   if (!station) return { title: "未找到" };
 
   return {
@@ -43,7 +44,7 @@ export default async function ApiTransitDetailPage({
 }) {
   const { slug } = await params;
   const { back } = await searchParams;
-  const station = await getStationBySlug(slug);
+  const station = await getTransitStationBySlug(slug);
 
   if (!station) notFound();
 
