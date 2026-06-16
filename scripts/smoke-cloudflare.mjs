@@ -27,7 +27,11 @@ const checks = [
     status: 200,
     text: {
       forbidden: fallbackHtmlMarkers,
-      requiredAny: [{ label: "configured=true", patterns: ['"configured":true', '\\"configured\\":true'] }],
+      requiredAny: [
+        { label: "homepage-title", patterns: ["先看清价格从哪里来"] },
+        { label: "purchase-paths", patterns: ["先回答一个问题：你现在要买什么"] },
+        { label: "sponsor-contact", patterns: ["https://t.me/dimthink"] },
+      ],
     },
   },
   {
