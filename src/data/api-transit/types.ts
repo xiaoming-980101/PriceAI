@@ -3,6 +3,7 @@ export type TransitSourceType = "manual_collected" | "user_submitted" | "merchan
 export type TransitCommercialRelation = "none" | "listed" | "partner" | "affiliate" | "sponsored" | "unknown";
 export type TransitDataStatus = "sample" | "pending_review" | "verified";
 export type TransitModelFamily = "claude" | "gpt";
+export type TransitStationSystem = "new_api" | "sub_to_api" | "custom" | "unknown";
 export type TransitChannelType =
   | "official_api"
   | "cloud"
@@ -12,7 +13,14 @@ export type TransitChannelType =
   | "mixed"
   | "undisclosed";
 export type TransitAccountPool = "pro" | "plus" | "max" | "team" | "enterprise" | "official_api" | "mixed" | "undisclosed";
-export type TransitRiskLabel = "sample_data" | "insufficient_samples" | "mixed_pool" | "reseller" | "undisclosed_upstream" | "pending_feedback";
+export type TransitRiskLabel =
+  | "sample_data"
+  | "insufficient_samples"
+  | "mixed_pool"
+  | "reseller"
+  | "undisclosed_upstream"
+  | "third_party_aggregate"
+  | "pending_feedback";
 export type TransitUsageAdvice = "try_small" | "cautious" | "not_recommended" | "pending";
 
 export interface TransitAvailability {
@@ -59,6 +67,8 @@ export interface TransitStation {
   slug: string;
   name: string;
   websiteUrl: string;
+  collectorKind?: string | null;
+  stationSystem?: TransitStationSystem;
   status: TransitStationStatus;
   sourceType: TransitSourceType;
   commercialRelation: TransitCommercialRelation;
@@ -116,6 +126,7 @@ export const TRANSIT_RISK_LABELS: Record<TransitRiskLabel, string> = {
   mixed_pool: "混池需确认",
   reseller: "二级分销",
   undisclosed_upstream: "上游未披露",
+  third_party_aggregate: "第三方聚合",
   pending_feedback: "反馈待核验",
 };
 

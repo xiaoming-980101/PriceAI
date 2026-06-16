@@ -1,0 +1,168 @@
+import "server-only";
+
+import { getRuntimeEnv } from "@/lib/runtime-env";
+import { getSupabaseServerClient } from "@/lib/supabase";
+import { stableId } from "@/lib/utils";
+
+export type TransitCredentialAccessMode = "test_key" | "test_account";
+
+export type TransitCredentialInput = {
+  accessMode: TransitCredentialAccessMode;
+  submissionId: string;
+  stationId?: string | null;
+  submitterIp?: string | null;
+  budgetLimit?: string | null;
+  expiresAt?: string | null;
+  allowedModels?: string[];
+  notes?: string | null;
+  apiKey?: string | null;
+  loginUrl?: string | null;
+  username?: string | null;
+  password?: string | null;
+};
+
+type EncryptedPayload = {
+  alg: "AES-GCM";
+  iv: string;
+  ciphertext: string;
+  encoded: "base64";
+};
+
+export async function assertTransitCredentialStorageReady() {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase 尚未配置，暂时无法接收测试凭据。");
+  getCredentialEncryptionSecret();
+
+  const { error } = await supabase.from("api_transit_credentials").select("id").limit(1);
+  if (error) throw new Error("测试凭据表尚未初始化，请先执行 Supabase 迁移。");
+}
+
+export async function createTransitCredential(input: TransitCredentialInput) {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase 尚未配置，暂时无法接收测试凭据。");
+
+  const credentialType = input.accessMode === "test_account" ? "test_account" : "test_key";
+  const secretPayload = buildSecretPayload(input);
+  const encryptedPayload = await encryptCredentialPayload(secretPayload);
+  const credentialMeta = buildCredentialMeta(input);
+
+  const { error } = await supabase.from("api_transit_credentials").upsert(
+    {
+      id: stableId("api-transit-credential", input.submissionId, credentialType),
+      submission_id: input.submissionId,
+      station_id: input.stationId || null,
+      credential_type: credentialType,
+      status: "submitted",
+      encrypted_payload: encryptedPayload,
+      credential_meta: credentialMeta,
+      expires_at: normalizeDate(input.expiresAt),
+      submitter_ip: input.submitterIp || null,
+    },
+    { onConflict: "submission_id,credential_type" },
+  );
+
+  if (error) throw error;
+}
+
+function buildSecretPayload(input: TransitCredentialInput) {
+  if (input.accessMode === "test_key") {
+    return {
+      type: "test_key",
+      api_key: cleanRequired(input.apiKey, "请填写测试 API Key。"),
+      budget_limit: cleanText(input.budgetLimit),
+      expires_at: cleanText(input.expiresAt),
+      allowed_models: cleanList(input.allowedModels),
+      notes: cleanText(input.notes),
+    };
+  }
+
+  return {
+    type: "test_account",
+    login_url: cleanRequired(input.loginUrl, "请填写测试账号登录地址。"),
+    username: cleanRequired(input.username, "请填写测试账号。"),
+    password: cleanRequired(input.password, "请填写测试账号密码。"),
+    budget_limit: cleanText(input.budgetLimit),
+    expires_at: cleanText(input.expiresAt),
+    allowed_models: cleanList(input.allowedModels),
+    notes: cleanText(input.notes),
+  };
+}
+
+function buildCredentialMeta(input: TransitCredentialInput) {
+  const loginHost = input.loginUrl ? safeHost(input.loginUrl) : null;
+  return {
+    access_mode: input.accessMode,
+    budget_limit: cleanText(input.budgetLimit),
+    expires_at: cleanText(input.expiresAt),
+    allowed_models: cleanList(input.allowedModels),
+    login_host: loginHost,
+    has_api_key: input.accessMode === "test_key",
+    has_test_account: input.accessMode === "test_account",
+  };
+}
+
+async function encryptCredentialPayload(payload: Record<string, unknown>): Promise<EncryptedPayload> {
+  const cryptoApi = globalThis.crypto;
+  if (!cryptoApi?.subtle) throw new Error("当前运行环境不支持凭据加密。");
+
+  const encoder = new TextEncoder();
+  const secret = getCredentialEncryptionSecret();
+  const keyMaterial = await cryptoApi.subtle.digest("SHA-256", encoder.encode(secret));
+  const key = await cryptoApi.subtle.importKey("raw", keyMaterial, { name: "AES-GCM" }, false, ["encrypt"]);
+  const iv = cryptoApi.getRandomValues(new Uint8Array(12));
+  const encrypted = await cryptoApi.subtle.encrypt({ name: "AES-GCM", iv }, key, encoder.encode(JSON.stringify(payload)));
+
+  return {
+    alg: "AES-GCM",
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(new Uint8Array(encrypted)),
+    encoded: "base64",
+  };
+}
+
+function getCredentialEncryptionSecret(): string {
+  const secret = getRuntimeEnv("API_TRANSIT_CREDENTIAL_ENCRYPTION_KEY");
+  if (!secret || secret.length < 32) {
+    throw new Error("服务端未配置 API_TRANSIT_CREDENTIAL_ENCRYPTION_KEY，暂时无法接收测试凭据。");
+  }
+  return secret;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function cleanRequired(value: string | null | undefined, message: string): string {
+  const text = cleanText(value);
+  if (!text) throw new Error(message);
+  return text;
+}
+
+function cleanText(value: string | null | undefined): string | null {
+  const text = String(value || "").trim();
+  return text ? text : null;
+}
+
+function cleanList(values: string[] | null | undefined): string[] {
+  return Array.from(new Set((values || []).map((value) => value.trim()).filter(Boolean))).slice(0, 30);
+}
+
+function normalizeDate(value: string | null | undefined): string | null {
+  const text = cleanText(value);
+  if (!text) return null;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function safeHost(value: string): string | null {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
+}

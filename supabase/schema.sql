@@ -1276,6 +1276,23 @@ create table if not exists api_transit_submissions (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists api_transit_credentials (
+  id text primary key,
+  submission_id text not null references api_transit_submissions(id) on delete cascade,
+  station_id text references api_transit_stations(id) on delete set null,
+  credential_type text not null check (credential_type in ('test_key', 'test_account')),
+  status text not null default 'submitted' check (status in ('submitted', 'ready', 'failed', 'revoked', 'deleted')),
+  encrypted_payload jsonb not null,
+  credential_meta jsonb not null default '{}'::jsonb,
+  expires_at timestamptz,
+  last_used_at timestamptz,
+  failure_message text,
+  submitter_ip text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (submission_id, credential_type)
+);
+
 create table if not exists api_transit_detection_runs (
   id text primary key,
   station_id text references api_transit_stations(id) on delete cascade,
@@ -1315,6 +1332,8 @@ create index if not exists api_transit_offers_family_idx on api_transit_offers(f
 create index if not exists api_transit_offers_status_idx on api_transit_offers(status);
 create index if not exists api_transit_submissions_review_status_idx on api_transit_submissions(review_status, created_at desc);
 create index if not exists api_transit_submissions_submitted_url_idx on api_transit_submissions(submitted_url);
+create index if not exists api_transit_credentials_submission_id_idx on api_transit_credentials(submission_id);
+create index if not exists api_transit_credentials_status_idx on api_transit_credentials(status, created_at desc);
 create index if not exists api_transit_detection_runs_started_at_idx on api_transit_detection_runs(started_at desc);
 create index if not exists api_transit_detection_runs_station_id_idx on api_transit_detection_runs(station_id);
 create index if not exists api_transit_feedback_status_idx on api_transit_feedback(status, created_at desc);
@@ -1334,8 +1353,14 @@ create trigger api_transit_submissions_set_updated_at
 before update on api_transit_submissions
 for each row execute function set_updated_at();
 
+drop trigger if exists api_transit_credentials_set_updated_at on api_transit_credentials;
+create trigger api_transit_credentials_set_updated_at
+before update on api_transit_credentials
+for each row execute function set_updated_at();
+
 alter table api_transit_stations enable row level security;
 alter table api_transit_offers enable row level security;
 alter table api_transit_submissions enable row level security;
+alter table api_transit_credentials enable row level security;
 alter table api_transit_detection_runs enable row level security;
 alter table api_transit_feedback enable row level security;

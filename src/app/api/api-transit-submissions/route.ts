@@ -1,5 +1,25 @@
 import { z } from "zod";
+import {
+  assertTransitCredentialStorageReady,
+  createTransitCredential,
+  type TransitCredentialAccessMode,
+} from "@/lib/api-transit-credentials";
 import { createTransitSubmission } from "@/lib/api-transit-submissions";
+
+const accessModeSchema = z.enum(["public_only", "test_key", "test_account"]);
+
+const credentialSchema = z.object({
+  accessMode: accessModeSchema,
+  safetyConfirmed: z.boolean().optional(),
+  apiKey: z.string().trim().max(3000).optional().nullable(),
+  loginUrl: z.string().url().max(2048).optional().nullable(),
+  username: z.string().trim().max(300).optional().nullable(),
+  password: z.string().trim().max(3000).optional().nullable(),
+  budgetLimit: z.string().trim().max(200).optional().nullable(),
+  expiresAt: z.string().trim().max(80).optional().nullable(),
+  allowedModels: z.array(z.string().trim().max(80)).max(30).optional(),
+  notes: z.string().trim().max(500).optional().nullable(),
+}).optional();
 
 const schema = z.object({
   type: z.enum(["user", "merchant"]).default("user"),
@@ -11,6 +31,8 @@ const schema = z.object({
   notes: z.string().trim().max(1000).optional().nullable(),
   models: z.array(z.string().trim().max(80)).max(30).optional(),
   meta: z.record(z.string(), z.unknown()).optional(),
+  accessMode: accessModeSchema.optional(),
+  credentials: credentialSchema,
   website: z.string().max(200).optional().nullable(),
 });
 
@@ -19,6 +41,11 @@ export async function POST(request: Request) {
     const payload = schema.parse(await request.json());
     if (payload.website) return Response.json({ ok: true });
 
+    validateSubmissionAccess(payload);
+    const credential = normalizeCredential(payload);
+    if (credential) await assertTransitCredentialStorageReady();
+
+    const accessMode = getSubmissionAccessMode(payload);
     const result = await createTransitSubmission({
       type: payload.type,
       url: payload.url,
@@ -28,9 +55,18 @@ export async function POST(request: Request) {
       contact: payload.contact ?? null,
       notes: payload.notes ?? null,
       models: payload.models || [],
-      meta: payload.meta || {},
+      meta: buildSafeMeta(payload),
+      accessMode,
       submitterIp: getClientIp(request),
     });
+
+    if (credential && !("ignored" in result)) {
+      await createTransitCredential({
+        ...credential,
+        submissionId: result.id,
+        submitterIp: getClientIp(request),
+      });
+    }
 
     return Response.json({ ok: true, ...result });
   } catch (error) {
@@ -51,4 +87,66 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof z.ZodError) return "提交内容格式不正确，请检查链接和字段。";
   if (error instanceof Error) return error.message;
   return "提交失败，请稍后再试。";
+}
+
+function validateSubmissionAccess(payload: z.infer<typeof schema>) {
+  if (payload.type !== "merchant") return;
+
+  const accessMode = getSubmissionAccessMode(payload);
+  const monitorUrl = typeof payload.meta?.monitorUrl === "string" ? payload.meta.monitorUrl : "";
+  if (accessMode === "public_only" && !payload.pricingUrl && !monitorUrl) {
+    throw new Error("公开资料接入至少需要填写公开价格页或公开监测页。");
+  }
+
+  if (accessMode === "test_key") {
+    if (!payload.credentials?.apiKey?.trim()) throw new Error("测试 Key 接入需要填写低额度测试 API Key。");
+    if (!payload.credentials.safetyConfirmed) throw new Error("请确认提供的是低额度测试 Key，不是主账号或长期高额度 Key。");
+  }
+
+  if (accessMode === "test_account") {
+    if (!payload.credentials?.loginUrl || !payload.credentials.username || !payload.credentials.password) {
+      throw new Error("测试账号接入需要填写登录地址、测试账号和密码。");
+    }
+    if (!payload.credentials.safetyConfirmed) throw new Error("请确认提供的是专用测试账号，不是主账号。");
+  }
+}
+
+function normalizeCredential(payload: z.infer<typeof schema>) {
+  const credentials = payload.credentials;
+  if (!credentials || credentials.accessMode === "public_only") return null;
+  if (payload.type !== "merchant") throw new Error("只有商家入驻可以提交测试凭据。");
+
+  return {
+    accessMode: credentials.accessMode as TransitCredentialAccessMode,
+    budgetLimit: credentials.budgetLimit ?? null,
+    expiresAt: credentials.expiresAt ?? null,
+    allowedModels: credentials.allowedModels || payload.models || [],
+    notes: credentials.notes ?? null,
+    apiKey: credentials.apiKey ?? null,
+    loginUrl: credentials.loginUrl ?? null,
+    username: credentials.username ?? null,
+    password: credentials.password ?? null,
+  };
+}
+
+function buildSafeMeta(payload: z.infer<typeof schema>): Record<string, unknown> {
+  const meta = { ...(payload.meta || {}) };
+  const accessMode = getSubmissionAccessMode(payload);
+  meta.accessMode = accessMode;
+
+  if (payload.credentials && payload.credentials.accessMode !== "public_only") {
+    meta.credentialStatus = "submitted";
+    meta.credentialType = payload.credentials.accessMode;
+    meta.credentialBudgetLimit = payload.credentials.budgetLimit || null;
+    meta.credentialExpiresAt = payload.credentials.expiresAt || null;
+    meta.credentialAllowedModels = payload.credentials.allowedModels || payload.models || [];
+    meta.credentialSafetyConfirmed = Boolean(payload.credentials.safetyConfirmed);
+  }
+
+  return meta;
+}
+
+function getSubmissionAccessMode(payload: z.infer<typeof schema>) {
+  if (payload.type !== "merchant") return "public_only";
+  return payload.accessMode || payload.credentials?.accessMode || "public_only";
 }

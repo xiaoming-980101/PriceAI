@@ -16,14 +16,24 @@ import { createPortal } from "react-dom";
 const githubUrl = "https://github.com/physics-dimension/PriceAI";
 const telegramUrl = "https://t.me/priceaicc";
 
-type FeedbackType = "feature" | "data" | "bug" | "ux" | "other";
+type FeedbackType = "feature" | "data" | "channel" | "bug" | "ux" | "other";
 
 const feedbackTypes: Array<{ value: FeedbackType; label: string }> = [
   { value: "feature", label: "功能建议" },
   { value: "data", label: "数据问题" },
+  { value: "channel", label: "渠道反馈" },
   { value: "bug", label: "Bug / 报错" },
   { value: "ux", label: "页面体验" },
   { value: "other", label: "其他" },
+];
+
+export const transitStationFeedbackTypes: Array<{ value: FeedbackType; label: string }> = [
+  { value: "data", label: "价格/倍率不对" },
+  { value: "data", label: "模型不可用" },
+  { value: "channel", label: "渠道来源不实" },
+  { value: "channel", label: "分组/号池不对" },
+  { value: "data", label: "监测结果不符" },
+  { value: "other", label: "其他站点问题" },
 ];
 
 type HeaderActionLabelFrom = "sm" | "2xl" | "never";
@@ -140,9 +150,33 @@ export function TelegramLink({
   );
 }
 
-export function FeedbackDialog({ onClose }: { onClose: () => void }) {
+type FeedbackDialogProps = {
+  onClose: () => void;
+  initialType?: FeedbackType;
+  title?: string;
+  description?: string;
+  placeholder?: string;
+  submitLabel?: string;
+  successMessage?: string;
+  messagePrefix?: string;
+  pageUrl?: string;
+  typeOptions?: Array<{ value: FeedbackType; label: string }>;
+};
+
+export function FeedbackDialog({
+  onClose,
+  initialType = "feature",
+  title = "意见反馈",
+  description = "功能建议、页面体验、数据问题都可以发到这里。",
+  placeholder = "比如某个页面不好用、希望增加某个能力、某类数据看起来不准...",
+  submitLabel = "提交",
+  successMessage = "已收到反馈，我会在后台查看处理。",
+  messagePrefix,
+  pageUrl,
+  typeOptions = feedbackTypes,
+}: FeedbackDialogProps) {
   const titleId = useId();
-  const [type, setType] = useState<FeedbackType>("feature");
+  const [type, setType] = useState<FeedbackType>(initialType);
   const [message, setMessage] = useState("");
   const [contact, setContact] = useState("");
   const [website, setWebsite] = useState("");
@@ -169,9 +203,9 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type,
-          message,
+          message: [messagePrefix, message.trim()].filter(Boolean).join("\n\n"),
           contact,
-          pageUrl: window.location.href,
+          pageUrl: pageUrl || window.location.href,
           website,
         }),
       });
@@ -180,7 +214,7 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
       if (response.ok && json.ok) {
         setMessage("");
         setContact("");
-        setResult({ type: "success", text: "已收到反馈，我会在后台查看处理。" });
+        setResult({ type: "success", text: successMessage });
       } else {
         setResult({ type: "error", text: json.message || "提交失败，请稍后再试。" });
       }
@@ -209,10 +243,10 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#adb3b4]/20 px-5 py-4">
             <div className="min-w-0">
               <h2 id={titleId} className="text-base font-bold text-[#202829]">
-                意见反馈
+                {title}
               </h2>
               <p className="mt-1 text-sm leading-6 text-[#5a6061]">
-                功能建议、页面体验、数据问题都可以发到这里。
+                {description}
               </p>
             </div>
             <button
@@ -227,9 +261,9 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {feedbackTypes.map((item) => (
+              {typeOptions.map((item) => (
                 <button
-                  key={item.value}
+                  key={`${item.value}-${item.label}`}
                   type="button"
                   onClick={() => setType(item.value)}
                   className={`h-9 rounded-full px-3 text-xs font-semibold transition ${
@@ -252,7 +286,7 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
                 minLength={3}
                 maxLength={1000}
                 rows={5}
-                placeholder="比如某个页面不好用、希望增加某个能力、某类数据看起来不准..."
+                placeholder={placeholder}
                 className="mt-2 max-h-40 min-h-28 w-full resize-y rounded-lg border border-[#adb3b4]/30 bg-white px-3 py-2 text-sm leading-6 text-[#2d3435] outline-none transition focus:border-[#45bf78]/60 focus:ring-2 focus:ring-[#45bf78]/15"
               />
             </label>
@@ -311,7 +345,7 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
               className="inline-flex h-10 items-center gap-2 rounded-full bg-[#2d3435] px-4 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#202829] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-              提交
+              {submitLabel}
             </button>
           </div>
         </form>

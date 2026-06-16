@@ -1,0 +1,82 @@
+"use client";
+
+import { useMemo } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { CategoryTabBar, type CategoryTabItem } from "@/components/CategoryTabBar";
+import { TransitModelIcon } from "@/components/TransitModelIcon";
+import type { TransitModelFamily } from "@/data/api-transit/types";
+
+type FamilyFilter = "all" | TransitModelFamily;
+
+const preferredFamilyOrder: TransitModelFamily[] = ["gpt", "claude"];
+
+function coerceFamily(value: string | null): FamilyFilter {
+  return value === "claude" || value === "gpt" ? value : "all";
+}
+
+function displayFamilyLabel(family: TransitModelFamily, fallback: string): string {
+  if (family === "gpt") return "ChatGPT";
+  if (family === "claude") return "Claude";
+  return fallback;
+}
+
+export function TransitFamilyTabs({
+  options,
+  className = "",
+}: {
+  options: { id: TransitModelFamily; label: string }[];
+  className?: string;
+}) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeFamily = coerceFamily(searchParams.get("family") ?? searchParams.get("model"));
+
+  const tabs = useMemo<CategoryTabItem[]>(() => {
+    const byId = new Map(options.map((option) => [option.id, option]));
+    const orderedOptions = preferredFamilyOrder
+      .filter((family) => byId.has(family))
+      .map((family) => byId.get(family)!);
+
+    options.forEach((option) => {
+      if (!orderedOptions.some((item) => item.id === option.id)) orderedOptions.push(option);
+    });
+
+    return [
+      {
+        id: "all",
+        label: "全部",
+        icon: <TransitModelIcon family="all" className="h-[18px] w-[18px]" />,
+      },
+      ...orderedOptions.map((option) => ({
+        id: option.id,
+        label: displayFamilyLabel(option.id, option.label),
+        icon: <TransitModelIcon family={option.id} className="h-[18px] w-[18px]" />,
+      })),
+    ];
+  }, [options]);
+
+  function updateFamily(value: string) {
+    const nextFamily = coerceFamily(value);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("model");
+
+    if (nextFamily === "all") {
+      params.delete("family");
+    } else {
+      params.set("family", nextFamily);
+    }
+
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
+  return (
+    <CategoryTabBar
+      items={tabs}
+      value={activeFamily}
+      onChange={updateFamily}
+      className={className}
+    />
+  );
+}

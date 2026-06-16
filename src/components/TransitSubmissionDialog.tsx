@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Send, X } from "lucide-react";
+import { CheckCircle2, Globe2, KeyRound, Send, ShieldCheck, UserRound, X } from "lucide-react";
 
 type DialogMode = "submit" | "merchant";
+type AccessMode = "public_only" | "test_key" | "test_account";
 
 const modelOptions = [
   "Claude Sonnet 4.6",
@@ -12,6 +13,34 @@ const modelOptions = [
   "Claude Opus 4.8",
   "GPT 5.5",
   "GPT 5.4",
+];
+
+const systemTypeOptions = ["不确定", "Sub2API", "New API", "One API", "自研系统"];
+const channelClaimOptions = ["官方 API", "云厂商", "一手自建号池", "一手批发", "二级分销", "混合渠道", "未披露"];
+const accessModeOptions: Array<{
+  id: AccessMode;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}> = [
+  {
+    id: "public_only",
+    title: "公开资料接入",
+    description: "提供价格页或监测页，PriceAI 自动抓取公开信息。",
+    icon: <Globe2 className="h-4 w-4" />,
+  },
+  {
+    id: "test_key",
+    title: "测试 Key 接入",
+    description: "提交低额度专用 Key，用于模型列表和可用性抽样。",
+    icon: <KeyRound className="h-4 w-4" />,
+  },
+  {
+    id: "test_account",
+    title: "测试账号接入",
+    description: "提交专用测试账号，适合必须登录后台读取分组的站点。",
+    icon: <UserRound className="h-4 w-4" />,
+  },
 ];
 
 export function TransitSubmissionActions({ className = "" }: { className?: string }) {
@@ -150,9 +179,7 @@ function TransitSubmissionModal({
                 {error}
               </p>
             ) : null}
-            <p className="rounded-lg bg-[#fff7e8] px-3 py-2 text-xs leading-5 text-[#7a541b]">
-              请不要提交 API Key、账号密码、Cookie、支付账户或任何能直接调用模型的密钥。
-            </p>
+            <SubmissionSafetyNote mode={mode} />
             <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -221,9 +248,17 @@ function SubmitFields() {
 }
 
 function MerchantFields() {
+  const [accessMode, setAccessMode] = useState<AccessMode>("public_only");
+
   return (
     <>
-      <OptionGroup label="你的角色" type="radio" name="merchant-role" options={["总渠道商", "中转站商家", "个人渠道"]} />
+      <OptionGroup
+        label="你的角色"
+        type="radio"
+        name="merchant-role"
+        options={["总渠道商", "中转站商家", "个人渠道"]}
+        defaultSelected={["中转站商家"]}
+      />
       <OptionGroup label="希望合作什么" name="cooperation" options={["公开展示", "提供测试额度", "补充渠道资料", "纠错 / 申诉", "批发合作", "其他"]} />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="站点名称或域名">
@@ -232,9 +267,23 @@ function MerchantFields() {
         <Field label="站点或 API 地址">
           <input className={fieldClassName} name="url" placeholder="https://example.com" type="url" required />
         </Field>
+        <Field label="系统类型">
+          <select className={fieldClassName} name="systemType" defaultValue="不确定">
+            {systemTypeOptions.map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </Field>
+        <Field label="API Base URL">
+          <input className={fieldClassName} name="apiBaseUrl" placeholder="https://example.com/v1" type="url" />
+        </Field>
         <Field label="公开价格页">
           <input className={fieldClassName} name="pricingUrl" placeholder="https://example.com/pricing" type="url" />
         </Field>
+        <Field label="公开监测页">
+          <input className={fieldClassName} name="monitorUrl" placeholder="https://example.com/status" type="url" />
+        </Field>
+      </div>
+      <AccessModeSection accessMode={accessMode} onChange={setAccessMode} />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="可接受合作规则">
           <select className={fieldClassName} name="commercialRule" defaultValue="仅提交资料，不参与优选">
             <option>仅提交资料，不参与优选</option>
@@ -243,7 +292,11 @@ function MerchantFields() {
             <option>合作规则待定</option>
           </select>
         </Field>
+        <Field label="监测预算或频率限制">
+          <input className={fieldClassName} name="monitorBudgetLimit" placeholder="例如每天 50 次 / 每小时 1 次 / 仅入驻验真" />
+        </Field>
       </div>
+      <OptionGroup label="渠道来源声明" name="channelClaims" options={channelClaimOptions} />
       <OptionGroup
         label="准入资料准备情况"
         name="admission"
@@ -257,6 +310,13 @@ function MerchantFields() {
           <input className={fieldClassName} name="supplyScale" placeholder="例如日请求量、账号池数量、模型覆盖" />
         </Field>
       </div>
+      <Field label="分组和倍率说明">
+        <textarea
+          name="groupPricingNotes"
+          className={`${fieldClassName} min-h-24 resize-y py-2 leading-6`}
+          placeholder="例如充值 1:1；GPT Plus 0.30x，GPT Pro 0.40x；Claude Code / AWS / 官方池分别是什么倍率"
+        />
+      </Field>
       <Field label="补充说明">
         <textarea
           name="notes"
@@ -265,6 +325,158 @@ function MerchantFields() {
         />
       </Field>
     </>
+  );
+}
+
+function AccessModeSection({
+  accessMode,
+  onChange,
+}: {
+  accessMode: AccessMode;
+  onChange: (value: AccessMode) => void;
+}) {
+  return (
+    <section className="space-y-3 rounded-lg border border-[#dfe4e5] bg-[#f8fafa] p-3">
+      <div>
+        <p className="text-xs font-semibold text-[#5a6061]">数据接入方式</p>
+        <p className="mt-1 text-xs leading-5 text-[#5a6061]">
+          默认走公开资料。没有公开页时，可以提交低额度测试 Key 或专用测试账号，后台只显示凭据状态，不展示明文。
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+        {accessModeOptions.map((option) => {
+          const active = accessMode === option.id;
+          return (
+            <label
+              key={option.id}
+              className={`flex min-h-[92px] cursor-pointer flex-col gap-2 rounded-lg border px-3 py-3 transition ${
+                active
+                  ? "border-[#2d3435] bg-[#eef3f8] text-[#202829]"
+                  : "border-[#adb3b4]/20 bg-white/70 text-[#5a6061] hover:bg-white"
+              }`}
+            >
+              <input
+                type="radio"
+                name="accessMode"
+                value={option.id}
+                checked={active}
+                onChange={() => onChange(option.id)}
+                className="sr-only"
+              />
+              <span className="flex items-center gap-2 text-sm font-bold">
+                <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${active ? "bg-[#2d3435] text-white" : "bg-[#edf0f1] text-[#5a6061]"}`}>
+                  {option.icon}
+                </span>
+                {option.title}
+              </span>
+              <span className="text-xs leading-5">{option.description}</span>
+            </label>
+          );
+        })}
+      </div>
+
+      {accessMode === "public_only" ? <PublicAccessFields /> : null}
+      {accessMode === "test_key" ? <TestKeyFields /> : null}
+      {accessMode === "test_account" ? <TestAccountFields /> : null}
+    </section>
+  );
+}
+
+function PublicAccessFields() {
+  return (
+    <div className="rounded-lg bg-[#eef3f8] px-3 py-2 text-xs leading-5 text-[#47657a]">
+      选择公开资料接入时，请至少填写上方的公开价格页或公开监测页。系统会优先尝试抓取价格接口、状态页和模型分组。
+    </div>
+  );
+}
+
+function TestKeyFields() {
+  return (
+    <div className="space-y-3 rounded-lg border border-[#dfe4e5] bg-white p-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Field label="低额度测试 API Key">
+          <input
+            className={fieldClassName}
+            name="credentialApiKey"
+            placeholder="sk-..."
+            type="password"
+            autoComplete="off"
+            required
+          />
+        </Field>
+        <Field label="额度 / 频率边界">
+          <input className={fieldClassName} name="credentialBudgetLimit" placeholder="例如 10 美元以内 / 每小时 1 次" required />
+        </Field>
+        <Field label="凭据过期时间">
+          <input className={fieldClassName} name="credentialExpiresAt" type="date" />
+        </Field>
+        <Field label="允许测试的模型">
+          <input className={fieldClassName} name="credentialAllowedModelsText" placeholder="例如 GPT 5.5, Claude Opus 4.8" />
+        </Field>
+      </div>
+      <CredentialSafetyConfirm label="我确认这是低额度专用测试 Key，不是主账号或长期高额度 Key。" />
+    </div>
+  );
+}
+
+function TestAccountFields() {
+  return (
+    <div className="space-y-3 rounded-lg border border-[#dfe4e5] bg-white p-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Field label="登录地址">
+          <input className={fieldClassName} name="credentialLoginUrl" placeholder="https://example.com/login" type="url" required />
+        </Field>
+        <Field label="测试账号">
+          <input className={fieldClassName} name="credentialUsername" placeholder="专用测试账号 / 邮箱" autoComplete="off" required />
+        </Field>
+        <Field label="测试账号密码">
+          <input className={fieldClassName} name="credentialPassword" type="password" autoComplete="off" required />
+        </Field>
+        <Field label="额度 / 频率边界">
+          <input className={fieldClassName} name="credentialBudgetLimit" placeholder="例如账户内仅放 10 美元以内额度" required />
+        </Field>
+        <Field label="凭据过期时间">
+          <input className={fieldClassName} name="credentialExpiresAt" type="date" />
+        </Field>
+        <Field label="允许测试的模型">
+          <input className={fieldClassName} name="credentialAllowedModelsText" placeholder="例如只测 GPT 分组 / Claude 分组" />
+        </Field>
+      </div>
+      <Field label="登录或创建 Key 说明">
+        <textarea
+          name="credentialNotes"
+          className={`${fieldClassName} min-h-20 resize-y py-2 leading-6`}
+          placeholder="例如登录后在哪个菜单创建临时 Key、哪些分组不要测试"
+        />
+      </Field>
+      <CredentialSafetyConfirm label="我确认这是专用测试账号，不是主账号；账号内只保留低额度测试余额。" />
+    </div>
+  );
+}
+
+function CredentialSafetyConfirm({ label }: { label: string }) {
+  return (
+    <label className="flex items-start gap-2 rounded-lg bg-[#fff7e8] px-3 py-2 text-xs leading-5 text-[#7a541b]">
+      <input name="credentialSafetyConfirmed" value="yes" type="checkbox" required className="mt-0.5 h-4 w-4 accent-[#2d3435]" />
+      <span>{label} PriceAI 仅用于价格解析、模型可用性抽样和监测，可要求删除。</span>
+    </label>
+  );
+}
+
+function SubmissionSafetyNote({ mode }: { mode: DialogMode }) {
+  if (mode === "merchant") {
+    return (
+      <p className="flex items-start gap-2 rounded-lg bg-[#eef3f8] px-3 py-2 text-xs leading-5 text-[#47657a]">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>测试 Key / 测试账号会单独加密保存，后台列表只显示是否已提供和额度说明，不显示明文。</span>
+      </p>
+    );
+  }
+
+  return (
+    <p className="rounded-lg bg-[#fff7e8] px-3 py-2 text-xs leading-5 text-[#7a541b]">
+      普通用户推荐请不要提交 API Key、账号密码、Cookie、支付账户或任何能直接调用模型的密钥。
+    </p>
   );
 }
 
@@ -282,12 +494,15 @@ function OptionGroup({
   name,
   options,
   type = "checkbox",
+  defaultSelected,
 }: {
   label: string;
   name?: string;
   options: string[];
   type?: "checkbox" | "radio";
+  defaultSelected?: string[];
 }) {
+  const selected = new Set(defaultSelected || []);
   return (
     <section>
       <p className="mb-2 text-xs font-semibold text-[#5a6061]">{label}</p>
@@ -300,7 +515,8 @@ function OptionGroup({
             <input
               type={type}
               name={name}
-              defaultChecked={index === 0 || (type === "checkbox" && index === 1)}
+              value={option}
+              defaultChecked={selected.has(option) || (type === "radio" && !selected.size && index === 0)}
               className="h-4 w-4 accent-[#2d3435]"
             />
             <span>{option}</span>
@@ -317,27 +533,76 @@ const fieldClassName =
 function buildSubmissionPayload(mode: DialogMode, formData: FormData) {
   const get = (name: string) => String(formData.get(name) || "").trim();
   const getAll = (name: string) => formData.getAll(name).map((value) => String(value).trim()).filter(Boolean);
+  const accessMode = normalizeAccessMode(get("accessMode"));
+  const credentialAllowedModels = [
+    ...splitLooseList(get("credentialAllowedModelsText")),
+    ...getAll("models"),
+  ];
   const notes = [
     get("notes"),
     get("priceHint") ? `价格线索：${get("priceHint")}` : "",
     get("sourceHint") ? `来源：${get("sourceHint")}` : "",
     get("supplyScale") ? `供给规模：${get("supplyScale")}` : "",
+    get("groupPricingNotes") ? `分组倍率说明：${get("groupPricingNotes")}` : "",
   ].filter(Boolean).join("\n");
 
   return {
     type: mode === "merchant" ? "merchant" : "user",
     name: get("name"),
     url: get("url"),
+    apiBaseUrl: get("apiBaseUrl") || undefined,
     pricingUrl: get("pricingUrl") || undefined,
     contact: get("contact"),
     notes,
     models: getAll("models"),
+    accessMode: mode === "merchant" ? accessMode : "public_only",
+    credentials: mode === "merchant" ? buildCredentialPayload(accessMode, formData, credentialAllowedModels) : undefined,
     meta: {
       channelType: get("channelType") || null,
       merchantRole: get("merchant-role") || null,
       cooperation: getAll("cooperation"),
       admission: getAll("admission"),
       commercialRule: get("commercialRule") || null,
+      systemType: get("systemType") || null,
+      monitorUrl: get("monitorUrl") || null,
+      channelClaims: getAll("channelClaims"),
+      groupPricingNotes: get("groupPricingNotes") || null,
+      accessMode: mode === "merchant" ? accessMode : "public_only",
+      credentialBudgetLimit: get("credentialBudgetLimit") || null,
+      credentialExpiresAt: get("credentialExpiresAt") || null,
+      credentialAllowedModels,
+      monitorBudgetLimit: get("monitorBudgetLimit") || null,
     },
   };
+}
+
+function buildCredentialPayload(accessMode: AccessMode, formData: FormData, allowedModels: string[]) {
+  const get = (name: string) => String(formData.get(name) || "").trim();
+  if (accessMode === "public_only") return { accessMode };
+
+  return {
+    accessMode,
+    safetyConfirmed: formData.get("credentialSafetyConfirmed") === "yes",
+    apiKey: accessMode === "test_key" ? get("credentialApiKey") : undefined,
+    loginUrl: accessMode === "test_account" ? get("credentialLoginUrl") : undefined,
+    username: accessMode === "test_account" ? get("credentialUsername") : undefined,
+    password: accessMode === "test_account" ? get("credentialPassword") : undefined,
+    budgetLimit: get("credentialBudgetLimit") || undefined,
+    expiresAt: get("credentialExpiresAt") || undefined,
+    allowedModels,
+    notes: get("credentialNotes") || undefined,
+  };
+}
+
+function normalizeAccessMode(value: string): AccessMode {
+  if (value === "test_key" || value === "test_account" || value === "public_only") return value;
+  return "public_only";
+}
+
+function splitLooseList(value: string): string[] {
+  return value
+    .split(/[,，、\n|｜]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 30);
 }

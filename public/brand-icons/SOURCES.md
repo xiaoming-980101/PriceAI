@@ -38,3 +38,4 @@ These assets are cached locally for stable rendering and performance. They are s
 | `volcengine.png` | `https://portal.volccdn.com/obj/volcfe/misc/favicon.png` | Volcengine official public favicon. |
 | `tencentcloud.png` | `https://cloudcache.tencent-cloud.com/qcloud/favicon.ico` | Converted from Tencent Cloud official public favicon to PNG. |
 | `ctyun.png` | `https://www.ctyun.cn/favicon.ico` | Converted from CTYun official public favicon to PNG. |
+| `new-api.png` | `https://github.com/QuantumNous/new-api/blob/main/web/default/public/logo.png` | Cached from the QuantumNous/new-api public repository for New API based transit stations. |

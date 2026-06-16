@@ -49,6 +49,7 @@ async function readStationsFromSupabase(): Promise<TransitStation[]> {
             "source_type",
             "commercial_relation",
             "summary",
+            "collector_kind",
             "channel_types",
             "account_pools",
             "payment_methods",
@@ -136,6 +137,7 @@ function mapStationRow(row: DbRow, offerRows: DbRow[]): TransitStation {
     slug: stringValue(row.slug) || id,
     name: stringValue(row.name) || id,
     websiteUrl: stringValue(row.website_url),
+    collectorKind: nullableString(row.collector_kind),
     status: stationStatus(row.status),
     sourceType: sourceType(row.source_type),
     commercialRelation: commercialRelation(row.commercial_relation),
@@ -331,6 +333,7 @@ function isTransitRiskLabel(value: string): value is TransitStation["riskLabels"
     "mixed_pool",
     "reseller",
     "undisclosed_upstream",
+    "third_party_aggregate",
     "pending_feedback",
   ].includes(value);
 }

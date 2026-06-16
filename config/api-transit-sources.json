@@ -61,5 +61,17 @@
     "pricingUrl": "https://www.micuapi.ai/pricing",
     "pricingEndpointUrl": "https://www.micuapi.ai/api/pricing",
     "collectorKind": "new_api_pricing"
+  },
+  {
+    "id": "franklybuilds-api",
+    "name": "FranklyBuilds中转站",
+    "websiteUrl": "https://api.franklybuilds.com/",
+    "apiBaseUrl": "https://api.franklybuilds.com/v1",
+    "pricingUrl": "https://api.franklybuilds.com/pricing",
+    "pricingEndpointUrl": "https://api.franklybuilds.com/api/pricing",
+    "collectorKind": "new_api_pricing",
+    "channelTypes": ["first_party_pool", "reseller", "mixed"],
+    "accountPools": ["mixed", "undisclosed"],
+    "summary": "站长通过 PriceAI 表单提交，公开 New API 价格接口可读取；渠道包含自建号池、二级分销和混合渠道，需继续接入测试 Key 做可用性监测。"
   }
 ]

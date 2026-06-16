@@ -1,9 +1,12 @@
 import type {
+  TransitChannelType,
   TransitModelFamily,
   TransitModelPrice,
   TransitStation,
+  TransitStationSystem,
 } from "@/data/api-transit/types";
 import {
+  TRANSIT_CHANNEL_TYPE_LABELS,
   TRANSIT_MODEL_FAMILY_LABELS,
   TRANSIT_COMMERCIAL_LABELS,
 } from "@/data/api-transit/types";
@@ -12,12 +15,21 @@ import { seedStations } from "@/data/api-transit/stations";
 let cached: TransitStation[] | null = null;
 let cachedAt = 0;
 const CACHE_TTL_MS = 30_000;
-const USD_TO_CNY_RATE = 7.2;
+const sourceChannelPriority: TransitChannelType[] = [
+  "official_api",
+  "cloud",
+  "first_party_pool",
+  "first_party_wholesale",
+  "reseller",
+  "mixed",
+  "undisclosed",
+];
 
 export type TransitSortKey = "overall" | "rate" | "stability";
 
 export const ALLOWED_RETURN_KEYS = [
   "q",
+  "family",
   "model",
   "channel",
   "pool",
@@ -57,7 +69,8 @@ export function parseRechargeRatio(text: string | null): number | null {
 export function getRechargeCoefficientFromRatio(text: string | null): number | null {
   const ratio = parseRechargeRatio(text);
   if (ratio === null) return null;
-  return ratio / USD_TO_CNY_RATE;
+  if (ratio <= 0) return null;
+  return 1 / ratio;
 }
 
 export function getStationRechargeCoefficient(station: TransitStation): number | null {
@@ -74,6 +87,131 @@ export function getCombinedRateForPrice(
   if (coefficient === null || price.modelMultiplier === null) return null;
 
   return coefficient * price.modelMultiplier;
+}
+
+export type TransitPriceMetric = "input" | "output" | "cacheWrite" | "cacheRead";
+
+export type TransitOfficialModelPrice = Record<TransitPriceMetric, number | null> & {
+  sourceLabel: string;
+  sourceUrl: string;
+};
+
+const anthropicPricingUrl = "https://platform.claude.com/docs/en/about-claude/pricing";
+const openAiPricingUrl = "https://developers.openai.com/api/docs/pricing";
+
+const TRANSIT_OFFICIAL_MODEL_PRICES: Record<
+  TransitModelPrice["standardModel"],
+  TransitOfficialModelPrice
+> = {
+  "Claude Sonnet 4.6": {
+    input: 3,
+    output: 15,
+    cacheWrite: 3.75,
+    cacheRead: 0.3,
+    sourceLabel: "Anthropic API",
+    sourceUrl: anthropicPricingUrl,
+  },
+  "Claude Opus 4.6": {
+    input: 5,
+    output: 25,
+    cacheWrite: 6.25,
+    cacheRead: 0.5,
+    sourceLabel: "Anthropic API",
+    sourceUrl: anthropicPricingUrl,
+  },
+  "Claude Opus 4.7": {
+    input: 5,
+    output: 25,
+    cacheWrite: 6.25,
+    cacheRead: 0.5,
+    sourceLabel: "Anthropic API",
+    sourceUrl: anthropicPricingUrl,
+  },
+  "Claude Opus 4.8": {
+    input: 5,
+    output: 25,
+    cacheWrite: 6.25,
+    cacheRead: 0.5,
+    sourceLabel: "Anthropic API",
+    sourceUrl: anthropicPricingUrl,
+  },
+  "GPT 5.5": {
+    input: 5,
+    output: 30,
+    cacheWrite: 0.5,
+    cacheRead: 0.5,
+    sourceLabel: "OpenAI API",
+    sourceUrl: openAiPricingUrl,
+  },
+  "GPT 5.4": {
+    input: 2.5,
+    output: 15,
+    cacheWrite: 0.25,
+    cacheRead: 0.25,
+    sourceLabel: "OpenAI API",
+    sourceUrl: openAiPricingUrl,
+  },
+};
+
+export function getOfficialTransitModelPrice(
+  standardModel: TransitModelPrice["standardModel"]
+): TransitOfficialModelPrice {
+  return TRANSIT_OFFICIAL_MODEL_PRICES[standardModel];
+}
+
+export function getOfficialTransitUnitPrice(
+  standardModel: TransitModelPrice["standardModel"],
+  metric: TransitPriceMetric
+): number | null {
+  return getOfficialTransitModelPrice(standardModel)[metric];
+}
+
+export function getTransitSplitMultiplier(
+  price: TransitModelPrice,
+  metric: TransitPriceMetric
+): number | null {
+  if (metric === "input") return price.inputPrice ?? price.modelMultiplier;
+  if (metric === "output") return price.outputPrice ?? price.modelMultiplier;
+  if (metric === "cacheRead") return price.cacheReadPrice;
+
+  if (price.cacheWritePrice !== null) return price.cacheWritePrice;
+
+  const officialPrice = getOfficialTransitModelPrice(price.standardModel);
+  if (
+    officialPrice.cacheWrite !== null &&
+    officialPrice.cacheRead !== null &&
+    officialPrice.cacheWrite === officialPrice.cacheRead
+  ) {
+    return price.cacheReadPrice;
+  }
+
+  return null;
+}
+
+export function getTransitEffectiveMetricRate(
+  station: TransitStation,
+  price: TransitModelPrice,
+  metric: TransitPriceMetric
+): number | null {
+  const coefficient =
+    getRechargeCoefficientFromRatio(price.rechargeRatio) ??
+    getStationRechargeCoefficient(station);
+  const splitMultiplier = getTransitSplitMultiplier(price, metric);
+  if (coefficient === null || splitMultiplier === null) return null;
+
+  return coefficient * splitMultiplier;
+}
+
+export function getTransitConvertedUnitPrice(
+  station: TransitStation,
+  price: TransitModelPrice,
+  metric: TransitPriceMetric
+): number | null {
+  const officialPrice = getOfficialTransitUnitPrice(price.standardModel, metric);
+  const effectiveRate = getTransitEffectiveMetricRate(station, price, metric);
+  if (officialPrice === null || effectiveRate === null) return null;
+
+  return officialPrice * effectiveRate;
 }
 
 export function getFamilyPrices(
@@ -178,12 +316,18 @@ export function getStationComparisonSummary(
     station.commercialRelation === "partner" || station.commercialRelation === "listed"
       ? 2
       : 0;
+  const stationSystem = getTransitStationSystem(station);
+  const systemScore =
+    stationSystem === "sub_to_api" ? 5 :
+      stationSystem === "new_api" ? -10 :
+        0;
   const riskPenalty = station.riskLabels.reduce((total, risk) => {
     if (risk === "sample_data") return total + 1;
     if (risk === "insufficient_samples") return total + 3;
     if (risk === "mixed_pool") return total + 2;
     if (risk === "reseller") return total + 3;
     if (risk === "undisclosed_upstream") return total + 5;
+    if (risk === "third_party_aggregate") return total + 6;
     return total + 2;
   }, 0);
 
@@ -196,8 +340,82 @@ export function getStationComparisonSummary(
     stabilitySamples,
     sourceCompleteness,
     overallScore:
-      rateScore + stabilityScore + sampleScore + completenessScore + commercialScore - riskPenalty,
+      rateScore + stabilityScore + sampleScore + completenessScore + commercialScore + systemScore - riskPenalty,
   };
+}
+
+export function getTransitStationSystem(station: TransitStation): TransitStationSystem {
+  if (station.stationSystem) return station.stationSystem;
+
+  const text = [
+    station.collectorKind,
+    station.id,
+    station.slug,
+    station.name,
+    station.websiteUrl,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  if (text.includes("sub2api") || text.includes("sub-to-api") || text.includes("sub_to_api")) {
+    return "sub_to_api";
+  }
+
+  if (text.includes("new_api") || text.includes("new-api") || text.includes("new api")) {
+    return "new_api";
+  }
+
+  if (station.collectorKind?.includes("new_api")) return "new_api";
+  return "unknown";
+}
+
+export function getTransitStationSystemLabel(station: TransitStation): string {
+  const system = getTransitStationSystem(station);
+  if (system === "new_api") return "New API";
+  if (system === "sub_to_api") return "Sub to API";
+  if (system === "custom") return "自定义系统";
+  return "未知系统";
+}
+
+export function getNormalizedSourceTags(
+  station: TransitStation
+): { id: string; label: string; tone: "neutral" | "warn" }[] {
+  const channelTypes = station.channelTypes.length ? station.channelTypes : ["undisclosed" as const];
+  const primary = sourceChannelPriority.filter((type) => channelTypes.includes(type));
+  const tags = primary.map((type) => ({
+    id: `channel-${type}`,
+    label: TRANSIT_CHANNEL_TYPE_LABELS[type],
+    tone: type === "undisclosed" ? "warn" as const : "neutral" as const,
+  }));
+
+  if (getTransitStationSystem(station) === "new_api") {
+    tags.unshift({ id: "system-new-api", label: "第三方聚合", tone: "warn" });
+  }
+
+  return dedupeTags(tags);
+}
+
+export function getTransitReviewTags(
+  station: TransitStation
+): { id: string; label: string; tone: "warn" | "danger" | "neutral" }[] {
+  const disclosed = station.channelTypes.some((type) => type !== "undisclosed");
+  const tags: { id: string; label: string; tone: "warn" | "danger" | "neutral" }[] = [];
+
+  if (!disclosed) tags.push({ id: "undisclosed", label: "未披露", tone: "warn" });
+  if (getTransitStationSystem(station) === "new_api") tags.push({ id: "third-party-aggregate", label: "第三方聚合待验真", tone: "warn" });
+  if (station.feedback.pendingCount > 0) tags.push({ id: "pending-feedback", label: "反馈待核验", tone: "warn" });
+  if (station.riskLabels.includes("reseller")) tags.push({ id: "reseller", label: "二级分销", tone: "warn" });
+  if (station.riskLabels.includes("third_party_aggregate")) tags.push({ id: "third-party-risk", label: "渠道来源需复核", tone: "warn" });
+
+  return dedupeTags(tags);
+}
+
+function dedupeTags<T extends { id: string; label: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.label;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function compareStations(
@@ -208,10 +426,6 @@ export function compareStations(
     const a = getStationComparisonSummary(left);
     const b = getStationComparisonSummary(right);
 
-    if (sortBy === "rate") {
-      return compareNullableNumber(a.bestCombinedRate, b.bestCombinedRate, "asc");
-    }
-
     if (sortBy === "stability") {
       return (
         compareNullableNumber(a.stabilityRate, b.stabilityRate, "desc") ||
@@ -221,8 +435,9 @@ export function compareStations(
     }
 
     return (
-      b.overallScore - a.overallScore ||
       compareNullableNumber(a.bestCombinedRate, b.bestCombinedRate, "asc") ||
+      compareNullableNumber(a.stabilityRate, b.stabilityRate, "desc") ||
+      b.stabilitySamples - a.stabilitySamples ||
       new Date(right.lastUpdatedAt).getTime() - new Date(left.lastUpdatedAt).getTime()
     );
   });
@@ -320,7 +535,7 @@ export function getTransitModelSummaries(
         standardModel,
         family: modelFamily,
         familyLabel: TRANSIT_MODEL_FAMILY_LABELS[modelFamily],
-        stationCount: prices.length,
+        stationCount: new Set(prices.map((entry) => entry.station.id)).size,
         bestCombinedRate: finiteRates[0] ?? null,
         worstCombinedRate: finiteRates[finiteRates.length - 1] ?? null,
         averageAvailability,
@@ -368,6 +583,16 @@ export function formatRate(rate: number | null): string {
   return `${rate.toFixed(2)}x`;
 }
 
+export function formatUsdPerMTok(price: number | null): string {
+  if (price === null || !Number.isFinite(price)) return "未公开";
+  if (price === 0) return "$0/M";
+
+  const absolutePrice = Math.abs(price);
+  const decimals = absolutePrice >= 1 ? (Number.isInteger(price) ? 0 : 2) : absolutePrice >= 0.1 ? 3 : 4;
+
+  return `$${price.toFixed(decimals)}/M`;
+}
+
 export function formatMultiplierRange(summary: TransitFamilyRateSummary): string {
   if (summary.modelMultiplierMin === null) return "—";
   if (summary.modelMultiplierMax === null || summary.modelMultiplierMax === summary.modelMultiplierMin) {
@@ -390,8 +615,8 @@ export function formatAvailability(
 
 export function getRateBadgeClass(rate: number | null): string {
   if (rate === null) return "bg-[#f2f4f4] text-[#5a6061]";
-  if (rate <= 0.025) return "bg-[#e8f3ec] text-[#2f7a4b]";
-  if (rate <= 0.06) return "bg-[#fff7e8] text-[#7a541b]";
+  if (rate <= 0.5) return "bg-[#e8f3ec] text-[#2f7a4b]";
+  if (rate <= 1) return "bg-[#fff7e8] text-[#7a541b]";
   return "bg-[#f2f4f4] text-[#5a6061]";
 }
 

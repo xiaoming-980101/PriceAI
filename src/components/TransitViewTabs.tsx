@@ -1,17 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Building2, Boxes } from "lucide-react";
 
 export function TransitViewTabs({ active, className = "" }: { active: "stations" | "models"; className?: string }) {
+  const searchParams = useSearchParams();
+  const stationHref = buildViewHref("/api-transit", searchParams);
+  const modelHref = buildViewHref("/api-transit/models", searchParams);
+
   return (
-    <nav className={`inline-flex items-center gap-1 rounded-full border border-[#dfe4e5] bg-white p-1 ${className}`} aria-label="中转 API 视图切换">
+    <nav className={`inline-flex h-11 items-center gap-1 rounded-full bg-[#e4e9ea] p-1 ${className}`} aria-label="中转 API 视图切换">
       <Link
-        href="/api-transit"
-        className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-sm font-bold transition-colors ${
+        href={stationHref}
+        className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition-colors ${
           active === "stations"
-            ? "bg-[#2d3435] text-[#f8f8f8]"
-            : "text-[#5a6061] hover:bg-[#f2f4f4]"
+            ? "bg-white text-[#202829] shadow-[0_8px_24px_rgba(45,52,53,0.08)]"
+            : "text-[#5a6061] hover:text-[#202829]"
         }`}
         aria-current={active === "stations" ? "page" : undefined}
       >
@@ -19,11 +24,11 @@ export function TransitViewTabs({ active, className = "" }: { active: "stations"
         站点
       </Link>
       <Link
-        href="/api-transit/models"
-        className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-sm font-bold transition-colors ${
+        href={modelHref}
+        className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition-colors ${
           active === "models"
-            ? "bg-[#2d3435] text-[#f8f8f8]"
-            : "text-[#5a6061] hover:bg-[#f2f4f4]"
+            ? "bg-white text-[#202829] shadow-[0_8px_24px_rgba(45,52,53,0.08)]"
+            : "text-[#5a6061] hover:text-[#202829]"
         }`}
         aria-current={active === "models" ? "page" : undefined}
       >
@@ -32,4 +37,16 @@ export function TransitViewTabs({ active, className = "" }: { active: "stations"
       </Link>
     </nav>
   );
+}
+
+function buildViewHref(pathname: string, searchParams: Pick<URLSearchParams, "get">): string {
+  const params = new URLSearchParams();
+  const query = searchParams.get("q");
+  const family = searchParams.get("family") ?? searchParams.get("model");
+
+  if (query) params.set("q", query);
+  if (family === "claude" || family === "gpt") params.set("family", family);
+
+  const qs = params.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
 }

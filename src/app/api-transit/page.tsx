@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { getTransitStations } from "@/lib/api-transit-db";
+import { getTransitModelFamilyOptions } from "@/lib/api-transit";
 import { SiteHeader } from "@/components/SiteHeader";
+import { TransitFamilyTabs } from "@/components/TransitFamilyTabs";
 import TransitStationExplorer from "@/components/TransitStationExplorer";
 import { TransitSubmissionActions } from "@/components/TransitSubmissionDialog";
 import { JsonLd } from "@/components/JsonLd";
@@ -23,6 +25,7 @@ export const revalidate = 300;
 
 export default async function ApiTransitPage() {
   const stations = await getTransitStations();
+  const familyOptions = getTransitModelFamilyOptions(stations);
 
   return (
     <div className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
@@ -44,8 +47,11 @@ export default async function ApiTransitPage() {
         ]}
       />
 
-      <div className="sticky top-0 z-40 border-b border-[#dfe4e5] bg-[#f9f9f9]/95 backdrop-blur-[18px]">
+      <div className="sticky top-0 z-40 bg-[#f9f9f9]/95 shadow-[0_10px_24px_rgba(45,52,53,0.035)] backdrop-blur-[18px]">
         <SiteHeader activeSection="transit" />
+        <Suspense fallback={<TransitFamilyTabsFallback />}>
+          <TransitFamilyTabs options={familyOptions} />
+        </Suspense>
       </div>
 
       <main className="mx-auto max-w-[1500px] px-5 py-7 pb-20">
@@ -73,5 +79,15 @@ export default async function ApiTransitPage() {
         </Suspense>
       </main>
     </div>
+  );
+}
+
+function TransitFamilyTabsFallback() {
+  return (
+    <section className="border-y border-[#dfe4e5] py-2">
+      <div className="mx-auto max-w-[1500px] px-5 sm:px-8">
+        <div className="h-10" />
+      </div>
+    </section>
   );
 }

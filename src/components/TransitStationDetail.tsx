@@ -1,17 +1,20 @@
 "use client";
 
-import { useCallback } from "react";
-import Link from "next/link";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
-  Banknote,
   Clock,
   ExternalLink,
   HelpCircle,
   Users,
 } from "lucide-react";
+import { DataTableHead, StatusChip } from "@/components/ComparisonUi";
+import { FeedbackDialog, transitStationFeedbackTypes } from "@/components/FeedbackLink";
+import { TransitPriceBreakdown } from "@/components/TransitPriceBreakdown";
+import { TransitStationSystemIcon } from "@/components/TransitStationSystemIcon";
+import { formatDateDay, formatDateMinute } from "@/lib/utils";
 import type {
   TransitModelFamily,
   TransitModelPrice,
@@ -23,7 +26,6 @@ import {
   TRANSIT_COMMERCIAL_LABELS,
   TRANSIT_DATA_STATUS_LABELS,
   TRANSIT_MODEL_FAMILY_LABELS,
-  TRANSIT_RISK_LABELS,
   TRANSIT_STATION_STATUS_LABELS,
   TRANSIT_USAGE_ADVICE_LABELS,
 } from "@/data/api-transit/types";
@@ -34,8 +36,12 @@ import {
   getCombinedRateForPrice,
   getFamilyPrices,
   getFamilyRateSummary,
+  getRechargeCoefficientFromRatio,
+  getNormalizedSourceTags,
   getRateBadgeClass,
   getStationRechargeCoefficient,
+  getTransitReviewTags,
+  getTransitStationSystemLabel,
   getUsageAdviceBadgeClass,
 } from "@/lib/api-transit";
 
@@ -46,6 +52,7 @@ interface Props {
 
 export default function TransitStationDetail({ station, backHref }: Props) {
   const router = useRouter();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const handleBack = useCallback(() => {
     if (backHref.includes("?")) {
@@ -70,9 +77,7 @@ export default function TransitStationDetail({ station, backHref }: Props) {
         <div className="space-y-5 lg:col-span-2">
           <section className="rounded-lg border border-[#dfe4e5] bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
             <div className="flex flex-wrap items-start gap-4">
-              <div className="grid h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-[#f2f4f4] text-lg font-black text-[#202829]">
-                {station.name[0]}
-              </div>
+              <TransitStationSystemIcon station={station} size="lg" />
               <div className="min-w-0 flex-1">
                 <h1 className="font-[family-name:var(--font-serif)] text-2xl font-semibold leading-tight text-[#202829]">
                   {station.name}
@@ -90,16 +95,17 @@ export default function TransitStationDetail({ station, backHref }: Props) {
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <StatusPill tone={station.status === "active" ? "success" : station.status === "limited" ? "warning" : "muted"}>
+              <StatusChip tone={station.status === "active" ? "success" : station.status === "limited" ? "warning" : "muted"}>
                 {TRANSIT_STATION_STATUS_LABELS[station.status]}
-              </StatusPill>
-              <StatusPill tone="info">{TRANSIT_COMMERCIAL_LABELS[station.commercialRelation]}</StatusPill>
-              <StatusPill tone={station.dataStatus === "verified" ? "success" : station.dataStatus === "sample" ? "warning" : "muted"}>
+              </StatusChip>
+              <StatusChip tone="info">{getTransitStationSystemLabel(station)}</StatusChip>
+              <StatusChip tone="info">{TRANSIT_COMMERCIAL_LABELS[station.commercialRelation]}</StatusChip>
+              <StatusChip tone={station.dataStatus === "verified" ? "success" : station.dataStatus === "sample" ? "warning" : "muted"}>
                 数据状态：{TRANSIT_DATA_STATUS_LABELS[station.dataStatus]}
-              </StatusPill>
+              </StatusChip>
               <span className="inline-flex items-center gap-1 text-xs text-[#5a6061]">
                 <Clock className="h-3 w-3" />
-                更新于 {station.lastUpdatedAt}
+                更新于 {formatDateDay(station.lastUpdatedAt)}
               </span>
             </div>
 
@@ -115,46 +121,42 @@ export default function TransitStationDetail({ station, backHref }: Props) {
                 访问站点
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
-              <Link
-                href="/api-transit/submit"
+              <button
+                type="button"
+                onClick={() => setFeedbackOpen(true)}
                 className="inline-flex h-10 items-center rounded-full bg-[#dde4e5] px-4 text-sm font-bold text-[#2d3435] transition-colors hover:bg-[#cfd8d9]"
               >
                 提交反馈
-              </Link>
+              </button>
             </div>
           </section>
 
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <MetricCard label="充值系数" value={formatRate(getStationRechargeCoefficient(station))} helper={station.prices[0]?.rechargeRatio ?? "未公开充值比例"} />
-            <MetricCard label="近 7 日稳定性" value={formatPercent(station.availability.sevenDayRate)} helper={`样本 ${station.availability.sevenDaySamples}`} />
-            <MetricCard label="最后检查" value={station.availability.lastCheckedAt ?? "暂无"} helper={station.availability.note ?? "尚未接入可用性检测"} />
+            <MetricCard label="充值倍率" value={formatRate(getStationRechargeCoefficient(station))} helper={station.prices[0]?.rechargeRatio ?? "未公开充值比例"} />
+            <MetricCard label="监测状态" value={formatPercent(station.availability.sevenDayRate)} helper={`当前样本 ${station.availability.sevenDaySamples}`} />
+            <MetricCard label="最后检查" value={formatDateMinute(station.availability.lastCheckedAt)} helper={station.availability.note ?? "尚未接入可用性检测"} />
           </section>
-
-          <PriceTable station={station} family="claude" />
-          <PriceTable station={station} family="gpt" />
-          <AvailabilityTable station={station} />
         </div>
 
         <aside className="space-y-5">
           <section className="rounded-lg border border-[#dfe4e5] bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
             <h3 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold text-[#202829]">
-              <Banknote className="h-4 w-4" />
-              渠道与号池
+              <AlertTriangle className="h-4 w-4" />
+              来源渠道
             </h3>
-            <InfoGroup label="渠道类型" items={station.channelTypes.map((type) => TRANSIT_CHANNEL_TYPE_LABELS[type])} />
-            <InfoGroup label="账号池" items={station.accountPools.map((pool) => TRANSIT_ACCOUNT_POOL_LABELS[pool])} />
+            <InfoGroup label="公开标签" items={getNormalizedSourceTags(station).map((item) => item.label)} />
             <InfoGroup label="支付方式" items={station.paymentMethods} />
           </section>
 
           <section className="rounded-lg border border-[#dfe4e5] bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
             <h3 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold text-[#202829]">
               <AlertTriangle className="h-4 w-4" />
-              风险与建议
+              核验提示
             </h3>
             <div className="flex flex-wrap gap-1.5">
-              {station.riskLabels.map((risk) => (
-                <span key={risk} className="rounded-full bg-[#fff7e8] px-2.5 py-1 text-[11px] font-bold text-[#7a541b]">
-                  {TRANSIT_RISK_LABELS[risk]}
+              {getTransitReviewTags(station).map((tag) => (
+                <span key={tag.id} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${tag.tone === "neutral" ? "bg-[#f2f4f4] text-[#5a6061]" : "bg-[#fff7e8] text-[#7a541b]"}`}>
+                  {tag.label}
                 </span>
               ))}
               <span className={`rounded-full px-3 py-1 text-xs font-bold ${getUsageAdviceBadgeClass(station.usageAdvice)}`}>
@@ -211,6 +213,31 @@ export default function TransitStationDetail({ station, backHref }: Props) {
           </div>
         </aside>
       </div>
+
+      <div className="mt-5 space-y-5">
+        <PriceTable station={station} family="claude" />
+        <PriceTable station={station} family="gpt" />
+        <AvailabilityTable station={station} />
+      </div>
+
+      {feedbackOpen ? (
+        <FeedbackDialog
+          onClose={() => setFeedbackOpen(false)}
+          initialType="data"
+          title={`${station.name} 数据反馈`}
+          description="反馈这个中转站的价格、模型可用性、渠道来源或页面采集信息是否属实。"
+          placeholder="例如：某个分组倍率变了、Claude Opus 不可用、渠道来源描述不准确、官网规则和这里不一致..."
+          submitLabel="提交核验反馈"
+          successMessage="已收到站点反馈，我会在后台和采集数据一起核验。"
+          typeOptions={transitStationFeedbackTypes}
+          messagePrefix={[
+            "【API 中转站数据反馈】",
+            `站点：${station.name}`,
+            `官网：${station.websiteUrl}`,
+            `系统：${getTransitStationSystemLabel(station)}`,
+          ].join("\n")}
+        />
+      ) : null}
     </div>
   );
 }
@@ -236,24 +263,33 @@ function PriceTable({
         </span>
       </div>
       {prices.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] border-collapse">
+        <div>
+          <table className="w-full table-fixed border-collapse">
+            <colgroup>
+              <col className="w-[28%]" />
+              <col className="w-[12%]" />
+              <col className="w-[28%]" />
+              <col className="w-[32%]" />
+            </colgroup>
             <thead>
               <tr className="bg-[#f2f4f4]/50">
-                <TableHead>标准模型</TableHead>
-                <TableHead>分组名</TableHead>
-                <TableHead>模型倍率</TableHead>
-                <TableHead>综合倍率</TableHead>
-                <TableHead>输入价</TableHead>
-                <TableHead>输出价</TableHead>
-                <TableHead>号池</TableHead>
-                <TableHead>确认时间</TableHead>
+                <DataTableHead compact>标准模型 / 分组</DataTableHead>
+                <DataTableHead compact>综合倍率</DataTableHead>
+                <DataTableHead compact>价格口径</DataTableHead>
+                <DataTableHead compact>渠道 / 确认</DataTableHead>
               </tr>
             </thead>
             <tbody>
-              {prices.map((price) => (
-                <PriceRow key={`${price.standardModel}-${price.groupName}`} station={station} price={price} />
-              ))}
+              {prices.map((price, index) => {
+                const key = `${price.standardModel}-${price.groupName}-${index}`;
+                return (
+                  <PriceRow
+                    key={key}
+                    station={station}
+                    price={price}
+                  />
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -272,27 +308,40 @@ function PriceRow({
   price: TransitModelPrice;
 }) {
   const combinedRate = getCombinedRateForPrice(station, price);
+  const rechargeCoefficient =
+    getRechargeCoefficientFromRatio(price.rechargeRatio) ??
+    getStationRechargeCoefficient(station);
 
   return (
-    <tr className="border-b border-[#dfe4e5]">
-      <td className="px-4 py-3 text-xs font-semibold text-[#202829]">{price.standardModel}</td>
-      <td className="px-4 py-3 text-xs text-[#2d3435]">{price.groupName}</td>
-      <td className="px-4 py-3 text-sm font-semibold text-[#202829]">
-        {price.modelMultiplier !== null ? `${price.modelMultiplier.toFixed(2)}x` : "—"}
+    <tr className="border-b border-[#dfe4e5] align-top transition hover:bg-[#f7f9f9]">
+      <td className="px-4 py-4">
+        <div className="break-words text-xs font-semibold text-[#202829]">{price.standardModel}</div>
+        <div className="mt-1 break-words text-xs text-[#5a6061]">{price.groupName}</div>
       </td>
-      <td className="px-4 py-3">
-        <span className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${getRateBadgeClass(combinedRate)}`}>
+      <td className="px-4 py-4">
+        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-extrabold ${getRateBadgeClass(combinedRate)}`}>
           {formatRate(combinedRate)}
         </span>
+        <div className="mt-2 space-y-1 text-[11px] font-semibold text-[#5a6061]">
+          <div>充值 {formatRate(rechargeCoefficient)}</div>
+          <div>模型 {formatModelRate(price.modelMultiplier)}</div>
+        </div>
       </td>
-      <td className="px-4 py-3 text-sm text-[#2d3435]">{formatCurrency(price.inputPrice)}</td>
-      <td className="px-4 py-3 text-sm text-[#2d3435]">{formatCurrency(price.outputPrice)}</td>
       <td className="px-4 py-3">
-        <span className="rounded-full bg-[#eef3f8] px-2 py-0.5 text-[10px] font-bold text-[#47657a]">
-          {TRANSIT_ACCOUNT_POOL_LABELS[price.accountPool]}
-        </span>
+        <TransitPriceBreakdown station={station} price={price} mode="detail" />
       </td>
-      <td className="px-4 py-3 text-xs text-[#5a6061]">{price.lastVerifiedAt}</td>
+      <td className="px-4 py-4">
+        <div className="flex flex-wrap gap-1">
+          <StatusChip tone="success" className="px-2 py-0.5 text-[10px]">
+            {TRANSIT_CHANNEL_TYPE_LABELS[price.channelType]}
+          </StatusChip>
+          <StatusChip tone="info" className="px-2 py-0.5 text-[10px]">
+            {TRANSIT_ACCOUNT_POOL_LABELS[price.accountPool]}
+          </StatusChip>
+        </div>
+        <div className="mt-2 break-words text-xs font-semibold text-[#2d3435]">{price.priceSource || "未公开"}</div>
+        <div className="mt-1 text-[11px] text-[#5a6061]">{formatDateMinute(price.lastVerifiedAt)}</div>
+      </td>
     </tr>
   );
 }
@@ -301,17 +350,17 @@ function AvailabilityTable({ station }: { station: TransitStation }) {
   return (
     <section className="overflow-hidden rounded-lg border border-[#dfe4e5] bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
       <div className="border-b border-[#dfe4e5] bg-[#f2f4f4] px-5 py-3">
-        <h2 className="text-base font-extrabold text-[#202829]">可用性样本</h2>
+        <h2 className="text-base font-extrabold text-[#202829]">监测样本</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse">
           <thead>
             <tr className="bg-[#f2f4f4]/50">
-              <TableHead>范围</TableHead>
-              <TableHead>近 7 日可用率</TableHead>
-              <TableHead>样本数</TableHead>
-              <TableHead>最后检查</TableHead>
-              <TableHead>说明</TableHead>
+              <DataTableHead>范围</DataTableHead>
+              <DataTableHead>可用率</DataTableHead>
+              <DataTableHead>样本数</DataTableHead>
+              <DataTableHead>最后检查</DataTableHead>
+              <DataTableHead>说明</DataTableHead>
             </tr>
           </thead>
           <tbody>
@@ -319,7 +368,7 @@ function AvailabilityTable({ station }: { station: TransitStation }) {
               <td className="px-4 py-3 text-xs font-semibold text-[#202829]">站点整体</td>
               <td className="px-4 py-3 text-sm text-[#2d3435]">{formatPercent(station.availability.sevenDayRate)}</td>
               <td className="px-4 py-3 text-sm text-[#2d3435]">{station.availability.sevenDaySamples}</td>
-              <td className="px-4 py-3 text-xs text-[#5a6061]">{station.availability.lastCheckedAt ?? "—"}</td>
+              <td className="px-4 py-3 text-xs text-[#5a6061]">{formatDateMinute(station.availability.lastCheckedAt)}</td>
               <td className="px-4 py-3 text-xs text-[#5a6061]">{station.availability.note ?? "—"}</td>
             </tr>
             {(["claude", "gpt"] as const).map((family) => {
@@ -331,7 +380,7 @@ function AvailabilityTable({ station }: { station: TransitStation }) {
                   </td>
                   <td className="px-4 py-3 text-sm text-[#2d3435]">{formatPercent(summary.sevenDayRate)}</td>
                   <td className="px-4 py-3 text-sm text-[#2d3435]">{summary.sevenDaySamples}</td>
-                  <td className="px-4 py-3 text-xs text-[#5a6061]">{summary.lastCheckedAt ?? "—"}</td>
+                  <td className="px-4 py-3 text-xs text-[#5a6061]">{formatDateMinute(summary.lastCheckedAt)}</td>
                   <td className="px-4 py-3 text-xs text-[#5a6061]">{formatAvailability({ sevenDayRate: summary.sevenDayRate, sevenDaySamples: summary.sevenDaySamples })}</td>
                 </tr>
               );
@@ -361,25 +410,6 @@ function MetricCard({
   );
 }
 
-function StatusPill({
-  tone,
-  children,
-}: {
-  tone: "success" | "warning" | "info" | "muted";
-  children: React.ReactNode;
-}) {
-  const className =
-    tone === "success"
-      ? "bg-[#e8f3ec] text-[#2f7a4b]"
-      : tone === "warning"
-        ? "bg-[#fff7e8] text-[#7a541b]"
-        : tone === "info"
-          ? "bg-[#eef3f8] text-[#47657a]"
-          : "bg-[#f2f4f4] text-[#5a6061]";
-
-  return <span className={`rounded-full px-3 py-1 text-xs font-bold ${className}`}>{children}</span>;
-}
-
 function InfoGroup({ label, items }: { label: string; items: string[] }) {
   if (!items.length) return null;
 
@@ -406,14 +436,6 @@ function TextLine({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-function TableHead({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="px-4 py-2.5 text-left text-xs font-bold text-[#5a6061]" scope="col">
-      {children}
-    </th>
-  );
-}
-
-function formatCurrency(value: number | null) {
-  return value === null ? "—" : `¥${value}`;
+function formatModelRate(value: number | null) {
+  return value === null || !Number.isFinite(value) ? "未公开" : `${value.toFixed(2)}x`;
 }

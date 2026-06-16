@@ -12,6 +12,7 @@ import {
   Inbox,
   KeyRound,
   Loader2,
+  Pencil,
   RefreshCcw,
   Search,
   Server,
@@ -20,7 +21,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FormEvent, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ApiTransitAdminData,
   ApiTransitAdminOffer,
@@ -38,6 +39,56 @@ type Message = {
   type: "success" | "error" | "info";
   text: string;
 };
+type EditDialog =
+  | { type: "station"; station: ApiTransitAdminStation }
+  | { type: "offer"; offer: ApiTransitAdminOffer }
+  | null;
+type ApiTransitStationEditInput = {
+  id: string;
+  name: string;
+  websiteUrl: string;
+  apiBaseUrl: string | null;
+  pricingUrl: string | null;
+  summary: string | null;
+  sourceType: string;
+  commercialRelation: string;
+  collectorKind: string;
+  collectionStatus: string;
+  channelTypes: string[];
+  accountPools: string[];
+  paymentMethods: string[];
+  minimumTopUp: string | null;
+  balanceExpiry: string | null;
+  supportChannels: string[];
+  refundPolicy: string | null;
+  riskLabels: string[];
+  status: string;
+  dataStatus: string;
+  usageAdvice: string;
+  published: boolean;
+  adminNote: string | null;
+};
+type ApiTransitOfferEditInput = {
+  id: string;
+  family: string;
+  standardModel: string;
+  rawModelName: string;
+  groupName: string;
+  rechargeRatio: string | null;
+  modelMultiplier: number | null;
+  inputPrice: number | null;
+  outputPrice: number | null;
+  cacheReadPrice: number | null;
+  cacheWritePrice: number | null;
+  currency: string;
+  accountPool: string;
+  channelType: string;
+  priceSource: string;
+  sourceUrl: string | null;
+  status: ApiTransitOfferStatus;
+};
+const adminFieldClassName =
+  "h-11 w-full rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-sm text-[#202829] outline-none transition placeholder:text-[#9aa2a3] focus:border-[#2d3435]";
 
 export function ApiTransitAdminConsole({ data }: { data: ApiTransitAdminData }) {
   return <ApiTransitAdminPanel data={data} framed />;
@@ -58,6 +109,7 @@ export function ApiTransitAdminPanel({
   const [selectedOfferIds, setSelectedOfferIds] = useState<Set<string>>(new Set());
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
+  const [editDialog, setEditDialog] = useState<EditDialog>(null);
 
   const authed = data.isAuthenticated || optimisticAuthed;
   const normalizedQuery = query.trim().toLowerCase();
@@ -201,6 +253,16 @@ export function ApiTransitAdminPanel({
     );
   }
 
+  async function saveStation(input: ApiTransitStationEditInput) {
+    setLoadingAction(`station-edit-${input.id}`);
+    const result = await requestJson("/api/admin/api-transit/stations", "PATCH", {
+      action: "update",
+      ...input,
+    });
+    if (result.ok) setEditDialog(null);
+    handleActionResult(result, "中转站资料已保存。", "保存中转站失败。");
+  }
+
   async function updateOffers(ids: string[], status: ApiTransitOfferStatus) {
     if (!ids.length) return;
     setLoadingAction(`offers-${status}`);
@@ -211,6 +273,13 @@ export function ApiTransitAdminPanel({
       "更新报价失败。",
     );
     setSelectedOfferIds(new Set());
+  }
+
+  async function saveOffer(input: ApiTransitOfferEditInput) {
+    setLoadingAction(`offer-edit-${input.id}`);
+    const result = await requestJson("/api/admin/api-transit/offers", "PATCH", input);
+    if (result.ok) setEditDialog(null);
+    handleActionResult(result, "报价资料已保存。", "保存报价失败。");
   }
 
   async function updateSubmission(
@@ -379,6 +448,7 @@ export function ApiTransitAdminPanel({
                 loadingAction={loadingAction}
                 onPublish={publishStation}
                 onTogglePublished={updateStationPublished}
+                onEdit={(station) => setEditDialog({ type: "station", station })}
               />
             ) : null}
 
@@ -396,6 +466,10 @@ export function ApiTransitAdminPanel({
                   setSelectedOfferIds((previous) => toggleCandidateSelection(previous, candidate));
                 }}
                 onUpdateOffers={updateOffers}
+                onEditOffer={(offerId) => {
+                  const offer = data.offers.find((item) => item.id === offerId);
+                  if (offer) setEditDialog({ type: "offer", offer });
+                }}
               />
             ) : null}
 
@@ -418,6 +492,7 @@ export function ApiTransitAdminPanel({
                   });
                 }}
                 onUpdateOffers={updateOffers}
+                onEdit={(offer) => setEditDialog({ type: "offer", offer })}
               />
             ) : null}
 
@@ -436,11 +511,33 @@ export function ApiTransitAdminPanel({
     </>
   );
 
-  if (!framed) return content;
+  const dialogs = (
+    <>
+      {editDialog?.type === "station" ? (
+        <StationEditDialog
+          station={editDialog.station}
+          loading={loadingAction === `station-edit-${editDialog.station.id}`}
+          onClose={() => setEditDialog(null)}
+          onSave={saveStation}
+        />
+      ) : null}
+      {editDialog?.type === "offer" ? (
+        <OfferEditDialog
+          offer={editDialog.offer}
+          loading={loadingAction === `offer-edit-${editDialog.offer.id}`}
+          onClose={() => setEditDialog(null)}
+          onSave={saveOffer}
+        />
+      ) : null}
+    </>
+  );
+
+  if (!framed) return <>{content}{dialogs}</>;
 
   return (
     <main className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
       {content}
+      {dialogs}
     </main>
   );
 }
@@ -460,12 +557,14 @@ function StationsPanel({
   loadingAction,
   onPublish,
   onTogglePublished,
+  onEdit,
 }: {
   stations: ApiTransitAdminStation[];
   pendingOffers: ApiTransitAdminOffer[];
   loadingAction: string | null;
   onPublish: (station: ApiTransitAdminStation) => void;
   onTogglePublished: (station: ApiTransitAdminStation, published: boolean) => void;
+  onEdit: (station: ApiTransitAdminStation) => void;
 }) {
   const pendingCountByStation = useMemo(() => {
     const counts = new Map<string, number>();
@@ -533,6 +632,14 @@ function StationsPanel({
                 <span className="text-xs text-[#5a6061]">{formatRelativeTime(station.lastCollectedAt || station.lastUpdatedAt || station.updatedAt)}</span>
               </div>
               <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+                <button
+                  type="button"
+                  onClick={() => onEdit(station)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#2d3435] transition-colors hover:bg-[#f2f4f4]"
+                >
+                  <Pencil size={13} />
+                  编辑
+                </button>
                 {!station.published ? (
                   <button
                     type="button"
@@ -582,6 +689,7 @@ function OfferCandidatesPanel({
   onToggleAll,
   onToggle,
   onUpdateOffers,
+  onEditOffer,
 }: {
   candidates: ApiTransitOfferCandidate[];
   selectedOfferIds: Set<string>;
@@ -591,6 +699,7 @@ function OfferCandidatesPanel({
   onToggleAll: () => void;
   onToggle: (candidate: ApiTransitOfferCandidate) => void;
   onUpdateOffers: (ids: string[], status: ApiTransitOfferStatus) => void;
+  onEditOffer: (offerId: string) => void;
 }) {
   return (
     <section className="overflow-hidden rounded-lg border border-[#adb3b4]/25 bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
@@ -703,6 +812,13 @@ function OfferCandidatesPanel({
                   </td>
                   <td className="px-3 py-3 text-right align-top">
                     <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onEditOffer(candidate.representativeOfferId)}
+                        className="inline-flex h-8 items-center rounded-full border border-[#adb3b4]/30 bg-white px-2.5 text-xs font-medium text-[#2d3435] disabled:opacity-60"
+                      >
+                        编辑
+                      </button>
                       {candidate.status !== "active" ? (
                         <button
                           type="button"
@@ -751,6 +867,7 @@ function OffersPanel({
   onToggleAll,
   onToggle,
   onUpdateOffers,
+  onEdit,
 }: {
   offers: ApiTransitAdminOffer[];
   selectedOfferIds: Set<string>;
@@ -760,6 +877,7 @@ function OffersPanel({
   onToggleAll: () => void;
   onToggle: (id: string) => void;
   onUpdateOffers: (ids: string[], status: ApiTransitOfferStatus) => void;
+  onEdit: (offer: ApiTransitAdminOffer) => void;
 }) {
   return (
     <section className="overflow-hidden rounded-lg border border-[#adb3b4]/25 bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
@@ -856,6 +974,13 @@ function OffersPanel({
                   </td>
                   <td className="px-3 py-3 text-right align-top">
                     <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onEdit(offer)}
+                        className="inline-flex h-8 items-center rounded-full border border-[#adb3b4]/30 bg-white px-2.5 text-xs font-medium text-[#2d3435] disabled:opacity-60"
+                      >
+                        编辑
+                      </button>
                       {offer.status !== "active" ? (
                         <button
                           type="button"
@@ -918,7 +1043,7 @@ function SubmissionsPanel({
       </div>
       <div className="divide-y divide-[#edf0f1]">
         {submissions.map((submission) => (
-          <article key={submission.id} className="grid gap-3 px-4 py-4 text-sm lg:grid-cols-[minmax(220px,1.5fr)_120px_140px_150px_220px] lg:items-center">
+          <article key={submission.id} className="grid gap-3 px-4 py-4 text-sm lg:grid-cols-[minmax(220px,1.5fr)_120px_140px_150px_220px] lg:items-start">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="truncate text-sm font-semibold text-[#202829]">{submission.submittedName || submission.submittedUrl}</h2>
@@ -930,11 +1055,13 @@ function SubmissionsPanel({
                 <span className="truncate">{submission.submittedUrl}</span>
                 <ExternalLink size={12} />
               </a>
+              <SubmissionMetaSummary submission={submission} />
               {submission.notes ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#5a6061]">{submission.notes}</p> : null}
             </div>
             <div>
               <MobileLabel>类型</MobileLabel>
               <span className="text-sm font-medium text-[#2d3435]">{submission.submissionType === "merchant" ? "站长提交" : "用户推荐"}</span>
+              {submission.contact ? <div className="mt-1 text-xs text-[#5a6061]">{submission.contact}</div> : null}
             </div>
             <div>
               <MobileLabel>探测</MobileLabel>
@@ -1029,6 +1156,403 @@ function RunsPanel({ runs }: { runs: ApiTransitAdminRun[] }) {
   );
 }
 
+function StationEditDialog({
+  station,
+  loading,
+  onClose,
+  onSave,
+}: {
+  station: ApiTransitAdminStation;
+  loading: boolean;
+  onClose: () => void;
+  onSave: (input: ApiTransitStationEditInput) => void;
+}) {
+  return (
+    <AdminEditDialog title={`编辑 ${station.name}`} onClose={onClose}>
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const formData = new FormData(event.currentTarget);
+          onSave({
+            id: station.id,
+            name: formText(formData, "name") || station.name,
+            websiteUrl: formText(formData, "websiteUrl") || station.websiteUrl,
+            apiBaseUrl: formNullableText(formData, "apiBaseUrl"),
+            pricingUrl: formNullableText(formData, "pricingUrl"),
+            summary: formNullableText(formData, "summary"),
+            sourceType: formText(formData, "sourceType") || station.sourceType,
+            commercialRelation: formText(formData, "commercialRelation") || station.commercialRelation,
+            collectorKind: formText(formData, "collectorKind") || station.collectorKind,
+            collectionStatus: formText(formData, "collectionStatus") || station.collectionStatus,
+            channelTypes: splitList(formText(formData, "channelTypes")),
+            accountPools: splitList(formText(formData, "accountPools")),
+            paymentMethods: splitList(formText(formData, "paymentMethods")),
+            minimumTopUp: formNullableText(formData, "minimumTopUp"),
+            balanceExpiry: formNullableText(formData, "balanceExpiry"),
+            supportChannels: splitList(formText(formData, "supportChannels")),
+            refundPolicy: formNullableText(formData, "refundPolicy"),
+            riskLabels: splitList(formText(formData, "riskLabels")),
+            status: formText(formData, "status") || station.status,
+            dataStatus: formText(formData, "dataStatus") || station.dataStatus,
+            usageAdvice: formText(formData, "usageAdvice") || station.usageAdvice,
+            published: formData.get("published") === "on",
+            adminNote: formNullableText(formData, "adminNote"),
+          });
+        }}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <AdminField label="站点名称">
+            <input name="name" defaultValue={station.name} className={adminFieldClassName} required />
+          </AdminField>
+          <AdminField label="官网 URL">
+            <input name="websiteUrl" defaultValue={station.websiteUrl} className={adminFieldClassName} type="url" required />
+          </AdminField>
+          <AdminField label="API Base URL">
+            <input name="apiBaseUrl" defaultValue={station.apiBaseUrl || ""} className={adminFieldClassName} type="url" />
+          </AdminField>
+          <AdminField label="价格页 / 价格接口">
+            <input name="pricingUrl" defaultValue={station.pricingUrl || ""} className={adminFieldClassName} type="url" />
+          </AdminField>
+          <AdminField label="系统 / 采集器类型">
+            <input name="collectorKind" defaultValue={station.collectorKind} className={adminFieldClassName} />
+          </AdminField>
+          <AdminField label="采集状态">
+            <select name="collectionStatus" defaultValue={station.collectionStatus} className={adminFieldClassName}>
+              <option value="pending">待采集</option>
+              <option value="success">成功</option>
+              <option value="partial">部分</option>
+              <option value="failed">失败</option>
+              <option value="manual_review">人工</option>
+            </select>
+          </AdminField>
+          <AdminField label="来源类型">
+            <select name="sourceType" defaultValue={station.sourceType} className={adminFieldClassName}>
+              <option value="manual_collected">运营整理</option>
+              <option value="user_submitted">用户推荐</option>
+              <option value="merchant_submitted">商家入驻</option>
+            </select>
+          </AdminField>
+          <AdminField label="商业关系">
+            <select name="commercialRelation" defaultValue={station.commercialRelation} className={adminFieldClassName}>
+              <option value="none">无</option>
+              <option value="listed">收录</option>
+              <option value="partner">合作</option>
+              <option value="affiliate">返佣</option>
+              <option value="sponsored">赞助</option>
+              <option value="unknown">未知</option>
+            </select>
+          </AdminField>
+          <AdminField label="站点状态">
+            <select name="status" defaultValue={station.status} className={adminFieldClassName}>
+              <option value="active">可用</option>
+              <option value="limited">受限</option>
+              <option value="unavailable">不可用</option>
+              <option value="unknown">未知</option>
+            </select>
+          </AdminField>
+          <AdminField label="数据状态">
+            <select name="dataStatus" defaultValue={station.dataStatus} className={adminFieldClassName}>
+              <option value="sample">样例</option>
+              <option value="pending_review">待审核</option>
+              <option value="verified">已核验</option>
+            </select>
+          </AdminField>
+          <AdminField label="使用建议">
+            <select name="usageAdvice" defaultValue={station.usageAdvice} className={adminFieldClassName}>
+              <option value="try_small">小额试用</option>
+              <option value="cautious">谨慎</option>
+              <option value="not_recommended">不推荐</option>
+              <option value="pending">待判断</option>
+            </select>
+          </AdminField>
+          <label className="flex h-11 items-center gap-2 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-sm font-medium text-[#2d3435]">
+            <input name="published" type="checkbox" defaultChecked={station.published} className="h-4 w-4 accent-[#2d3435]" />
+            前台发布
+          </label>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <AdminField label="渠道标签">
+            <input name="channelTypes" defaultValue={station.channelTypes.join("，")} className={adminFieldClassName} placeholder="官方 API，云厂商，一手号池" />
+          </AdminField>
+          <AdminField label="号池标签">
+            <input name="accountPools" defaultValue={station.accountPools.join("，")} className={adminFieldClassName} placeholder="plus，pro，aws" />
+          </AdminField>
+          <AdminField label="支付方式">
+            <input name="paymentMethods" defaultValue={station.paymentMethods.join("，")} className={adminFieldClassName} />
+          </AdminField>
+          <AdminField label="售后渠道">
+            <input name="supportChannels" defaultValue={station.supportChannels.join("，")} className={adminFieldClassName} />
+          </AdminField>
+          <AdminField label="最低充值">
+            <input name="minimumTopUp" defaultValue={station.minimumTopUp || ""} className={adminFieldClassName} />
+          </AdminField>
+          <AdminField label="余额有效期">
+            <input name="balanceExpiry" defaultValue={station.balanceExpiry || ""} className={adminFieldClassName} />
+          </AdminField>
+        </div>
+        <AdminField label="风险标签">
+          <input name="riskLabels" defaultValue={station.riskLabels.join("，")} className={adminFieldClassName} />
+        </AdminField>
+        <AdminField label="站点简介">
+          <textarea name="summary" defaultValue={station.summary} className={`${adminFieldClassName} min-h-20 resize-y py-2 leading-6`} />
+        </AdminField>
+        <AdminField label="退款说明">
+          <textarea name="refundPolicy" defaultValue={station.refundPolicy || ""} className={`${adminFieldClassName} min-h-20 resize-y py-2 leading-6`} />
+        </AdminField>
+        <AdminField label="后台备注">
+          <textarea name="adminNote" defaultValue={station.adminNote || ""} className={`${adminFieldClassName} min-h-20 resize-y py-2 leading-6`} />
+        </AdminField>
+        <AdminDialogActions loading={loading} onClose={onClose} submitLabel="保存站点" />
+      </form>
+    </AdminEditDialog>
+  );
+}
+
+function OfferEditDialog({
+  offer,
+  loading,
+  onClose,
+  onSave,
+}: {
+  offer: ApiTransitAdminOffer;
+  loading: boolean;
+  onClose: () => void;
+  onSave: (input: ApiTransitOfferEditInput) => void;
+}) {
+  return (
+    <AdminEditDialog title={`编辑报价：${offer.stationName}`} onClose={onClose}>
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const formData = new FormData(event.currentTarget);
+          onSave({
+            id: offer.id,
+            family: formText(formData, "family") || offer.family,
+            standardModel: formText(formData, "standardModel") || offer.standardModel,
+            rawModelName: formText(formData, "rawModelName") || offer.rawModelName,
+            groupName: formText(formData, "groupName") || offer.groupName,
+            rechargeRatio: formNullableText(formData, "rechargeRatio"),
+            modelMultiplier: formNullableNumber(formData, "modelMultiplier"),
+            inputPrice: formNullableNumber(formData, "inputPrice"),
+            outputPrice: formNullableNumber(formData, "outputPrice"),
+            cacheReadPrice: formNullableNumber(formData, "cacheReadPrice"),
+            cacheWritePrice: formNullableNumber(formData, "cacheWritePrice"),
+            currency: formText(formData, "currency") || offer.currency,
+            accountPool: formText(formData, "accountPool") || offer.accountPool,
+            channelType: formText(formData, "channelType") || offer.channelType,
+            priceSource: formText(formData, "priceSource") || offer.priceSource,
+            sourceUrl: formNullableText(formData, "sourceUrl"),
+            status: offerStatusFromText(formText(formData, "status")) || offer.status,
+          });
+        }}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <AdminField label="模型族">
+            <select name="family" defaultValue={offer.family} className={adminFieldClassName}>
+              <option value="claude">Claude</option>
+              <option value="gpt">GPT</option>
+            </select>
+          </AdminField>
+          <AdminField label="状态">
+            <select name="status" defaultValue={offer.status} className={adminFieldClassName}>
+              <option value="active">已发布</option>
+              <option value="needs_review">待审核</option>
+              <option value="inactive">已下架</option>
+            </select>
+          </AdminField>
+          <AdminField label="标准模型">
+            <input name="standardModel" defaultValue={offer.standardModel} className={adminFieldClassName} required />
+          </AdminField>
+          <AdminField label="原始模型名">
+            <input name="rawModelName" defaultValue={offer.rawModelName} className={adminFieldClassName} required />
+          </AdminField>
+          <AdminField label="分组名">
+            <input name="groupName" defaultValue={offer.groupName} className={adminFieldClassName} required />
+          </AdminField>
+          <AdminField label="充值倍率">
+            <input name="rechargeRatio" defaultValue={offer.rechargeRatio || ""} className={adminFieldClassName} placeholder="1:1 / 1.00x" />
+          </AdminField>
+          <AdminField label="模型倍率">
+            <input name="modelMultiplier" defaultValue={numberInputValue(offer.modelMultiplier)} className={adminFieldClassName} inputMode="decimal" />
+          </AdminField>
+          <AdminField label="输入倍率">
+            <input name="inputPrice" defaultValue={numberInputValue(offer.inputPrice)} className={adminFieldClassName} inputMode="decimal" />
+          </AdminField>
+          <AdminField label="输出倍率">
+            <input name="outputPrice" defaultValue={numberInputValue(offer.outputPrice)} className={adminFieldClassName} inputMode="decimal" />
+          </AdminField>
+          <AdminField label="缓存输入倍率">
+            <input name="cacheReadPrice" defaultValue={numberInputValue(offer.cacheReadPrice)} className={adminFieldClassName} inputMode="decimal" />
+          </AdminField>
+          <AdminField label="缓存创建倍率">
+            <input name="cacheWritePrice" defaultValue={numberInputValue(offer.cacheWritePrice)} className={adminFieldClassName} inputMode="decimal" />
+          </AdminField>
+          <AdminField label="币种 / 口径">
+            <input name="currency" defaultValue={offer.currency} className={adminFieldClassName} />
+          </AdminField>
+          <AdminField label="号池">
+            <input name="accountPool" defaultValue={offer.accountPool} className={adminFieldClassName} />
+          </AdminField>
+          <AdminField label="渠道类型">
+            <input name="channelType" defaultValue={offer.channelType} className={adminFieldClassName} />
+          </AdminField>
+          <AdminField label="价格来源">
+            <input name="priceSource" defaultValue={offer.priceSource} className={adminFieldClassName} />
+          </AdminField>
+          <AdminField label="来源 URL">
+            <input name="sourceUrl" defaultValue={offer.sourceUrl || ""} className={adminFieldClassName} type="url" />
+          </AdminField>
+        </div>
+        <AdminDialogActions loading={loading} onClose={onClose} submitLabel="保存报价" />
+      </form>
+    </AdminEditDialog>
+  );
+}
+
+function AdminEditDialog({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previousActiveElement?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#202829]/35 px-4 py-6 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        aria-modal="true"
+        role="dialog"
+        aria-label={title}
+        className="max-h-[min(820px,calc(100vh-48px))] w-full max-w-3xl overflow-y-auto rounded-lg bg-[#fbfcfc] p-5 shadow-[0_30px_80px_rgba(45,52,53,0.18)] ring-1 ring-[#adb3b4]/20"
+      >
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <h2 className="text-lg font-bold text-[#202829]">{title}</h2>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            aria-label="关闭编辑弹窗"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#e4e9ea] text-[#5a6061] hover:bg-[#dde4e5]"
+          >
+            <XCircle size={17} />
+          </button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function AdminField({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-semibold text-[#5a6061]">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function AdminDialogActions({
+  loading,
+  onClose,
+  submitLabel,
+}: {
+  loading: boolean;
+  onClose: () => void;
+  submitLabel: string;
+}) {
+  return (
+    <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+      <button
+        type="button"
+        onClick={onClose}
+        className="inline-flex h-10 items-center justify-center rounded-full bg-[#e4e9ea] px-4 text-sm font-semibold text-[#2d3435] transition hover:bg-[#dde4e5]"
+      >
+        取消
+      </button>
+      <button
+        type="submit"
+        disabled={loading}
+        className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#2d3435] px-5 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526] disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {loading ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+        {submitLabel}
+      </button>
+    </div>
+  );
+}
+
+function SubmissionMetaSummary({ submission }: { submission: ApiTransitAdminSubmission }) {
+  const meta = submission.submittedMeta;
+  const rows = [
+    ["接入", accessModeLabel(stringMeta(meta, "accessMode"))],
+    ["凭据", credentialStatusSummary(meta)],
+    ["系统", stringMeta(meta, "systemType")],
+    ["API", submission.apiBaseUrl],
+    ["价格页", submission.pricingUrl],
+    ["监测", stringMeta(meta, "monitorUrl")],
+    ["凭据额度", stringMeta(meta, "credentialBudgetLimit")],
+    ["过期", stringMeta(meta, "credentialExpiresAt")],
+    ["监测频率", stringMeta(meta, "monitorBudgetLimit")],
+  ].filter((row): row is [string, string] => Boolean(row[1]));
+  const chips = [
+    ...arrayMeta(meta, "channelClaims"),
+    ...arrayMeta(meta, "cooperation"),
+    ...arrayMeta(meta, "admission"),
+    ...submission.submittedModels,
+  ].filter(Boolean);
+
+  if (!rows.length && !chips.length) return null;
+
+  return (
+    <div className="mt-2 space-y-2">
+      {rows.length ? (
+        <div className="grid gap-1 text-xs leading-5 text-[#5a6061] sm:grid-cols-2">
+          {rows.map(([label, value]) => (
+            <div key={label} className="min-w-0">
+              <span className="font-medium text-[#202829]">{label}：</span>
+              <span className="break-words">{value}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {chips.length ? (
+        <div className="flex flex-wrap gap-1.5">
+          {Array.from(new Set(chips)).slice(0, 8).map((chip) => (
+            <StatusBadge key={chip} tone="info">{chip}</StatusBadge>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MessageBox({ message, onDismiss }: { message: Message; onDismiss: () => void }) {
   const className =
     message.type === "error"
@@ -1084,6 +1608,8 @@ type ApiResponse = {
   message?: string;
   updatedCount?: number;
   updatedOfferCount?: number;
+  offer?: unknown;
+  station?: unknown;
 };
 
 async function requestJson(path: string, method: string, body: unknown): Promise<ApiResponse> {
@@ -1125,10 +1651,72 @@ function formatRatio(value: number | null): string {
   return value.toLocaleString("zh-CN", { maximumFractionDigits: 6 });
 }
 
+function numberInputValue(value: number | null): string {
+  return value === null ? "" : String(value);
+}
+
+function formText(formData: FormData, name: string): string {
+  return String(formData.get(name) || "").trim();
+}
+
+function formNullableText(formData: FormData, name: string): string | null {
+  const text = formText(formData, name);
+  return text ? text : null;
+}
+
+function formNullableNumber(formData: FormData, name: string): number | null {
+  const text = formText(formData, name);
+  if (!text) return null;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function splitList(value: string): string[] {
+  return value.split(/[,，\n|｜]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function stringMeta(meta: Record<string, unknown>, key: string): string | null {
+  const value = meta[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function arrayMeta(meta: Record<string, unknown>, key: string): string[] {
+  const value = meta[key];
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  if (typeof value === "string") return splitList(value);
+  return [];
+}
+
+function accessModeLabel(value: string | null): string | null {
+  if (value === "test_key") return "测试 Key 接入";
+  if (value === "test_account") return "测试账号接入";
+  if (value === "public_only") return "公开资料接入";
+  return null;
+}
+
+function credentialStatusSummary(meta: Record<string, unknown>): string | null {
+  const status = stringMeta(meta, "credentialStatus");
+  const type = stringMeta(meta, "credentialType");
+  if (!status || !type) return null;
+
+  const typeLabel = type === "test_account" ? "测试账号" : "测试 Key";
+  if (status === "submitted") return `${typeLabel} 已加密保存`;
+  if (status === "ready") return `${typeLabel} 可用于检测`;
+  if (status === "failed") return `${typeLabel} 验证失败`;
+  if (status === "revoked") return `${typeLabel} 已撤销`;
+  if (status === "deleted") return `${typeLabel} 已删除`;
+  return `${typeLabel} ${status}`;
+}
+
 function offerStatusLabel(value: ApiTransitOfferStatus): string {
   if (value === "active") return "已发布";
   if (value === "inactive") return "已下架";
   return "待审核";
+}
+
+function offerStatusFromText(value: string): ApiTransitOfferStatus | null {
+  if (value === "active" || value === "needs_review" || value === "inactive") return value;
+  return null;
 }
 
 function collectionStatusLabel(value: string): string {

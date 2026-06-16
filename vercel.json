@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/official-prices-weekly",
       "schedule": "30 18 * * 0"
+    },
+    {
+      "path": "/api/cron/api-transit-probe",
+      "schedule": "20 */6 * * *"
     }
   ]
 }

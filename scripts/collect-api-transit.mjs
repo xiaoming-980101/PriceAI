@@ -15,6 +15,14 @@ const defaultOutPath = path.join(repoRoot, "data", "api-transit", "latest-public
 const userAgent = "Mozilla/5.0 PriceAI/1.0 APITransitCollector";
 const DEFAULT_TIMEOUT_MS = 20000;
 const DEFAULT_RECHARGE_RATIO = "1:1";
+const officialTransitPrices = {
+  "Claude Sonnet 4.6": { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+  "Claude Opus 4.6": { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  "Claude Opus 4.7": { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  "Claude Opus 4.8": { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  "GPT 5.5": { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 0.5 },
+  "GPT 5.4": { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0.25 },
+};
 
 if (isCli()) {
   const args = normalizeOptions(parseArgs(process.argv.slice(2)));
@@ -148,7 +156,8 @@ function parsePricingPayload(source, payload, collectedAt) {
 
     const groups = normalizeItemGroups(item, groupRatios);
     for (const group of groups) {
-      selected.push(buildOfferRow(source, item, group, standard, collectedAt));
+      const offer = buildOfferRow(source, item, group, standard, collectedAt);
+      if (offer) selected.push(offer);
     }
   }
 
@@ -273,10 +282,8 @@ function buildStationRow(source, collectedAt, collection = {}) {
 function buildOfferRow(source, item, group, standard, collectedAt) {
   const family = standard.startsWith("Claude") ? "claude" : "gpt";
   const groupMultiplier = group.groupRatio ?? 1;
-  const modelRatio = group.modelRatio;
-  const combinedModelMultiplier = modelRatio === null ? null : modelRatio * groupMultiplier;
-  const inputPrice = modelRatio === null ? null : round(modelRatio * groupMultiplier, 6);
-  const outputPrice = modelRatio === null || group.completionRatio === null ? null : round(modelRatio * group.completionRatio * groupMultiplier, 6);
+  const splitMultipliers = getSplitMultipliers(item, group, standard, groupMultiplier);
+  if (!splitMultipliers || splitMultipliers.model === null || splitMultipliers.model <= 0) return null;
 
   return {
     id: stableId("api-transit-offer", source.id, standard, group.key),
@@ -286,11 +293,11 @@ function buildOfferRow(source, item, group, standard, collectedAt) {
     raw_model_name: String(item.model_name || item.name || ""),
     group_name: group.name || group.key || "default",
     recharge_ratio: source.rechargeRatio || DEFAULT_RECHARGE_RATIO,
-    model_multiplier: combinedModelMultiplier === null ? null : round(combinedModelMultiplier, 6),
-    input_price: inputPrice,
-    output_price: outputPrice,
-    cache_read_price: inputPrice === null || group.cacheRatio === null ? null : round(inputPrice * group.cacheRatio, 6),
-    cache_write_price: inputPrice === null || group.createCacheRatio === null ? null : round(inputPrice * group.createCacheRatio, 6),
+    model_multiplier: round(splitMultipliers.model, 6),
+    input_price: splitMultipliers.input === null ? null : round(splitMultipliers.input, 6),
+    output_price: splitMultipliers.output === null ? null : round(splitMultipliers.output, 6),
+    cache_read_price: splitMultipliers.cacheRead === null ? null : round(splitMultipliers.cacheRead, 6),
+    cache_write_price: splitMultipliers.cacheWrite === null ? null : round(splitMultipliers.cacheWrite, 6),
     currency: "CNY",
     account_pool: inferAccountPool(`${group.name} ${item.model_name || ""}`),
     channel_type: inferChannelType(`${group.name} ${group.description || ""}`),
@@ -307,6 +314,61 @@ function buildOfferRow(source, item, group, standard, collectedAt) {
       group,
     },
   };
+}
+
+function getSplitMultipliers(item, group, standard, groupMultiplier) {
+  const official = officialTransitPrices[standard];
+  const billing = parseBillingExpression(item?.billing_expr);
+  if (billing && official) {
+    const input = ratioValue(billing.input, official.input, groupMultiplier);
+    const output = ratioValue(billing.output, official.output, groupMultiplier);
+    const cacheRead = ratioValue(billing.cacheRead, official.cacheRead, groupMultiplier);
+    const cacheWrite = ratioValue(billing.cacheWrite, official.cacheWrite, groupMultiplier);
+    return {
+      model: input ?? output ?? cacheRead ?? cacheWrite,
+      input,
+      output,
+      cacheRead,
+      cacheWrite,
+    };
+  }
+
+  const modelRatio = group.modelRatio;
+  if (modelRatio === null || modelRatio <= 0) return null;
+  const input = modelRatio * groupMultiplier;
+  return {
+    model: input,
+    input,
+    output: group.completionRatio === null ? null : input * group.completionRatio,
+    cacheRead: group.cacheRatio === null ? null : input * group.cacheRatio,
+    cacheWrite: group.createCacheRatio === null ? null : input * group.createCacheRatio,
+  };
+}
+
+function ratioValue(value, officialValue, groupMultiplier) {
+  if (value === null || officialValue === null || officialValue <= 0) return null;
+  return (value * groupMultiplier) / officialValue;
+}
+
+function parseBillingExpression(value) {
+  const text = String(value || "");
+  if (!text) return null;
+
+  const parsed = {
+    input: extractBillingTerm(text, "p"),
+    output: extractBillingTerm(text, "c"),
+    cacheRead: extractBillingTerm(text, "cr"),
+    cacheWrite: extractBillingTerm(text, "cc"),
+    cacheWriteOneHour: extractBillingTerm(text, "cc1h"),
+  };
+
+  return Object.values(parsed).some((item) => item !== null) ? parsed : null;
+}
+
+function extractBillingTerm(text, key) {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = text.match(new RegExp(`(?:^|[^A-Za-z0-9_])${escaped}\\s*\\*\\s*(\\d+(?:\\.\\d+)?)`));
+  return match ? Number(match[1]) : null;
 }
 
 function dedupeBestOffers(offers) {
@@ -339,6 +401,7 @@ function standardizeModelName(name) {
 
   if (value.includes("gpt") || value.includes("codex") || value.includes("openai")) {
     if (matchesVersion(value, "5.5") || value.includes("5-5")) return "GPT 5.5";
+    if (/\bgpt[-._ ]?5[-._ ]?4[-._ ]?mini\b/.test(value)) return null;
     if (matchesVersion(value, "5.4") || value.includes("5-4")) return "GPT 5.4";
   }
 

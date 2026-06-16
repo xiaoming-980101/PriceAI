@@ -1,0 +1,72 @@
+[
+  {
+    "stationId": "kksj-org",
+    "apiBaseUrl": "https://api.kksj.org/v1",
+    "apiKeyEnv": "API_TRANSIT_KKSJ_ORG_KEY",
+    "protocol": "openai_compatible",
+    "enabled": true
+  },
+  {
+    "stationId": "smartaipro-cn",
+    "apiBaseUrl": "https://fast.smartaipro.cn/v1",
+    "apiKeyEnv": "API_TRANSIT_SMARTAIPRO_CN_KEY",
+    "protocol": "openai_compatible",
+    "enabled": true
+  },
+  {
+    "stationId": "8yes-cc",
+    "apiBaseUrl": "https://8yes.cc/v1",
+    "apiKeyEnv": "API_TRANSIT_8YES_CC_KEY",
+    "protocol": "openai_compatible",
+    "enabled": true
+  },
+  {
+    "stationId": "4router-net",
+    "apiBaseUrl": "https://4router.net/v1",
+    "apiKeyEnv": "API_TRANSIT_4ROUTER_NET_KEY",
+    "protocol": "openai_compatible",
+    "enabled": true
+  },
+  {
+    "stationId": "88996-cloud",
+    "apiBaseUrl": "https://88996.cloud/v1",
+    "apiKeyEnv": "API_TRANSIT_88996_CLOUD_KEY",
+    "protocol": "openai_compatible",
+    "enabled": true
+  },
+  {
+    "stationId": "180txt-cn",
+    "apiBaseUrl": "https://www.180txt.cn/v1",
+    "apiKeyEnv": "API_TRANSIT_180TXT_CN_KEY",
+    "protocol": "openai_compatible",
+    "enabled": true
+  },
+  {
+    "stationId": "micuapi-ai",
+    "apiBaseUrl": "https://www.micuapi.ai/v1",
+    "apiKeyEnv": "API_TRANSIT_MICUAPI_AI_KEY",
+    "protocol": "openai_compatible",
+    "enabled": true
+  },
+  {
+    "stationId": "freedomstore-asia",
+    "apiBaseUrl": "https://freedomstore.asia/v1",
+    "apiKeyEnv": "API_TRANSIT_FREEDOMSTORE_ASIA_KEY",
+    "protocol": "openai_compatible",
+    "enabled": true,
+    "targets": [
+      {
+        "family": "gpt",
+        "standardModel": "GPT 5.5",
+        "candidates": ["gpt-5.5"],
+        "keywords": ["gpt", "5.5"]
+      },
+      {
+        "family": "gpt",
+        "standardModel": "GPT 5.4",
+        "candidates": ["gpt-5.4"],
+        "keywords": ["gpt", "5.4"]
+      }
+    ]
+  }
+]

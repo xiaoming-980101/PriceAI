@@ -4,6 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase";
 import { stableId } from "@/lib/utils";
 
 export type TransitSubmissionType = "user" | "merchant";
+export type TransitSubmissionAccessMode = "public_only" | "test_key" | "test_account";
 
 export type CreateTransitSubmissionInput = {
   type: TransitSubmissionType;
@@ -15,6 +16,7 @@ export type CreateTransitSubmissionInput = {
   notes?: string | null;
   models?: string[];
   meta?: Record<string, unknown>;
+  accessMode?: TransitSubmissionAccessMode | null;
   submitterIp?: string | null;
 };
 
@@ -37,9 +39,9 @@ export async function createTransitSubmission(input: CreateTransitSubmissionInpu
     contact: cleanText(input.contact),
     notes: cleanText(input.notes),
     submitted_models: input.models?.map((item) => item.trim()).filter(Boolean).slice(0, 30) || [],
-    submitted_meta: input.meta || {},
+    submitted_meta: buildSubmittedMeta(input),
     parse_status: "pending",
-    probe_status: input.pricingUrl ? "public_pricing_found" : "pending",
+    probe_status: inferProbeStatus(input),
     review_status: "pending",
     submitter_ip: input.submitterIp || null,
   });
@@ -81,5 +83,27 @@ function cleanUrl(value: string | null | undefined): string | null {
 
 function cleanText(value: string | null | undefined): string | null {
   const text = String(value || "").trim();
+  return text ? text : null;
+}
+
+function buildSubmittedMeta(input: CreateTransitSubmissionInput): Record<string, unknown> {
+  const meta = { ...(input.meta || {}) };
+  const accessMode = input.accessMode || stringValue(meta.accessMode) || "public_only";
+  meta.accessMode = accessMode;
+  if (accessMode === "test_key" || accessMode === "test_account") {
+    meta.credentialStatus = "submitted";
+    meta.credentialType = accessMode;
+  }
+  return meta;
+}
+
+function inferProbeStatus(input: CreateTransitSubmissionInput): "pending" | "public_pricing_found" | "needs_login" {
+  if (input.pricingUrl || stringValue(input.meta?.monitorUrl)) return "public_pricing_found";
+  if (input.accessMode === "test_account") return "needs_login";
+  return "pending";
+}
+
+function stringValue(value: unknown): string | null {
+  const text = typeof value === "string" ? value.trim() : "";
   return text ? text : null;
 }

@@ -28,6 +28,11 @@ export type ApiTransitAdminStation = {
   summary: string;
   channelTypes: string[];
   accountPools: string[];
+  paymentMethods: string[];
+  minimumTopUp: string | null;
+  balanceExpiry: string | null;
+  supportChannels: string[];
+  refundPolicy: string | null;
   riskLabels: string[];
   usageAdvice: ApiTransitUsageAdvice;
   dataStatus: ApiTransitDataStatus;
@@ -114,6 +119,7 @@ export type ApiTransitAdminSubmission = {
   contact: string | null;
   notes: string | null;
   submittedModels: string[];
+  submittedMeta: Record<string, unknown>;
   parseStatus: ApiTransitParseStatus;
   probeStatus: ApiTransitProbeStatus;
   reviewStatus: ApiTransitSubmissionReviewStatus;

@@ -92,6 +92,23 @@ export function getEmptyApiTransitAdminData(
 
 export async function updateApiTransitStation(input: {
   id: string;
+  name?: string;
+  websiteUrl?: string;
+  apiBaseUrl?: string | null;
+  pricingUrl?: string | null;
+  summary?: string | null;
+  sourceType?: string;
+  commercialRelation?: string;
+  collectorKind?: string;
+  collectionStatus?: ApiTransitCollectionStatus;
+  channelTypes?: string[];
+  accountPools?: string[];
+  paymentMethods?: string[];
+  minimumTopUp?: string | null;
+  balanceExpiry?: string | null;
+  supportChannels?: string[];
+  refundPolicy?: string | null;
+  riskLabels?: string[];
   published?: boolean;
   dataStatus?: ApiTransitDataStatus;
   usageAdvice?: ApiTransitUsageAdvice;
@@ -103,6 +120,26 @@ export async function updateApiTransitStation(input: {
     last_updated_at: new Date().toISOString(),
   };
 
+  if (input.name !== undefined) row.name = cleanRequired(input.name, "站点名称不能为空。");
+  if (input.websiteUrl !== undefined) row.website_url = cleanRequired(input.websiteUrl, "站点 URL 不能为空。");
+  if (input.apiBaseUrl !== undefined) row.api_base_url = cleanNullable(input.apiBaseUrl);
+  if (input.pricingUrl !== undefined) {
+    row.pricing_url = cleanNullable(input.pricingUrl);
+    row.pricing_endpoint_url = cleanNullable(input.pricingUrl);
+  }
+  if (input.summary !== undefined) row.summary = cleanNullable(input.summary) || "";
+  if (input.sourceType !== undefined) row.source_type = input.sourceType;
+  if (input.commercialRelation !== undefined) row.commercial_relation = input.commercialRelation;
+  if (input.collectorKind !== undefined) row.collector_kind = cleanRequired(input.collectorKind, "采集器类型不能为空。");
+  if (input.collectionStatus) row.collection_status = input.collectionStatus;
+  if (input.channelTypes !== undefined) row.channel_types = uniqueText(input.channelTypes);
+  if (input.accountPools !== undefined) row.account_pools = uniqueText(input.accountPools);
+  if (input.paymentMethods !== undefined) row.payment_methods = uniqueText(input.paymentMethods);
+  if (input.minimumTopUp !== undefined) row.minimum_top_up = cleanNullable(input.minimumTopUp);
+  if (input.balanceExpiry !== undefined) row.balance_expiry = cleanNullable(input.balanceExpiry);
+  if (input.supportChannels !== undefined) row.support_channels = uniqueText(input.supportChannels);
+  if (input.refundPolicy !== undefined) row.refund_policy = cleanNullable(input.refundPolicy);
+  if (input.riskLabels !== undefined) row.risk_labels = uniqueText(input.riskLabels);
   if (typeof input.published === "boolean") row.published = input.published;
   if (input.dataStatus) row.data_status = input.dataStatus;
   if (input.usageAdvice) row.usage_advice = input.usageAdvice;
@@ -127,12 +164,13 @@ export async function updateApiTransitStation(input: {
 
 export async function updateApiTransitOffers(input: {
   ids: string[];
-  status: ApiTransitOfferStatus;
+  status?: ApiTransitOfferStatus;
 }): Promise<{ updatedCount: number }> {
   const ids = uniqueText(input.ids);
   if (!ids.length) return { updatedCount: 0 };
 
   const supabase = getSupabaseOrThrow();
+  if (!input.status) return { updatedCount: 0 };
   const { data, error } = await supabase
     .from("api_transit_offers")
     .update({ status: input.status })
@@ -142,6 +180,83 @@ export async function updateApiTransitOffers(input: {
   if (error) throw error;
   clearTransitStationsCache();
   return { updatedCount: dbRows(data).length };
+}
+
+export async function updateApiTransitOffer(input: {
+  id: string;
+  family?: string;
+  standardModel?: string;
+  rawModelName?: string;
+  groupName?: string;
+  rechargeRatio?: string | null;
+  modelMultiplier?: number | null;
+  inputPrice?: number | null;
+  outputPrice?: number | null;
+  cacheReadPrice?: number | null;
+  cacheWritePrice?: number | null;
+  currency?: string;
+  accountPool?: string;
+  channelType?: string;
+  priceSource?: string;
+  sourceUrl?: string | null;
+  status?: ApiTransitOfferStatus;
+}): Promise<ApiTransitAdminOffer> {
+  const supabase = getSupabaseOrThrow();
+  const row: DbRow = {};
+
+  if (input.family !== undefined) row.family = input.family;
+  if (input.standardModel !== undefined) row.standard_model = cleanRequired(input.standardModel, "标准模型不能为空。");
+  if (input.rawModelName !== undefined) row.raw_model_name = cleanRequired(input.rawModelName, "原始模型不能为空。");
+  if (input.groupName !== undefined) row.group_name = cleanRequired(input.groupName, "分组名不能为空。");
+  if (input.rechargeRatio !== undefined) row.recharge_ratio = cleanNullable(input.rechargeRatio);
+  if (input.modelMultiplier !== undefined) row.model_multiplier = input.modelMultiplier;
+  if (input.inputPrice !== undefined) row.input_price = input.inputPrice;
+  if (input.outputPrice !== undefined) row.output_price = input.outputPrice;
+  if (input.cacheReadPrice !== undefined) row.cache_read_price = input.cacheReadPrice;
+  if (input.cacheWritePrice !== undefined) row.cache_write_price = input.cacheWritePrice;
+  if (input.currency !== undefined) row.currency = cleanRequired(input.currency, "币种不能为空。");
+  if (input.accountPool !== undefined) row.account_pool = cleanRequired(input.accountPool, "号池不能为空。");
+  if (input.channelType !== undefined) row.channel_type = cleanRequired(input.channelType, "渠道类型不能为空。");
+  if (input.priceSource !== undefined) row.price_source = cleanRequired(input.priceSource, "价格来源不能为空。");
+  if (input.sourceUrl !== undefined) row.source_url = cleanNullable(input.sourceUrl);
+  if (input.status) row.status = input.status;
+
+  const { data, error } = await supabase
+    .from("api_transit_offers")
+    .update(row)
+    .eq("id", input.id)
+    .select(
+      [
+        "id",
+        "station_id",
+        "family",
+        "standard_model",
+        "raw_model_name",
+        "group_name",
+        "recharge_ratio",
+        "model_multiplier",
+        "input_price",
+        "output_price",
+        "cache_read_price",
+        "cache_write_price",
+        "currency",
+        "account_pool",
+        "channel_type",
+        "price_source",
+        "source_url",
+        "last_verified_at",
+        "status",
+        "created_at",
+        "updated_at",
+        "api_transit_stations(name,published)",
+      ].join(",")
+    )
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("报价不存在。");
+  clearTransitStationsCache();
+  return mapOffer(data as unknown as DbRow);
 }
 
 export async function publishApiTransitStationWithOffers(input: {
@@ -387,6 +502,11 @@ function mapStation(
     summary: stringValue(row.summary),
     channelTypes: stringArray(row.channel_types),
     accountPools: stringArray(row.account_pools),
+    paymentMethods: stringArray(row.payment_methods),
+    minimumTopUp: nullableString(row.minimum_top_up),
+    balanceExpiry: nullableString(row.balance_expiry),
+    supportChannels: stringArray(row.support_channels),
+    refundPolicy: nullableString(row.refund_policy),
     riskLabels: stringArray(row.risk_labels),
     usageAdvice: usageAdvice(row.usage_advice),
     dataStatus: dataStatus(row.data_status),
@@ -448,6 +568,7 @@ function mapSubmission(row: DbRow): ApiTransitAdminSubmission {
     contact: nullableString(row.contact),
     notes: nullableString(row.notes),
     submittedModels: stringArray(row.submitted_models),
+    submittedMeta: recordValue(row.submitted_meta),
     parseStatus: parseStatus(row.parse_status),
     probeStatus: probeStatus(row.probe_status),
     reviewStatus: reviewStatus(row.review_status),
@@ -713,6 +834,10 @@ function nestedRow(value: unknown): DbRow | null {
   return value && typeof value === "object" ? value as DbRow : null;
 }
 
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value : value === null || value === undefined ? "" : String(value);
 }
@@ -720,6 +845,12 @@ function stringValue(value: unknown): string {
 function cleanNullable(value: string | null | undefined): string | null {
   const text = stringValue(value).trim();
   return text ? text : null;
+}
+
+function cleanRequired(value: string, message: string): string {
+  const text = stringValue(value).trim();
+  if (!text) throw new Error(message);
+  return text;
 }
 
 function nullableString(value: unknown): string | null {

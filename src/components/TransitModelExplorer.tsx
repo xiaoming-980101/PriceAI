@@ -1,16 +1,23 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRight, Search } from "lucide-react";
-import { CategoryTabStrip, type CategoryTabItem } from "@/components/CategoryTabBar";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import {
+  DataTableHead,
+  DataTableShell,
+  SearchField,
+  StatusChip,
+} from "@/components/ComparisonUi";
 import { TransitModelIcon } from "@/components/TransitModelIcon";
+import { TransitPriceBreakdown } from "@/components/TransitPriceBreakdown";
 import { TransitViewTabs } from "@/components/TransitViewTabs";
+import { formatDateMinute } from "@/lib/utils";
 import type { TransitModelFamily, TransitStation } from "@/data/api-transit/types";
 import {
   TRANSIT_ACCOUNT_POOL_LABELS,
+  TRANSIT_CHANNEL_TYPE_LABELS,
   TRANSIT_MODEL_FAMILY_LABELS,
   TRANSIT_RISK_LABELS,
   TRANSIT_USAGE_ADVICE_LABELS,
@@ -19,8 +26,8 @@ import {
   formatPercent,
   formatRate,
   getRateBadgeClass,
-  getTransitModelFamilyOptions,
   getTransitModelSummaries,
+  getTransitStationSystemLabel,
   getUsageAdviceBadgeClass,
   type TransitModelPriceEntry,
   type TransitModelSummary,
@@ -40,7 +47,7 @@ export default function TransitModelExplorer({ stations }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [urlReady, setUrlReady] = useState(false);
-  const [family, setFamily] = useState<FamilyFilter>(coerceFamily(searchParams.get("family")));
+  const family = coerceFamily(searchParams.get("family") ?? searchParams.get("model"));
   const [query, setQuery] = useState(searchParams.get("q") || "");
 
   useEffect(() => {
@@ -58,27 +65,6 @@ export default function TransitModelExplorer({ stations }: Props) {
 
     router.replace(qs ? `/api-transit/models?${qs}` : "/api-transit/models", { scroll: false });
   }, [family, query, router, urlReady]);
-
-  const familyOptions = useMemo(() => getTransitModelFamilyOptions(stations), [stations]);
-  const familyTabs = useMemo<CategoryTabItem[]>(() => {
-    const tabs: CategoryTabItem[] = [
-      {
-        id: "all",
-        label: "全部",
-        icon: <TransitModelIcon family="all" className="h-[18px] w-[18px]" />,
-      },
-    ];
-
-    familyOptions.forEach((option) => {
-      tabs.push({
-        id: option.id,
-        label: option.label,
-        icon: <TransitModelIcon family={option.id} className="h-[18px] w-[18px]" />,
-      });
-    });
-
-    return tabs;
-  }, [familyOptions]);
 
   const modelSummaries = useMemo(() => {
     const summaries = getTransitModelSummaries(stations, family);
@@ -102,23 +88,14 @@ export default function TransitModelExplorer({ stations }: Props) {
 
   return (
     <div>
-      <div className="sticky top-[66px] z-20 mb-5 rounded-lg bg-[#f2f4f4] p-3 ring-1 ring-[#adb3b4]/15">
+      <div className="mb-5 rounded-lg bg-[#f2f4f4] p-3 ring-1 ring-[#adb3b4]/15">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
           <TransitViewTabs active="models" className="shrink-0 rounded-lg" />
-          <div className="relative min-w-[200px] flex-1 xl:max-w-[440px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a8182]" />
-            <input
-              className="h-[38px] w-full rounded-lg border border-[#dfe4e5] bg-white pl-9 pr-3 text-sm text-[#2d3435] outline-none placeholder:text-[#5f6869] transition focus:border-[#45bf78]/65 focus:shadow-[0_0_0_3px_rgba(69,191,120,0.16)]"
-              placeholder="搜索标准模型名..."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-          <CategoryTabStrip
-            items={familyTabs}
-            value={family}
-            onChange={(value) => setFamily(value as FamilyFilter)}
-            className="py-0"
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            placeholder="搜索标准模型名..."
+            className="flex-1 xl:max-w-[440px]"
           />
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#5a6061]">
@@ -156,65 +133,88 @@ export default function TransitModelExplorer({ stations }: Props) {
 }
 
 function ModelSummaryTable({ summaries }: { summaries: TransitModelSummary[] }) {
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
+  function toggleModel(summary: TransitModelSummary) {
+    const key = modelKey(summary);
+    setExpandedKey((current) => current === key ? null : key);
+  }
+
   return (
-    <section className="hidden overflow-hidden rounded-lg bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15 md:block">
-      <div className="overflow-x-auto">
+    <DataTableShell className="hidden md:block">
         <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
           <thead className="bg-[#f2f4f4] text-[0.68rem] font-semibold text-[#5a6061]">
             <tr>
-              <TableHead>标准模型</TableHead>
-              <TableHead>模型类型</TableHead>
-              <TableHead>覆盖站点</TableHead>
-              <TableHead>最优综合倍率</TableHead>
-              <TableHead>稳定性</TableHead>
-              <TableHead>代表站点</TableHead>
-              <TableHead className="w-[120px] text-center">操作</TableHead>
+              <DataTableHead>标准模型</DataTableHead>
+              <DataTableHead>最优综合倍率</DataTableHead>
+              <DataTableHead>稳定性</DataTableHead>
+              <DataTableHead>代表站点</DataTableHead>
+              <DataTableHead>覆盖</DataTableHead>
+              <DataTableHead className="w-[120px] text-center">操作</DataTableHead>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#edf0f1]">
-            {summaries.map((summary) => (
-              <ModelSummaryRow key={`${summary.family}-${summary.standardModel}`} summary={summary} />
-            ))}
+            {summaries.map((summary) => {
+              const expanded = expandedKey === modelKey(summary);
+
+              return (
+                <Fragment key={`${summary.family}-${summary.standardModel}`}>
+                  <ModelSummaryRow
+                    summary={summary}
+                    expanded={expanded}
+                    onToggleModel={() => toggleModel(summary)}
+                  />
+                  {expanded ? <ModelExpandedRow summary={summary} stationId="all" /> : null}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
-      </div>
-    </section>
+    </DataTableShell>
   );
 }
 
-function ModelSummaryRow({ summary }: { summary: TransitModelSummary }) {
+function ModelSummaryRow({
+  summary,
+  expanded,
+  onToggleModel,
+}: {
+  summary: TransitModelSummary;
+  expanded: boolean;
+  onToggleModel: () => void;
+}) {
   const bestEntry = summary.prices[0] ?? null;
-  const href = stationListHref(summary);
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTableRowElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onToggleModel();
+    }
+  }
 
   return (
-    <tr className="align-top transition hover:bg-[#f7f9f9]">
+    <tr
+      className="cursor-pointer align-top transition hover:bg-[#f7f9f9] focus-visible:bg-[#f7f9f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#45bf78]/40"
+      onClick={onToggleModel}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="button"
+      aria-expanded={expanded}
+      aria-label={`${expanded ? "收起" : "展开"} ${summary.standardModel} 站点倍率`}
+    >
       <td className="max-w-[330px] px-5 py-4">
-        <Link href={href} className="group flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] ring-1 ring-[#adb3b4]/15">
             <TransitModelIcon family={summary.family} className="h-7 w-7" />
           </span>
           <span className="min-w-0">
-            <span className="block truncate font-semibold text-[#202829] group-hover:text-[#2f7a4b]">
+            <span className="block truncate font-semibold text-[#202829]">
               {summary.standardModel}
             </span>
             <span className="mt-1 block truncate text-xs text-[#5a6061]">
-              {summary.stationCount} 个站点 · 样本 {summary.sampleCount}
+              {summary.familyLabel} · {summary.stationCount} 个站点 · 样本 {summary.sampleCount}
             </span>
           </span>
-        </Link>
-      </td>
-      <td className="px-5 py-4">
-        <CountBadge tone="neutral">{summary.familyLabel}</CountBadge>
-      </td>
-      <td className="px-5 py-4">
-        <div className="flex flex-wrap gap-1.5">
-          <CountBadge tone="neutral">站点 {summary.stationCount}</CountBadge>
-          {summary.prices.slice(0, 2).map((entry) => (
-            <CountBadge key={`${entry.station.id}-${entry.price.groupName}`} tone="good">
-              {entry.station.name}
-            </CountBadge>
-          ))}
-          {summary.prices.length > 2 ? <CountBadge tone="neutral">+{summary.prices.length - 2}</CountBadge> : null}
         </div>
       </td>
       <td className="px-5 py-4">
@@ -232,14 +232,23 @@ function ModelSummaryRow({ summary }: { summary: TransitModelSummary }) {
       <td className="max-w-[260px] px-5 py-4">
         {bestEntry ? <RepresentativeStation entry={bestEntry} /> : <span className="text-sm text-[#5a6061]">暂无代表站点</span>}
       </td>
+      <td className="px-5 py-4">
+        <p className="font-semibold text-[#202829]">{summary.stationCount} 个站点</p>
+        <p className="mt-1 text-xs text-[#5a6061]">报价样本 {summary.sampleCount}</p>
+      </td>
       <td className="w-[120px] px-5 py-4 text-center">
-        <Link
-          href={href}
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleModel();
+          }}
           className="inline-flex h-9 min-w-[76px] items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[#2d3435] px-3 text-xs font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526]"
+          aria-expanded={expanded}
         >
-          查看
-          <ChevronRight size={14} />
-        </Link>
+          {expanded ? "收起" : "展开"}
+          <ChevronDown size={14} className={`transition ${expanded ? "rotate-180" : ""}`} />
+        </button>
       </td>
     </tr>
   );
@@ -247,11 +256,14 @@ function ModelSummaryRow({ summary }: { summary: TransitModelSummary }) {
 
 function ModelSummaryCard({ summary }: { summary: TransitModelSummary }) {
   const bestEntry = summary.prices[0] ?? null;
-  const href = stationListHref(summary);
+  const [expanded, setExpanded] = useState(false);
+
+  function toggleModel() {
+    setExpanded((current) => !current);
+  }
 
   return (
-    <Link
-      href={href}
+    <article
       className="rounded-lg bg-white p-4 shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15 transition hover:bg-[#fbfcfc]"
     >
       <div className="mb-3 flex min-w-0 items-center gap-3">
@@ -275,10 +287,138 @@ function ModelSummaryCard({ summary }: { summary: TransitModelSummary }) {
         </div>
       </div>
       {bestEntry ? <RepresentativeStation entry={bestEntry} /> : null}
-      <div className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#2d3435]">
-        查看站点 <ChevronRight size={13} />
+      {expanded ? <ModelMobileExpandedPanel summary={summary} stationId="all" /> : null}
+      <button
+        type="button"
+        onClick={toggleModel}
+        className="mt-3 inline-flex h-8 items-center gap-1 rounded-full bg-[#2d3435] px-3 text-xs font-semibold text-[#f8f8f8]"
+        aria-expanded={expanded}
+      >
+        {expanded ? "收起站点报价" : "展开站点报价"}
+        <ChevronDown size={13} className={`transition ${expanded ? "rotate-180" : ""}`} />
+      </button>
+    </article>
+  );
+}
+
+function ModelExpandedRow({ summary, stationId }: { summary: TransitModelSummary; stationId: string }) {
+  return (
+    <tr>
+      <td colSpan={6} className="bg-[#fbfcfc] px-5 pb-5 pt-0">
+        <ModelExpandedPanel summary={summary} stationId={stationId} />
+      </td>
+    </tr>
+  );
+}
+
+function ModelExpandedPanel({ summary, stationId }: { summary: TransitModelSummary; stationId: string }) {
+  const entries = getExpandedEntries(summary, stationId);
+  const selectedStation = stationId === "all" ? null : entries[0]?.station ?? null;
+
+  return (
+    <div className="rounded-lg border border-[#dfe4e5] bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#dfe4e5] bg-[#f2f4f4] px-4 py-3">
+        <div>
+          <p className="text-sm font-extrabold text-[#202829]">
+            {selectedStation ? selectedStation.name : "全部站点"} · {summary.standardModel}
+          </p>
+          <p className="mt-1 text-xs text-[#5a6061]">展示该模型在对应站点/分组下的官方价、换算价、综合倍率和渠道标记。</p>
+        </div>
+        {selectedStation ? (
+          <Link
+            href={`/api-transit/${selectedStation.slug}`}
+            className="inline-flex h-8 items-center gap-1 rounded-full bg-[#2d3435] px-3 text-xs font-semibold text-[#f8f8f8] hover:bg-[#202829]"
+          >
+            站点详情
+            <ChevronRight size={13} />
+          </Link>
+        ) : null}
       </div>
-    </Link>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1060px] border-collapse text-left text-xs">
+          <thead className="bg-[#f7f9f9] text-[#5a6061]">
+            <tr>
+              <DataTableHead>站点</DataTableHead>
+              <DataTableHead>分组</DataTableHead>
+              <DataTableHead>模型倍率</DataTableHead>
+              <DataTableHead>综合倍率</DataTableHead>
+              <DataTableHead>输入 / 输出</DataTableHead>
+              <DataTableHead>充值</DataTableHead>
+              <DataTableHead>渠道 / 号池</DataTableHead>
+              <DataTableHead>确认时间</DataTableHead>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#edf0f1]">
+            {entries.map((entry) => (
+              <ModelExpandedEntryRow key={`${entry.station.id}-${entry.price.groupName}`} entry={entry} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ModelExpandedEntryRow({ entry }: { entry: TransitModelPriceEntry }) {
+  return (
+    <tr>
+      <td className="px-4 py-3">
+        <Link
+          href={`/api-transit/${entry.station.slug}`}
+          className="font-semibold text-[#202829] transition-colors hover:text-[#2f7a4b]"
+        >
+          {entry.station.name}
+        </Link>
+        <div className="mt-1 text-[11px] text-[#5a6061]">{getTransitStationSystemLabel(entry.station)}</div>
+      </td>
+      <td className="px-4 py-3 text-[#2d3435]">{entry.price.groupName}</td>
+      <td className="px-4 py-3 font-semibold text-[#202829]">
+        {entry.price.modelMultiplier !== null ? `${entry.price.modelMultiplier.toFixed(2)}x` : "—"}
+      </td>
+      <td className="px-4 py-3">
+        <span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${getRateBadgeClass(entry.combinedRate)}`}>
+          {formatRate(entry.combinedRate)}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <TransitPriceBreakdown station={entry.station} price={entry.price} mode="compact" />
+      </td>
+      <td className="px-4 py-3 text-[#2d3435]">{formatRate(entry.rechargeCoefficient)}</td>
+      <td className="px-4 py-3 text-[#5a6061]">
+        {TRANSIT_CHANNEL_TYPE_LABELS[entry.price.channelType]} / {TRANSIT_ACCOUNT_POOL_LABELS[entry.price.accountPool]}
+      </td>
+      <td className="px-4 py-3 text-[#5a6061]">{formatDateMinute(entry.price.lastVerifiedAt)}</td>
+    </tr>
+  );
+}
+
+function ModelMobileExpandedPanel({ summary, stationId }: { summary: TransitModelSummary; stationId: string }) {
+  const entries = getExpandedEntries(summary, stationId);
+
+  return (
+    <div className="mb-3 rounded-lg border border-[#dfe4e5] bg-[#fbfcfc] p-3">
+      <div className="space-y-2">
+        {entries.slice(0, 8).map((entry) => (
+          <div key={`${entry.station.id}-${entry.price.groupName}`} className="flex items-start justify-between gap-3 border-b border-[#edf0f1] pb-2 last:border-0 last:pb-0">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-[#202829]">{entry.station.name}</p>
+              <p className="mt-1 truncate text-[11px] text-[#5a6061]">{entry.price.groupName} · {TRANSIT_CHANNEL_TYPE_LABELS[entry.price.channelType]}</p>
+              <div className="mt-2">
+                <TransitPriceBreakdown station={entry.station} price={entry.price} mode="compact" />
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-xs font-bold text-[#202829]">
+                {entry.price.modelMultiplier !== null ? `${entry.price.modelMultiplier.toFixed(2)}x` : "—"}
+              </p>
+              <p className={`mt-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${getRateBadgeClass(entry.combinedRate)}`}>
+                {formatRate(entry.combinedRate)}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -304,9 +444,9 @@ function RiskPills({ station }: { station: TransitStation }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {station.riskLabels.slice(0, 1).map((risk) => (
-        <span key={risk} className="rounded-full bg-[#fff7e8] px-2 py-0.5 text-[11px] font-semibold text-[#7a541b]">
+        <StatusChip key={risk} tone="warning" className="px-2 py-0.5 text-[11px]">
           {TRANSIT_RISK_LABELS[risk]}
-        </span>
+        </StatusChip>
       ))}
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${getUsageAdviceBadgeClass(station.usageAdvice)}`}>
         {TRANSIT_USAGE_ADVICE_LABELS[station.usageAdvice]}
@@ -315,25 +455,11 @@ function RiskPills({ station }: { station: TransitStation }) {
   );
 }
 
-function TableHead({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <th className={`px-5 py-3 font-semibold ${className}`} scope="col">
-      {children}
-    </th>
-  );
+function modelKey(summary: TransitModelSummary): string {
+  return `${summary.family}:${summary.standardModel}`;
 }
 
-function CountBadge({ children, tone }: { children: ReactNode; tone: "good" | "warn" | "neutral" }) {
-  const className = {
-    good: "bg-[#e8f3ec] text-[#2f7a4b]",
-    warn: "bg-[#fff7e8] text-[#7a541b]",
-    neutral: "bg-[#e4e9ea] text-[#2d3435]",
-  }[tone];
-
-  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{children}</span>;
-}
-
-function stationListHref(summary: TransitModelSummary): string {
-  const params = new URLSearchParams({ model: summary.family });
-  return `/api-transit?${params.toString()}`;
+function getExpandedEntries(summary: TransitModelSummary, stationId: string): TransitModelPriceEntry[] {
+  if (stationId === "all") return summary.prices;
+  return summary.prices.filter((entry) => entry.station.id === stationId);
 }
