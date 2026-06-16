@@ -10,7 +10,7 @@ import ts from "typescript";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
-const { buildProductGroups, classifyOffer } = await loadCatalogModule();
+const { buildProductGroups, classifyOffer, isSharedAccessOffer } = await loadCatalogModule();
 
 const cases = [
   ["ChatGPT Plus 直充 卡密自助", "chatgpt-plus"],
@@ -263,6 +263,41 @@ assert.equal(warrantyPlusGroup.lowestOffer?.id, "cheap-no-warranty", "Regular lo
 assert.equal(warrantyPlusGroup.warrantyLowestOffer?.id, "long-warranty", "Warranty lowest price should use the cheapest available long-warranty offer.");
 assert.equal(warrantyPlusGroup.warrantyLowestPrice, 80, "Warranty lowest price should be tracked separately.");
 assert.equal(warrantyPlusGroup.warrantyOfferCount, 1, "Only available long-warranty offers should be counted.");
+
+const sharedAccessGroups = buildProductGroups([
+  makeOffer({ id: "cheap-people-car", title: "Claude Pro-三人车", price: 50, status: "in_stock" }),
+  makeOffer({ id: "regular-claude", title: "Claude Pro 月卡 直充", price: 129, status: "in_stock" }),
+  makeOffer({ id: "plus-shared-dedicated", title: "ChatGPT Plus 拼车｜GPT会话独享 或者 codex额度独享｜月付", price: 76, status: "in_stock" }),
+  makeOffer({ id: "exclusive-plus", title: "ChatGPT Plus 成品号 独享账号", price: 88, status: "in_stock" }),
+  makeOffer({ id: "grok-people-car", title: "SuperGrok-三人车", price: 70, status: "in_stock" }),
+  makeOffer({ id: "shared-double-car", title: "Claude Max 5X 双人车", price: 388, status: "in_stock" }),
+  makeOffer({ id: "team-boarding", title: "GPT Team 月卡Business 席位x1【质保上车】", price: 55, status: "in_stock" }),
+]);
+const sharedClaudeGroup = sharedAccessGroups.find((group) => group.id === "claude-pro-month");
+assert.ok(sharedClaudeGroup, "Claude Pro group should exist for shared-access sorting.");
+assert.equal(sharedClaudeGroup.lowestOffer?.id, "regular-claude", "People-car offers must not drive the displayed lowest price.");
+assert.equal(sharedClaudeGroup.offers.at(-1)?.id, "cheap-people-car", "Available shared-access offers should sort behind regular available offers.");
+assert.ok(isSharedAccessOffer(sharedClaudeGroup.offers.find((offer) => offer.id === "cheap-people-car")), "三人车 should be tagged as shared access.");
+assert.ok(
+  isSharedAccessOffer(sharedAccessGroups.flatMap((group) => group.offers).find((offer) => offer.id === "plus-shared-dedicated")),
+  "Explicit 拼车 titles should stay shared even when a dedicated session or quota is mentioned.",
+);
+assert.ok(
+  !isSharedAccessOffer(sharedAccessGroups.flatMap((group) => group.offers).find((offer) => offer.id === "exclusive-plus")),
+  "Plain 独享 account titles should not be tagged as shared access.",
+);
+assert.ok(
+  isSharedAccessOffer(sharedAccessGroups.flatMap((group) => group.offers).find((offer) => offer.id === "grok-people-car")),
+  "Other product 人车 titles should also be tagged as shared access.",
+);
+assert.ok(
+  isSharedAccessOffer(sharedAccessGroups.flatMap((group) => group.offers).find((offer) => offer.id === "shared-double-car")),
+  "双人车 should be tagged as shared access.",
+);
+assert.ok(
+  !isSharedAccessOffer(sharedAccessGroups.flatMap((group) => group.offers).find((offer) => offer.id === "team-boarding")),
+  "Generic 质保上车 wording should not mark a Team seat as shared access.",
+);
 
 const outOnlyGroups = buildProductGroups([
   makeOffer({ id: "out-only", title: "ChatGPT Pro 20倍 官方充值", price: 200, status: "out_of_stock" }),

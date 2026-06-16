@@ -24,7 +24,7 @@ export const OFFER_FILTER_TAGS: OfferFilterTagDefinition[] = [
     id: "shared_access",
     label: "拼车/团购",
     group: "access",
-    description: "多人共享、拼车、团购、车位或合租类报价。",
+    description: "多人共享、几人车、拼车、团购、车位或合租类报价。",
   },
   {
     id: "proxy_supported",
@@ -136,11 +136,23 @@ function hasSupportedProxySignal(text: string): boolean {
 }
 
 function hasSharedAccessNegativeSignal(text: string): boolean {
-  return /非拼车|不是拼车|不拼车|无拼车|拒绝拼车|非团购|不是团购|不团购|非共享|不是共享|不共享|无共享|非合租|不是合租|不合租|非车位|不是车位|独享|独立|一人一号|一人一户|专享/.test(text);
+  return /非拼车|不是拼车|不拼车|无拼车|拒绝拼车|非团购|不是团购|不团购|非共享|不是共享|不共享|无共享|非合租|不是合租|不合租|非车位|不是车位/.test(text);
 }
 
 function hasSharedAccessSignal(text: string): boolean {
-  return /拼车|团购|拼团|车位|共享|多人共享|多人共用|合租|共用|共享号|车友|车队|家庭车|团号|团购车|拼车位|共享车/.test(text);
+  return hasStrongSharedAccessSignal(text) || (!hasExclusiveAccessSignal(text) && hasWeakSharedAccessSignal(text));
+}
+
+function hasStrongSharedAccessSignal(text: string): boolean {
+  return /拼车|团购|拼团|车位|多人共享|多人共用|(?:二|两|双|三|四|五|六|七|八|九|十|[2-9]|[1-9][0-9])人(?:车|共享|共用|位)|多人车|车友|车队|家庭车|团号|团购车|拼车位|共享车/.test(text);
+}
+
+function hasWeakSharedAccessSignal(text: string): boolean {
+  return /共享|共用|合租|共享号/.test(text);
+}
+
+function hasExclusiveAccessSignal(text: string): boolean {
+  return /独享|独立|一人一号|一人一户|专享/.test(text);
 }
 
 function hasNoWarrantySignal(text: string): boolean {
