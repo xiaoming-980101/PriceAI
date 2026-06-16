@@ -18,6 +18,7 @@ const navItems = [
 ];
 
 type SiteHeaderSection = (typeof navItems)[number]["key"] | "home" | "guides";
+const homeHref = "/?home=1";
 const githubUrl = "https://github.com/physics-dimension/PriceAI";
 const telegramUrl = "https://t.me/priceaicc";
 
@@ -54,7 +55,7 @@ export function SiteHeader({
           >
             <Menu size={18} />
           </button>
-          <Link href="/" aria-label="PriceAI 首页" className="inline-flex min-h-11 min-w-0 shrink-0 items-center">
+          <Link href={homeHref} aria-label="PriceAI 首页" className="inline-flex min-h-11 min-w-0 shrink-0 items-center">
             <AppLogo compact={logoCompact} />
           </Link>
         </div>
@@ -143,7 +144,7 @@ function MobileModuleDrawer({
         aria-label="模块导航"
       >
         <div className="mb-4 flex items-center justify-between gap-3 px-1">
-          <Link href="/" aria-label="PriceAI 首页" className="min-w-0 shrink-0" onClick={onClose}>
+          <Link href={homeHref} aria-label="PriceAI 首页" className="min-w-0 shrink-0" onClick={onClose}>
             <AppLogo compact />
           </Link>
           <button
