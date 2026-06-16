@@ -36,6 +36,7 @@ export const ADMIN_SOURCE_HIDE_REASON_PREFIX = "管理员手动下架渠道";
 export const ADMIN_OFFER_HIDE_REASON_PREFIX = "管理员手动下架报价";
 export const ADMIN_MANUAL_HIDE_REASON_PREFIX = "管理员手动下架";
 const UNCHANGED_OFFER_REFRESH_INTERVAL_MS = 2 * 60 * 60 * 1000;
+const RAW_OFFER_WRITE_CHUNK_SIZE = 5;
 
 export type RawOfferUpsertResult = {
   receivedCount: number;
@@ -368,7 +369,7 @@ export async function upsertRawOffers(
 
   await ensureCanonicalProducts(supabase);
 
-  const rows = [];
+  const collectedRows = [];
   const collectionMethod = options.collectionMethod || "browser";
   const sourceCache = new Map<string, Source>();
   const checkedAt = normalizedDateString(options.checkedAt) || new Date().toISOString();
@@ -422,9 +423,10 @@ export async function upsertRawOffers(
       freshnessStatus: trustFields.freshness_status,
     });
     row.updated_at = checkedAt;
-    rows.push(row);
+    collectedRows.push(row);
   }
 
+  const rows = dedupeRawOfferRowsById(collectedRows);
   if (!rows.length) return { receivedCount: 0, writtenCount: 0, unchangedCount: 0, refreshedCount: 0 };
 
   const manualHiddenById = await getManualHiddenOffersById(rows.map((row) => String(row.id)));
@@ -451,8 +453,8 @@ export async function upsertRawOffers(
     }
   }
 
-  if (changedRows.length) {
-    const { error } = await supabase.from("raw_offers").upsert(changedRows);
+  for (const rowChunk of chunks(changedRows, RAW_OFFER_WRITE_CHUNK_SIZE)) {
+    const { error } = await supabase.from("raw_offers").upsert(rowChunk);
     if (error) throw error;
   }
 
@@ -518,6 +520,39 @@ function shouldRefreshUnchangedOffer(next: Record<string, unknown>, existing?: R
   return nextTime - existingTime >= UNCHANGED_OFFER_REFRESH_INTERVAL_MS;
 }
 
+function dedupeRawOfferRowsById(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  const byId = new Map<string, Record<string, unknown>>();
+
+  for (const row of rows) {
+    const id = String(row.id || "");
+    if (!id) continue;
+    const existing = byId.get(id);
+    byId.set(id, existing ? preferredRawOfferRow(existing, row) : row);
+  }
+
+  return Array.from(byId.values());
+}
+
+function preferredRawOfferRow(left: Record<string, unknown>, right: Record<string, unknown>): Record<string, unknown> {
+  const statusDiff = offerStatusRank(right.status) - offerStatusRank(left.status);
+  if (statusDiff > 0) return right;
+  if (statusDiff < 0) return left;
+
+  const rightTitleLength = String(right.source_title || "").length;
+  const leftTitleLength = String(left.source_title || "").length;
+  if (rightTitleLength > leftTitleLength) return right;
+
+  return left;
+}
+
+function offerStatusRank(value: unknown): number {
+  if (value === "in_stock") return 4;
+  if (value === "low_stock") return 3;
+  if (value === "unknown") return 2;
+  if (value === "out_of_stock") return 1;
+  return 0;
+}
+
 async function refreshSeenRawOfferRows(rows: Array<Record<string, unknown>>): Promise<number> {
   const supabase = getSupabaseServerClient();
   if (!supabase || !rows.length) return 0;
@@ -545,7 +580,7 @@ async function refreshSeenRawOfferRows(rows: Array<Record<string, unknown>>): Pr
 
   let refreshedCount = 0;
   for (const group of groups.values()) {
-    for (const ids of chunks(group.ids, 100)) {
+    for (const ids of chunks(group.ids, RAW_OFFER_WRITE_CHUNK_SIZE)) {
       const { count, error } = await supabase
         .from("raw_offers")
         .update(group.update, { count: "exact" })
