@@ -20,9 +20,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     {
       url: siteUrl,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 1,
+    },
+    {
+      url: `${siteUrl}/channels`,
       lastModified: data.generatedAt ? new Date(data.generatedAt) : now,
       changeFrequency: "hourly",
-      priority: 1,
+      priority: 0.92,
     },
     {
       url: `${siteUrl}/about`,
@@ -41,6 +47,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.75,
+    },
+    {
+      url: `${siteUrl}/api-transit`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.68,
     },
     ...platformPageConfigList.map((platform) => ({
       url: `${siteUrl}/platforms/${platform.slug}`,

@@ -201,7 +201,7 @@ export const guideReadingPaths: GuideReadingPath[] = [
         description: "区分 Plus、Pro、Team、成品号、代充、CDK 和 API/CDK。",
       },
       {
-        href: "/?stock=available",
+        href: "/channels?stock=available",
         label: "回到有货报价",
         description: "最后回到 PriceAI，按有货最低价、来源和更新时间筛选。",
       },

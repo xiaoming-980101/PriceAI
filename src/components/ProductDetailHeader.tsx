@@ -14,7 +14,7 @@ export function ProductDetailHeader() {
 }
 
 export function ProductReturnLink() {
-  const [returnHref, setReturnHref] = useState("/");
+  const [returnHref, setReturnHref] = useState("/channels");
 
   useEffect(() => {
     window.queueMicrotask(() => {
@@ -26,13 +26,13 @@ export function ProductReturnLink() {
   return (
     <a href={returnHref} className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-2 text-sm font-semibold text-[#5a6061] hover:bg-[#edf0f1] hover:text-[#2d3435] sm:px-3">
       <ArrowLeft size={17} />
-      返回首页
+      返回卡网订阅
     </a>
   );
 }
 
 function buildReturnHref(back: string | undefined): string {
-  if (!back) return "/";
+  if (!back) return "/channels";
 
   const source = new URLSearchParams(back.replace(/^\?/, ""));
   const safe = new URLSearchParams();
@@ -44,5 +44,5 @@ function buildReturnHref(back: string | undefined): string {
   });
 
   const query = safe.toString();
-  return query ? `/?${query}` : "/";
+  return query ? `/channels?${query}` : "/channels";
 }
