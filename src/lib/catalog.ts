@@ -757,8 +757,8 @@ export function buildProductGroups(
     product.offerCount = product.offers.length;
     product.inStockCount = product.offers.filter(isAvailable).length;
     product.outOfStockCount = Math.max(0, product.offers.length - product.inStockCount);
-    const displayLowestOffer = getDisplayLowestOffer(product.offers);
-    const warrantyLowestOffer = getDisplayLowestOffer(product.offers.filter(isLongWarrantyOffer));
+    const displayLowestOffer = getDisplayLowestOffer(product.offers, { excludeSharedAccess: true });
+    const warrantyLowestOffer = getDisplayLowestOffer(product.offers.filter(isLongWarrantyOffer), { excludeSharedAccess: false });
     const priceMeta = getOfferPriceMeta(displayLowestOffer);
 
     product.lowestOffer = displayLowestOffer;
@@ -788,6 +788,9 @@ export function buildProductGroups(
 export function compareOffers(a: RawOffer, b: RawOffer): number {
   const availableDelta = Number(isAvailable(b)) - Number(isAvailable(a));
   if (availableDelta !== 0) return availableDelta;
+
+  const sharedAccessDelta = Number(isSharedAccessOffer(a)) - Number(isSharedAccessOffer(b));
+  if (isAvailable(a) && isAvailable(b) && sharedAccessDelta !== 0) return sharedAccessDelta;
 
   const priceDelta =
     (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER);
@@ -821,8 +824,14 @@ export function getOfferPriceMeta(
   return { label: "有货", tone: "good" };
 }
 
-function getDisplayLowestOffer(offers: RawOffer[]): RawOffer | null {
-  const displayPool = offers.filter((offer) => hasUsablePrice(offer) && isAvailable(offer));
+function getDisplayLowestOffer(
+  offers: RawOffer[],
+  options: { excludeSharedAccess?: boolean } = {},
+): RawOffer | null {
+  const displayPool = offers.filter((offer) => {
+    if (!hasUsablePrice(offer) || !isAvailable(offer)) return false;
+    return !options.excludeSharedAccess || !isSharedAccessOffer(offer);
+  });
   if (!displayPool.length) return null;
 
   return [...displayPool].sort((a, b) => {
@@ -837,6 +846,10 @@ function isLongWarrantyOffer(offer: RawOffer): boolean {
   return offerMatchesFilterTags(offer, ["warranty_long"]);
 }
 
+export function isSharedAccessOffer(offer: RawOffer): boolean {
+  return offerMatchesFilterTags(offer, ["shared_access"]);
+}
+
 function hasUsablePrice(offer: RawOffer): offer is RawOffer & { price: number } {
   return typeof offer.price === "number" && Number.isFinite(offer.price);
 }
@@ -845,6 +858,7 @@ export function collectOfferFlags(offer: RawOffer): string[] {
   const flags = new Set<string>();
 
   if (!isAvailable(offer)) flags.add("缺货");
+  if (isSharedAccessOffer(offer)) flags.add("拼车/团购");
   if (offer.tags.some((tag) => tag.includes("无质保"))) flags.add("无质保");
 
   return Array.from(flags);

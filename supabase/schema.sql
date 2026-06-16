@@ -242,6 +242,12 @@ declare
   );
   output text[] := '{}';
 begin
+  if text_value !~ '(非拼车|不是拼车|不拼车|无拼车|拒绝拼车|非团购|不是团购|不团购|非共享|不是共享|不共享|无共享|非合租|不是合租|不合租|非车位|不是车位|独享|独立|一人一号|一人一户|专享)'
+    and text_value ~ '(拼车|团购|拼团|车位|共享|多人共享|多人共用|合租|共用|共享号|车友|车队|家庭车|团号|团购车|拼车位|共享车)'
+  then
+    output := array_append(output, 'shared_access');
+  end if;
+
   if text_value !~ '(仅支持?网页|只能网页|仅网页|网页号|不支持codex|无法使用codex|不能使用codex|不能直接登录codex|无法直接登录codex|无法codex|codex不售后|不可反代|无法反代|不能反代|不支持反代)'
     and text_value ~ '(可反代|支持反代|反代\+?codex|可用codex|支持codex|直接登录codex|sub2|cpa|api格式|json格式|json文件|sub格式|cpa格式)'
   then
@@ -383,6 +389,11 @@ as $$
         then 0
         else 1
       end as availability_rank,
+      case
+        when coalesce(raw_offers.public_filter_tags, priceai_public_offer_filter_tags(raw_offers.source_title, raw_offers.tags)) @> array['shared_access']::text[]
+        then 1
+        else 0
+      end as shared_access_rank,
       coalesce(raw_offers.verified_at, raw_offers.last_seen_at, raw_offers.captured_at, raw_offers.source_updated_at) as public_updated_at,
       coalesce(raw_offers.source_store_name, raw_offers.source_name, '') as public_source_label
     from raw_offers
@@ -419,6 +430,7 @@ as $$
   from ranked
   order by
     ranked.availability_rank asc,
+    ranked.shared_access_rank asc,
     ranked.price asc nulls last,
     ranked.public_updated_at desc nulls last,
     ranked.public_source_label asc,
@@ -500,6 +512,7 @@ as $$
       ) as lowest_rank
     from offers
     where offers.is_public_available = true
+      and not (offers.public_offer_filter_tags @> array['shared_access']::text[])
   ),
   warranty_lowest_ranked as (
     select

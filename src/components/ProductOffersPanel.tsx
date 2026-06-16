@@ -1,8 +1,8 @@
 "use client";
 
-import { ExternalLink, Flag, Search, X } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { isAvailable } from "@/lib/catalog";
+import { ExternalLink, Flag, ImageUp, Loader2, Search, Trash2, X } from "lucide-react";
+import { type ChangeEvent, type ClipboardEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { isAvailable, isSharedAccessOffer } from "@/lib/catalog";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { readSessionCache, writeSessionCache } from "@/lib/client-cache";
 import { createTimeoutSignal, isGeneratedDatasetStale, newestGeneratedDataset } from "@/lib/client-refresh";
@@ -31,7 +31,15 @@ const OFFER_PAGE_SIZE = 80;
 const PRODUCT_OFFERS_CACHE_TTL_MS = 2 * 60 * 1000;
 const PRODUCT_OFFERS_MEMORY_CACHE_LIMIT = 40;
 const TELEGRAM_COMMUNITY_URL = "https://t.me/priceaicc";
+const FEEDBACK_EVIDENCE_MAX_IMAGES = 5;
 const productOffersMemoryCache = new Map<string, ProductOffersResponse>();
+
+type UploadedFeedbackEvidence = {
+  url: string;
+  name: string;
+  mimeType: string;
+  size: number;
+};
 
 export function ProductOffersPanel({
   productId,
@@ -405,7 +413,7 @@ function productOffersCacheKey(
   query = "",
   excludeQuery = "",
 ): string {
-  return `priceai:product-offers:v6:${productId}:${offset}:${OFFER_PAGE_SIZE}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}`;
+  return `priceai:product-offers:v7:${productId}:${offset}:${OFFER_PAGE_SIZE}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}`;
 }
 
 function rememberProductOffers(cacheKey: string, value: ProductOffersResponse) {
@@ -672,6 +680,7 @@ function OfferTable({ offers, onFeedback }: { offers: RawOffer[]; onFeedback: (o
           <tbody className="divide-y divide-[#edf0f1]">
             {offers.map((offer, index) => {
               const available = isOfferAvailable(offer);
+              const sharedAccess = isSharedAccessOffer(offer);
 
               return (
                 <tr key={offerRowKey(offer, index)} className={`group/row transition hover:bg-[#f7f9f9] ${available ? "" : "bg-[#fbf7f6]"}`}>
@@ -687,7 +696,7 @@ function OfferTable({ offers, onFeedback }: { offers: RawOffer[]; onFeedback: (o
                     ) : null}
                   </td>
                   <td className="px-5 py-4">
-                    <OfferSourceTitle title={offer.sourceTitle} mode="table" />
+                    <OfferSourceTitle title={offer.sourceTitle} mode="table" sharedAccess={sharedAccess} />
                   </td>
                   <td className="px-4 py-4">
                     <span className={`text-lg font-bold ${available ? "text-[#202829]" : "text-[#9b3328]"}`}>
@@ -715,13 +724,14 @@ function OfferTable({ offers, onFeedback }: { offers: RawOffer[]; onFeedback: (o
 
 function OfferListItem({ offer, onFeedback }: { offer: RawOffer; onFeedback: (offer: RawOffer) => void }) {
   const available = isOfferAvailable(offer);
+  const sharedAccess = isSharedAccessOffer(offer);
 
   return (
     <article className={`min-w-0 rounded-lg p-4 shadow-[0_16px_45px_rgba(45,52,53,0.04)] ring-1 ${available ? "bg-white ring-[#adb3b4]/15" : "bg-[#fbf7f6] ring-[#ead8d5]"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-semibold text-[#202829]">{sourceLabel(offer)}</p>
-          <OfferSourceTitle title={offer.sourceTitle} mode="card" />
+          <OfferSourceTitle title={offer.sourceTitle} mode="card" sharedAccess={sharedAccess} />
         </div>
         <OfferStatusBadge available={available} />
       </div>
@@ -748,19 +758,29 @@ function TableHead({ children, className = "" }: { children: React.ReactNode; cl
   return <th className={`px-5 py-3 font-semibold ${className}`}>{children}</th>;
 }
 
-function OfferSourceTitle({ title, mode }: { title: string; mode: "table" | "card" }) {
+function OfferSourceTitle({ title, mode, sharedAccess }: { title: string; mode: "table" | "card"; sharedAccess?: boolean }) {
   if (mode === "table") {
     return (
-      <span className="block line-clamp-2 leading-6 text-[#2d3435]" title={title} aria-label={`原始商品名：${title}`}>
-        {title}
+      <span className="block leading-6 text-[#2d3435]" title={title} aria-label={`原始商品名：${title}`}>
+        {sharedAccess ? <OfferSharedAccessBadge /> : null}
+        <span className="line-clamp-2">{title}</span>
       </span>
     );
   }
 
   return (
-    <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#5a6061]" title={title}>
-      {title}
+    <p className="mt-1 text-sm leading-6 text-[#5a6061]" title={title}>
+      {sharedAccess ? <OfferSharedAccessBadge /> : null}
+      <span className="line-clamp-2">{title}</span>
     </p>
+  );
+}
+
+function OfferSharedAccessBadge() {
+  return (
+    <span className="mb-1 mr-1.5 inline-flex shrink-0 items-center rounded-full bg-[#fff7df] px-2 py-0.5 text-[0.68rem] font-semibold leading-5 text-[#8a5a10] ring-1 ring-[#efd38a]">
+      拼车/团购
+    </span>
   );
 }
 
@@ -908,10 +928,19 @@ export function OfferFeedbackDialog({
   const [userExpectedAction, setUserExpectedAction] = useState("recheck");
   const [notes, setNotes] = useState("");
   const [evidenceText, setEvidenceText] = useState("");
+  const [uploadedEvidence, setUploadedEvidence] = useState<UploadedFeedbackEvidence[]>([]);
   const [contact, setContact] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const titleId = "offer-feedback-dialog-title";
+  const hasEvidence =
+    uploadedEvidence.length > 0 ||
+    extractEvidenceUrls(evidenceText).length > 0 ||
+    evidenceText.trim().length >= 8 ||
+    notes.trim().length >= 12;
+  const requiresEvidence = needsHighRiskEvidence(reason, userExpectedAction);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -928,12 +957,85 @@ export function OfferFeedbackDialog({
     };
   }, [onClose]);
 
+  const uploadEvidenceFiles = useCallback(async (files: File[]) => {
+    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+    if (!imageFiles.length) return;
+
+    const availableSlots = FEEDBACK_EVIDENCE_MAX_IMAGES - uploadedEvidence.length;
+    if (availableSlots <= 0) {
+      setMessage({ type: "error", text: "最多上传 5 张图片证据。" });
+      return;
+    }
+
+    setUploadingEvidence(true);
+    setMessage(null);
+
+    try {
+      const nextEvidence: UploadedFeedbackEvidence[] = [];
+      for (const file of imageFiles.slice(0, availableSlots)) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("website", "");
+
+        const response = await fetch("/api/feedback/evidence", {
+          method: "POST",
+          body: formData,
+        });
+        const json = await response.json().catch(() => ({ ok: false, message: response.statusText }));
+        if (!response.ok || !json.ok) {
+          throw new Error(json.message || "图片上传失败。");
+        }
+
+        nextEvidence.push({
+          url: String(json.evidence.url),
+          name: String(json.evidence.name || file.name || "图片证据"),
+          mimeType: String(json.evidence.mimeType || file.type),
+          size: Number(json.evidence.size || file.size),
+        });
+      }
+
+      setUploadedEvidence((current) => [...current, ...nextEvidence].slice(0, FEEDBACK_EVIDENCE_MAX_IMAGES));
+      if (imageFiles.length > availableSlots) {
+        setMessage({ type: "error", text: "最多上传 5 张图片，超出的图片没有上传。" });
+      }
+    } catch (currentError) {
+      setMessage({ type: "error", text: currentError instanceof Error ? currentError.message : "图片上传失败。" });
+    } finally {
+      setUploadingEvidence(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [uploadedEvidence.length]);
+
+  function handleFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    void uploadEvidenceFiles(Array.from(event.target.files || []));
+  }
+
+  function handleEvidencePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file && file.type.startsWith("image/")));
+    if (!files.length) return;
+
+    void uploadEvidenceFiles(files);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setMessage(null);
 
+    if (requiresEvidence && !hasEvidence) {
+      setMessage({ type: "error", text: "这类反馈需要补充图片、链接或较完整说明，方便后台判断是否下架。" });
+      setLoading(false);
+      return;
+    }
+
     try {
+      const evidenceUrls = [
+        ...extractEvidenceUrls(evidenceText),
+        ...uploadedEvidence.map((item) => item.url),
+      ];
       const response = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -955,7 +1057,7 @@ export function OfferFeedbackDialog({
           reason,
           userExpectedAction,
           evidenceText: evidenceText || null,
-          evidenceUrls: extractEvidenceUrls(evidenceText),
+          evidenceUrls,
           notes: notes || null,
           contact: contact || null,
           website: "",
@@ -1033,16 +1135,63 @@ export function OfferFeedbackDialog({
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[#5a6061]">证据链接或说明（可选）</span>
+            <span className="mb-1 block text-xs font-medium text-[#5a6061]">
+              证据链接或说明{requiresEvidence ? "（必填）" : "（可选）"}
+            </span>
             <textarea
               value={evidenceText}
               onChange={(event) => setEvidenceText(event.target.value)}
+              onPaste={handleEvidencePaste}
               rows={3}
               maxLength={1000}
-              placeholder="可粘贴截图链接、订单页、聊天记录链接，或说明你看到的证据。"
+              placeholder="可粘贴截图、截图链接、订单页、聊天记录链接，或说明你看到的证据。"
               className="w-full resize-y rounded-lg border border-[#adb3b4]/40 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#2d3435]"
             />
           </label>
+          <div className="rounded-lg border border-[#adb3b4]/25 bg-[#f7f9f9] px-3 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold text-[#2d3435]">图片证据</p>
+                <p className="mt-1 text-xs leading-5 text-[#5a6061]">支持 PNG、JPG、WebP，单张 4MB 内；电脑端也可以直接粘贴截图。</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingEvidence || uploadedEvidence.length >= FEEDBACK_EVIDENCE_MAX_IMAGES}
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-3 text-xs font-semibold text-[#2d3435] ring-1 ring-[#adb3b4]/30 transition hover:bg-[#eef1f1] disabled:opacity-60"
+              >
+                {uploadingEvidence ? <Loader2 size={14} className="animate-spin" /> : <ImageUp size={14} />}
+                上传图片
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                className="hidden"
+                onChange={handleFileInputChange}
+              />
+            </div>
+            {uploadedEvidence.length ? (
+              <div className="mt-3 grid gap-2">
+                {uploadedEvidence.map((item) => (
+                  <div key={item.url} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 text-xs text-[#5a6061] ring-1 ring-[#adb3b4]/20">
+                    <span className="min-w-0 truncate">
+                      {item.name} · {formatFileSize(item.size)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setUploadedEvidence((current) => current.filter((evidence) => evidence.url !== item.url))}
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#7a8587] transition hover:bg-[#f2f4f4] hover:text-[#9b3328]"
+                      aria-label={`移除图片证据 ${item.name}`}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <label className="hidden">
             Website
             <input tabIndex={-1} autoComplete="off" name="website" />
@@ -1079,10 +1228,10 @@ export function OfferFeedbackDialog({
           ) : null}
           <button
             type="submit"
-            disabled={loading || message?.type === "success"}
+            disabled={loading || uploadingEvidence || message?.type === "success"}
             className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#2d3435] px-4 text-sm font-semibold text-white transition hover:bg-[#202829] disabled:opacity-60"
           >
-            {message?.type === "success" ? "已提交" : loading ? "提交中..." : "提交反馈"}
+            {message?.type === "success" ? "已提交" : loading ? "提交中..." : uploadingEvidence ? "图片上传中..." : "提交反馈"}
           </button>
         </form>
       </div>
@@ -1110,6 +1259,16 @@ const expectedActionOptions = [
 function extractEvidenceUrls(value: string): string[] {
   const matches = value.match(/https?:\/\/[^\s"'<>，。；、]+/g) || [];
   return Array.from(new Set(matches)).slice(0, 10);
+}
+
+function needsHighRiskEvidence(reason: string, userExpectedAction: string): boolean {
+  return reason === "fraud" || reason === "bad_source" || userExpectedAction === "hide_offer" || userExpectedAction === "hide_source";
+}
+
+function formatFileSize(size: number): string {
+  if (!Number.isFinite(size) || size <= 0) return "未知大小";
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)}MB`;
+  return `${Math.max(1, Math.round(size / 1024))}KB`;
 }
 
 function isOfferAvailable(offer: RawOffer): boolean {

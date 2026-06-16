@@ -1,11 +1,12 @@
 export const OFFER_FILTER_TAG_GROUPS = {
+  access: "交付方式",
   proxy: "反代能力",
   warranty: "质保",
 } as const;
 
 export type OfferFilterTagGroup = keyof typeof OFFER_FILTER_TAG_GROUPS;
 
-export type OfferFilterTagId = "proxy_supported" | "warranty_long";
+export type OfferFilterTagId = "shared_access" | "proxy_supported" | "warranty_long";
 
 export type OfferFilterTagDefinition = {
   id: OfferFilterTagId;
@@ -19,6 +20,12 @@ export type OfferFilterTagFacet = OfferFilterTagDefinition & {
 };
 
 export const OFFER_FILTER_TAGS: OfferFilterTagDefinition[] = [
+  {
+    id: "shared_access",
+    label: "拼车/团购",
+    group: "access",
+    description: "多人共享、拼车、团购、车位或合租类报价。",
+  },
   {
     id: "proxy_supported",
     label: "可反代",
@@ -68,6 +75,10 @@ export function deriveOfferFilterTags(input: {
 
   if (!hasUnsupportedProxySignal(text) && hasSupportedProxySignal(text)) {
     output.add("proxy_supported");
+  }
+
+  if (!hasSharedAccessNegativeSignal(text) && hasSharedAccessSignal(text)) {
+    output.add("shared_access");
   }
 
   if (!hasNoWarrantySignal(text) && !hasShortWarrantySignal(text) && !hasFirstLoginWarrantySignal(text) && hasLongWarrantySignal(text)) {
@@ -122,6 +133,14 @@ function hasUnsupportedProxySignal(text: string): boolean {
 
 function hasSupportedProxySignal(text: string): boolean {
   return /可反代|支持反代|反代\+?codex|可用codex|支持codex|直接登录codex|sub2|cpa|api格式|json格式|json文件|sub格式|cpa格式/.test(text);
+}
+
+function hasSharedAccessNegativeSignal(text: string): boolean {
+  return /非拼车|不是拼车|不拼车|无拼车|拒绝拼车|非团购|不是团购|不团购|非共享|不是共享|不共享|无共享|非合租|不是合租|不合租|非车位|不是车位|独享|独立|一人一号|一人一户|专享/.test(text);
+}
+
+function hasSharedAccessSignal(text: string): boolean {
+  return /拼车|团购|拼团|车位|共享|多人共享|多人共用|合租|共用|共享号|车友|车队|家庭车|团号|团购车|拼车位|共享车/.test(text);
 }
 
 function hasNoWarrantySignal(text: string): boolean {

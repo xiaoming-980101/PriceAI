@@ -10,6 +10,7 @@ import {
 } from "./collector-registry";
 import { pruneOperationalLogs } from "./operational-logs";
 import { safeFetch } from "./safe-fetch";
+import { isFeedbackEvidenceReference } from "./feedback-evidence";
 import { getSupabaseServerClient } from "./supabase";
 import type {
   ChannelSubmission,
@@ -1088,7 +1089,7 @@ function sanitizeFeedbackEvidenceUrls(value: string[]): string[] {
     .filter((item) => {
       try {
         const url = new URL(item);
-        return url.protocol === "http:" || url.protocol === "https:";
+        return url.protocol === "http:" || url.protocol === "https:" || isFeedbackEvidenceReference(item);
       } catch {
         return false;
       }

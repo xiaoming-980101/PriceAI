@@ -2,7 +2,7 @@ import "server-only";
 
 import { ADMIN_MANUAL_HIDE_REASON_PREFIX, listOfferFeedback, listSiteFeedback, listSubmissions } from "./admin";
 import { notifyOperationalIssue } from "./alerts";
-import { buildProductGroups, canonicalCatalog, comparePlatformOrder, resolveOfferProduct } from "./catalog";
+import { buildProductGroups, canonicalCatalog, comparePlatformOrder, isSharedAccessOffer, resolveOfferProduct } from "./catalog";
 import { isSupabaseConfigured } from "./env";
 import { getApiModelAdminData } from "./api-models-db";
 import { normalizeCollectorKind } from "./collector-registry";
@@ -1948,6 +1948,9 @@ function isOfferAvailableForPublicList(offer: RawOffer): boolean {
 function comparePublicOffers(a: RawOffer, b: RawOffer): number {
   const availableDelta = Number(isOfferAvailableForPublicList(b)) - Number(isOfferAvailableForPublicList(a));
   if (availableDelta !== 0) return availableDelta;
+
+  const sharedAccessDelta = Number(isSharedAccessOffer(a)) - Number(isSharedAccessOffer(b));
+  if (isOfferAvailableForPublicList(a) && isOfferAvailableForPublicList(b) && sharedAccessDelta !== 0) return sharedAccessDelta;
 
   const priceDelta = (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER);
   if (priceDelta !== 0) return priceDelta;

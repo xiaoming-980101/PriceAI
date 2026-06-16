@@ -3851,18 +3851,9 @@ function OfferFeedbackList({
                     <p className="font-semibold text-[#2d3435]">证据</p>
                     {item.evidenceText ? <p className="mt-1 whitespace-pre-wrap break-words">{item.evidenceText}</p> : null}
                     {item.evidenceUrls.length ? (
-                      <div className="mt-1 space-y-1">
+                      <div className="mt-2 space-y-2">
                         {item.evidenceUrls.map((url) => (
-                          <a
-                            key={url}
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex max-w-full items-center gap-1 break-all text-[#47657a] hover:text-[#2d3435]"
-                          >
-                            <span className="break-all">{url}</span>
-                            <ExternalLink size={12} className="shrink-0" />
-                          </a>
+                          <FeedbackEvidenceLink key={url} url={url} />
                         ))}
                       </div>
                     ) : null}
@@ -4132,6 +4123,46 @@ function FeedbackFact({
       <p className={`mt-1 truncate text-sm ${strong ? "font-semibold" : "font-medium"} ${toneClass}`}>{value}</p>
     </div>
   );
+}
+
+function FeedbackEvidenceLink({ url }: { url: string }) {
+  if (isFeedbackEvidenceImageReference(url)) {
+    const imageUrl = `/api/admin/feedback-evidence?ref=${encodeURIComponent(url)}`;
+    return (
+      <a
+        href={imageUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group inline-flex max-w-full items-center gap-3 rounded-md bg-white px-2 py-2 text-[#47657a] ring-1 ring-[#adb3b4]/20 transition hover:text-[#2d3435] hover:ring-[#adb3b4]/35"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt="用户上传的图片证据"
+          className="h-16 w-24 shrink-0 rounded object-cover ring-1 ring-[#adb3b4]/20"
+          loading="lazy"
+        />
+        <span className="min-w-0 truncate text-xs font-semibold">图片证据</span>
+        <ExternalLink size={12} className="shrink-0 opacity-70 transition group-hover:opacity-100" />
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex max-w-full items-center gap-1 break-all text-[#47657a] hover:text-[#2d3435]"
+    >
+      <span className="break-all">{url}</span>
+      <ExternalLink size={12} className="shrink-0" />
+    </a>
+  );
+}
+
+function isFeedbackEvidenceImageReference(url: string): boolean {
+  return url.startsWith("r2://feedback-evidence/");
 }
 
 function EmptyState({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
