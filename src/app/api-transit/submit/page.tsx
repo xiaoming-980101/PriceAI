@@ -119,7 +119,7 @@ export default function ApiTransitSubmitPage() {
               商业关系披露
             </h2>
             <p className="mt-2 text-sm leading-7 text-[#5a6061]">
-              入驻、返佣、广告或合作关系会单独披露，不会直接等同于客观排名。默认排序仍以价格、稳定性、样本数和资料完整度为主。
+              入驻、AFF、广告或合作关系会单独披露，不会直接等同于客观排名。默认排序仍以价格、稳定性、样本数和资料完整度为主。
             </p>
           </div>
         </section>

@@ -21,3 +21,24 @@ npm run deploy:production
 npm run deploy:production -- --check
 ```
 <!-- END:priceai-deploy-rules -->
+
+<!-- BEGIN:priceai-db-migration-rules -->
+# PriceAI 数据库迁移默认交给 Supabase GitHub Integration
+
+生产数据库迁移由 Supabase Dashboard 的 GitHub Integration 管理：repo 为 `physics-dimension/PriceAI`，working directory 为 `.`，production branch 为 `main`。`supabase/migrations/*.sql` 合入 `main` 后，由 Supabase 集成负责应用到生产项目。
+
+不要默认把 `supabase db push` 加回 `.github/workflows/deploy-cloudflare-worker.yml`，也不要让 Cloudflare Workers/OpenNext 发布流程依赖本机或 GitHub Actions 里的 `SUPABASE_ACCESS_TOKEN`、`SUPABASE_DB_PASSWORD` 来做生产迁移。除非用户明确要求替换 Supabase GitHub Integration，否则 Cloudflare workflow 只负责站点部署。
+
+涉及 migration 的发布完成后，要同时确认 Supabase GitHub Integration / checks 状态，以及生产 API 的真实行为。优先验证相关业务端点，例如：
+
+```bash
+curl -I https://priceai.cc/api/explorer
+curl https://priceai.cc/api/explorer
+```
+
+如果本机 `git push` 或 GitHub HTTPS 连接超时，可显式走本机代理：
+
+```bash
+HTTPS_PROXY=http://127.0.0.1:7897 HTTP_PROXY=http://127.0.0.1:7897 git push origin main
+```
+<!-- END:priceai-db-migration-rules -->

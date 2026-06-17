@@ -15,6 +15,27 @@ export type ApiTransitProbeStatus = "pending" | "public_pricing_found" | "needs_
 export type ApiTransitParseStatus = "pending" | "parsed" | "failed";
 export type ApiTransitRunStatus = "success" | "partial" | "failed";
 
+export type ApiTransitCommercialOffer = {
+  id: string;
+  type: "coupon" | "affiliate" | "sponsored";
+  title: string;
+  description: string | null;
+  code: string | null;
+  url: string | null;
+  validUntil: string | null;
+  disclosure: string | null;
+  enabled: boolean;
+};
+
+export type ApiTransitVerificationEvent = {
+  id: string;
+  source: "priceai" | "official" | "user" | "merchant";
+  status: "success" | "warning" | "failed" | "info";
+  title: string;
+  description: string | null;
+  happenedAt: string;
+};
+
 export type ApiTransitAdminStation = {
   id: string;
   slug: string;
@@ -22,6 +43,7 @@ export type ApiTransitAdminStation = {
   websiteUrl: string;
   apiBaseUrl: string | null;
   pricingUrl: string | null;
+  monitorUrl: string | null;
   status: ApiTransitStationStatus;
   sourceType: string;
   commercialRelation: string;
@@ -43,6 +65,10 @@ export type ApiTransitAdminStation = {
   lastUpdatedAt: string | null;
   published: boolean;
   adminNote: string | null;
+  strengths: string[];
+  cautions: string[];
+  commercialOffers: ApiTransitCommercialOffer[];
+  verificationEvents: ApiTransitVerificationEvent[];
   createdAt: string;
   updatedAt: string | null;
   offerCount: number;
@@ -68,6 +94,10 @@ export type ApiTransitAdminOffer = {
   outputPrice: number | null;
   cacheReadPrice: number | null;
   cacheWritePrice: number | null;
+  inputUnitPriceUsd: number | null;
+  outputUnitPriceUsd: number | null;
+  cacheReadUnitPriceUsd: number | null;
+  cacheWriteUnitPriceUsd: number | null;
   currency: string;
   accountPool: string;
   channelType: string;
@@ -96,6 +126,10 @@ export type ApiTransitOfferCandidate = {
   outputPrice: number | null;
   cacheReadPrice: number | null;
   cacheWritePrice: number | null;
+  inputUnitPriceUsd: number | null;
+  outputUnitPriceUsd: number | null;
+  cacheReadUnitPriceUsd: number | null;
+  cacheWriteUnitPriceUsd: number | null;
   currency: string;
   accountPool: string;
   channelType: string;

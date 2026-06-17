@@ -10,6 +10,7 @@ import { getSupabaseServerClient } from "@/lib/supabase";
 
 let cached: TransitStation[] | null = null;
 let cachedAt = 0;
+let hasWarnedMissingEnhancementColumns = false;
 const CACHE_TTL_MS = 30_000;
 
 export function clearTransitStationsCache(): void {
@@ -34,6 +35,7 @@ export async function getTransitStationBySlug(slug: string): Promise<TransitStat
 async function readStationsFromSupabase(): Promise<TransitStation[]> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return seedStations;
+  const client = supabase;
 
   try {
     const [stationsResult, offersResult] = await Promise.all([
@@ -111,6 +113,14 @@ async function readStationsFromSupabase(): Promise<TransitStation[]> {
 
     const stationRows = dbRows(stationsResult.data);
     if (!stationRows.length) return [];
+    const stationIds = stationRows.map((row) => stringValue(row.id)).filter(Boolean);
+    const enhancementRows = await readStationEnhancementRows();
+    const availabilityWindows = await readAvailabilityWindows(stationIds);
+    const enhancementsByStation = new Map<string, DbRow>();
+    for (const row of enhancementRows) {
+      const id = stringValue(row.id);
+      if (id) enhancementsByStation.set(id, row);
+    }
 
     const offersByStation = new Map<string, DbRow[]>();
     for (const offer of dbRows(offersResult.data)) {
@@ -119,24 +129,117 @@ async function readStationsFromSupabase(): Promise<TransitStation[]> {
       offersByStation.set(stationId, [...(offersByStation.get(stationId) || []), offer]);
     }
 
-    return stationRows.map((row) => mapStationRow(row, offersByStation.get(stringValue(row.id)) || []));
+    return stationRows.map((row) => {
+      const id = stringValue(row.id);
+      return mapStationRow(
+        row,
+        offersByStation.get(id) || [],
+        enhancementsByStation.get(id),
+        availabilityWindows.stations.get(id),
+        availabilityWindows.models
+      );
+    });
   } catch (error) {
     console.warn("Returning no API transit stations because Supabase read failed:", error);
     return [];
   }
+
+  async function readStationEnhancementRows(): Promise<DbRow[]> {
+    try {
+      const { data, error } = await client
+        .from("api_transit_stations")
+        .select(
+          [
+            "id",
+            "monitor_url",
+            "strengths",
+            "cautions",
+            "commercial_offers",
+            "verification_events",
+          ].join(",")
+        )
+        .eq("published", true);
+      if (error) throw error;
+      return dbRows(data);
+    } catch (error) {
+      if (!isMissingColumnError(error) && !hasWarnedMissingEnhancementColumns) {
+        hasWarnedMissingEnhancementColumns = true;
+        console.warn("API transit station enhancement columns are unavailable:", error);
+      }
+      return [];
+    }
+  }
+
+  async function readAvailabilityWindows(stationIds: string[]): Promise<{
+    stations: Map<string, AvailabilityWindow>;
+    models: Map<string, AvailabilityWindow>;
+  }> {
+    const stations = new Map<string, AvailabilityWindow>();
+    const models = new Map<string, AvailabilityWindow>();
+    if (!stationIds.length) return { stations, models };
+
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await client
+      .from("api_transit_detection_runs")
+      .select("station_id,started_at,finished_at,raw_snapshot")
+      .in("station_id", stationIds)
+      .eq("run_type", "api_probe")
+      .gte("started_at", since)
+      .order("started_at", { ascending: true })
+      .limit(1000);
+
+    if (error) throw error;
+
+    for (const row of dbRows(data)) {
+      const stationId = stringValue(row.station_id);
+      if (!stationId) continue;
+      const checkedAt = nullableTimestamp(row.finished_at || row.started_at);
+      if (!checkedAt) continue;
+
+      const snapshot = row.raw_snapshot && typeof row.raw_snapshot === "object" ? row.raw_snapshot as DbRow : {};
+      const targetResults = Array.isArray(snapshot.targetResults) ? snapshot.targetResults : [];
+      const targetSamples = targetResults.filter(isTargetAvailabilitySample);
+
+      if (targetSamples.length) {
+        for (const item of targetSamples) {
+          mergeWindow(stations, stationId, checkedAt);
+          const standardModel = standardModelValue((item as DbRow).standardModel);
+          if (standardModel) mergeWindow(models, modelWindowKey(stationId, standardModel), checkedAt);
+        }
+        continue;
+      }
+
+      const modelList = snapshot.modelList;
+      if (modelList && typeof modelList === "object") mergeWindow(stations, stationId, checkedAt);
+    }
+
+    return { stations, models };
+  }
 }
 
 type DbRow = Record<string, unknown>;
+type AvailabilityWindow = {
+  firstCheckedAt: string | null;
+  lastCheckedAt: string | null;
+};
 
-function mapStationRow(row: DbRow, offerRows: DbRow[]): TransitStation {
+function mapStationRow(
+  row: DbRow,
+  offerRows: DbRow[],
+  enhancementRow?: DbRow,
+  stationWindow?: AvailabilityWindow,
+  modelWindows?: Map<string, AvailabilityWindow>
+): TransitStation {
   const id = stringValue(row.id);
   const updatedAt = timestampValue(row.last_updated_at || row.updated_at);
+  const enhancement = enhancementRow || {};
 
   return {
     id,
     slug: stringValue(row.slug) || id,
     name: stringValue(row.name) || id,
     websiteUrl: stringValue(row.website_url),
+    monitorUrl: nullableString(enhancement.monitor_url),
     collectorKind: nullableString(row.collector_kind),
     status: stationStatus(row.status),
     sourceType: sourceType(row.source_type),
@@ -156,10 +259,11 @@ function mapStationRow(row: DbRow, offerRows: DbRow[]): TransitStation {
     availability: {
       sevenDayRate: numberValue(row.availability_seven_day_rate),
       sevenDaySamples: integerValue(row.availability_seven_day_samples) || 0,
+      firstCheckedAt: stationWindow?.firstCheckedAt ?? null,
       lastCheckedAt: nullableTimestamp(row.availability_last_checked_at),
       note: nullableString(row.availability_note) || undefined,
     },
-    prices: offerRows.map(mapOfferRow).filter((price): price is TransitModelPrice => Boolean(price)),
+    prices: offerRows.map((offer) => mapOfferRow(offer, modelWindows)).filter((price): price is TransitModelPrice => Boolean(price)),
     feedback: {
       pendingCount: integerValue(row.feedback_pending_count) || 0,
       verifiedRiskCount: integerValue(row.feedback_verified_risk_count) || 0,
@@ -167,13 +271,19 @@ function mapStationRow(row: DbRow, offerRows: DbRow[]): TransitStation {
       mainThemes: stringArray(row.feedback_main_themes),
       publicNotes: nullableString(row.feedback_public_notes),
     },
+    strengths: stringArray(enhancement.strengths),
+    cautions: stringArray(enhancement.cautions),
+    commercialOffers: commercialOffers(enhancement.commercial_offers),
+    verificationEvents: verificationEvents(enhancement.verification_events),
   };
 }
 
-function mapOfferRow(row: DbRow): TransitModelPrice | null {
+function mapOfferRow(row: DbRow, modelWindows?: Map<string, AvailabilityWindow>): TransitModelPrice | null {
   const family = modelFamily(row.family);
   const standardModel = standardModelValue(row.standard_model);
   if (!family || !standardModel) return null;
+  const stationId = stringValue(row.station_id);
+  const window = modelWindows?.get(modelWindowKey(stationId, standardModel));
 
   return {
     family,
@@ -193,6 +303,7 @@ function mapOfferRow(row: DbRow): TransitModelPrice | null {
     availability: {
       sevenDayRate: numberValue(row.availability_seven_day_rate),
       sevenDaySamples: integerValue(row.availability_seven_day_samples) || 0,
+      firstCheckedAt: window?.firstCheckedAt ?? null,
       lastCheckedAt: nullableTimestamp(row.availability_last_checked_at),
       note: nullableString(row.availability_note) || undefined,
     },
@@ -201,6 +312,15 @@ function mapOfferRow(row: DbRow): TransitModelPrice | null {
 
 function dbRows(value: unknown): DbRow[] {
   return Array.isArray(value) ? value.filter((item): item is DbRow => Boolean(item && typeof item === "object")) : [];
+}
+
+function isMissingColumnError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "42703"
+  );
 }
 
 function stringValue(value: unknown): string {
@@ -236,10 +356,73 @@ function nullableTimestamp(value: unknown): string | null {
   return text;
 }
 
+function mergeWindow(windows: Map<string, AvailabilityWindow>, key: string, checkedAt: string): void {
+  const existing = windows.get(key);
+  if (!existing) {
+    windows.set(key, { firstCheckedAt: checkedAt, lastCheckedAt: checkedAt });
+    return;
+  }
+
+  windows.set(key, {
+    firstCheckedAt: !existing.firstCheckedAt || checkedAt < existing.firstCheckedAt ? checkedAt : existing.firstCheckedAt,
+    lastCheckedAt: !existing.lastCheckedAt || checkedAt > existing.lastCheckedAt ? checkedAt : existing.lastCheckedAt,
+  });
+}
+
+function modelWindowKey(stationId: string, standardModel: string): string {
+  return `${stationId}::${standardModel}`;
+}
+
+function isTargetAvailabilitySample(item: unknown): item is DbRow {
+  return Boolean(item && typeof item === "object" && !Array.isArray(item) && typeof (item as DbRow).ok === "boolean");
+}
+
 function stringArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((item) => stringValue(item).trim()).filter(Boolean);
   if (typeof value === "string") return value.split(/[,，\n|｜]+/).map((item) => item.trim()).filter(Boolean);
   return [];
+}
+
+function objectArray(value: unknown): DbRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is DbRow => Boolean(item && typeof item === "object" && !Array.isArray(item)));
+}
+
+function commercialOffers(value: unknown): NonNullable<TransitStation["commercialOffers"]> {
+  return objectArray(value).map((item, index) => ({
+    id: nullableString(item.id) || `offer-${index}`,
+    type: commercialOfferType(item.type),
+    title: stringValue(item.title) || "可用优惠",
+    description: nullableString(item.description),
+    code: nullableString(item.code),
+    url: nullableString(item.url),
+    validUntil: nullableString(item.validUntil || item.valid_until),
+    disclosure: nullableString(item.disclosure),
+    enabled: item.enabled === undefined ? true : Boolean(item.enabled),
+  })).filter((item) => item.title);
+}
+
+function verificationEvents(value: unknown): NonNullable<TransitStation["verificationEvents"]> {
+  return objectArray(value).map((item, index) => ({
+    id: nullableString(item.id) || `event-${index}`,
+    source: verificationEventSource(item.source),
+    status: verificationEventStatus(item.status),
+    title: stringValue(item.title) || "核验记录",
+    description: nullableString(item.description),
+    happenedAt: timestampValue(item.happenedAt || item.happened_at),
+  })).filter((item) => item.title);
+}
+
+function commercialOfferType(value: unknown): NonNullable<TransitStation["commercialOffers"]>[number]["type"] {
+  return value === "affiliate" || value === "sponsored" || value === "coupon" ? value : "coupon";
+}
+
+function verificationEventSource(value: unknown): NonNullable<TransitStation["verificationEvents"]>[number]["source"] {
+  return value === "official" || value === "user" || value === "merchant" || value === "priceai" ? value : "priceai";
+}
+
+function verificationEventStatus(value: unknown): NonNullable<TransitStation["verificationEvents"]>[number]["status"] {
+  return value === "warning" || value === "failed" || value === "info" || value === "success" ? value : "info";
 }
 
 function enumArray<T extends string>(value: unknown, guard: (value: string) => value is T): T[] {
@@ -306,6 +489,7 @@ function isTransitChannelType(value: string): value is TransitModelPrice["channe
     "official_api",
     "cloud",
     "first_party_pool",
+    "reverse_engineered",
     "first_party_wholesale",
     "reseller",
     "mixed",
@@ -319,6 +503,7 @@ function isTransitAccountPool(value: string): value is TransitModelPrice["accoun
     "plus",
     "max",
     "team",
+    "kiro",
     "enterprise",
     "official_api",
     "mixed",

@@ -15,6 +15,7 @@ const defaultOutPath = path.join(repoRoot, "data", "api-transit", "latest-public
 const userAgent = "Mozilla/5.0 PriceAI/1.0 APITransitCollector";
 const DEFAULT_TIMEOUT_MS = 20000;
 const DEFAULT_RECHARGE_RATIO = "1:1";
+const NEW_API_USD_UNIT_PRICE_FACTOR = 2;
 const officialTransitPrices = {
   "Claude Sonnet 4.6": { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
   "Claude Opus 4.6": { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
@@ -312,6 +313,8 @@ function buildOfferRow(source, item, group, standard, collectedAt) {
     raw_payload: {
       model: item,
       group,
+      unit_prices_usd: splitMultipliers.unitPricesUsd || null,
+      multiplier_basis: splitMultipliers.basis || "unknown",
     },
   };
 }
@@ -335,6 +338,24 @@ function getSplitMultipliers(item, group, standard, groupMultiplier) {
 
   const modelRatio = group.modelRatio;
   if (modelRatio === null || modelRatio <= 0) return null;
+
+  const unitPricesUsd = getNewApiUnitPricesUsd(group, groupMultiplier);
+  if (official && unitPricesUsd.input !== null) {
+    const input = unitRatioValue(unitPricesUsd.input, official.input);
+    const output = unitRatioValue(unitPricesUsd.output, official.output);
+    const cacheRead = unitRatioValue(unitPricesUsd.cacheRead, official.cacheRead);
+    const cacheWrite = unitRatioValue(unitPricesUsd.cacheWrite, official.cacheWrite);
+    return {
+      model: input ?? output ?? cacheRead ?? cacheWrite,
+      input,
+      output,
+      cacheRead,
+      cacheWrite,
+      unitPricesUsd,
+      basis: "new_api_usd_per_million",
+    };
+  }
+
   const input = modelRatio * groupMultiplier;
   return {
     model: input,
@@ -342,12 +363,29 @@ function getSplitMultipliers(item, group, standard, groupMultiplier) {
     output: group.completionRatio === null ? null : input * group.completionRatio,
     cacheRead: group.cacheRatio === null ? null : input * group.cacheRatio,
     cacheWrite: group.createCacheRatio === null ? null : input * group.createCacheRatio,
+    unitPricesUsd: null,
+    basis: "legacy_multiplier",
   };
 }
 
 function ratioValue(value, officialValue, groupMultiplier) {
   if (value === null || officialValue === null || officialValue <= 0) return null;
   return (value * groupMultiplier) / officialValue;
+}
+
+function unitRatioValue(value, officialValue) {
+  if (value === null || officialValue === null || officialValue <= 0) return null;
+  return value / officialValue;
+}
+
+function getNewApiUnitPricesUsd(group, groupMultiplier) {
+  const input = group.modelRatio * NEW_API_USD_UNIT_PRICE_FACTOR * groupMultiplier;
+  return {
+    input,
+    output: group.completionRatio === null ? null : input * group.completionRatio,
+    cacheRead: group.cacheRatio === null ? null : input * group.cacheRatio,
+    cacheWrite: group.createCacheRatio === null ? null : input * group.createCacheRatio,
+  };
 }
 
 function parseBillingExpression(value) {
@@ -392,11 +430,15 @@ function standardizeModelName(name) {
   const value = String(name || "").toLowerCase();
   if (!value) return null;
 
-  if (value.includes("claude") && value.includes("sonnet")) return "Claude Sonnet 4.6";
+  if (value.includes("claude") && value.includes("sonnet")) {
+    if (matchesVersion(value, "4.6") || value.includes("4-6")) return "Claude Sonnet 4.6";
+    return null;
+  }
   if (value.includes("claude") && value.includes("opus")) {
     if (matchesVersion(value, "4.8") || value.includes("4-8")) return "Claude Opus 4.8";
     if (matchesVersion(value, "4.7") || value.includes("4-7")) return "Claude Opus 4.7";
-    return "Claude Opus 4.6";
+    if (matchesVersion(value, "4.6") || value.includes("4-6")) return "Claude Opus 4.6";
+    return null;
   }
 
   if (value.includes("gpt") || value.includes("codex") || value.includes("openai")) {

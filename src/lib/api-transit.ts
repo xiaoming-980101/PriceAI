@@ -1,8 +1,10 @@
 import type {
   TransitChannelType,
+  TransitCommercialOffer,
   TransitModelFamily,
   TransitModelPrice,
   TransitStation,
+  TransitVerificationEvent,
   TransitStationSystem,
 } from "@/data/api-transit/types";
 import {
@@ -19,6 +21,7 @@ const sourceChannelPriority: TransitChannelType[] = [
   "official_api",
   "cloud",
   "first_party_pool",
+  "reverse_engineered",
   "first_party_wholesale",
   "reseller",
   "mixed",
@@ -231,6 +234,7 @@ export type TransitFamilyRateSummary = {
   combinedRateMax: number | null;
   sevenDayRate: number | null;
   sevenDaySamples: number;
+  firstCheckedAt: string | null;
   lastCheckedAt: string | null;
 };
 
@@ -262,6 +266,12 @@ export function getFamilyRateSummary(
       .filter((value): value is string => Boolean(value))
       .sort()
       .at(-1) ?? null;
+  const firstCheckedAt =
+    prices
+      .map((price) => price.availability.firstCheckedAt)
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(0) ?? null;
 
   return {
     family,
@@ -273,6 +283,7 @@ export function getFamilyRateSummary(
     combinedRateMax: combinedRates.length ? Math.max(...combinedRates) : null,
     sevenDayRate: weightedAvailability,
     sevenDaySamples: availabilitySamples,
+    firstCheckedAt,
     lastCheckedAt,
   };
 }
@@ -380,7 +391,7 @@ export function getTransitStationSystemLabel(station: TransitStation): string {
 export function getNormalizedSourceTags(
   station: TransitStation
 ): { id: string; label: string; tone: "neutral" | "warn" }[] {
-  const channelTypes = station.channelTypes.length ? station.channelTypes : ["undisclosed" as const];
+  const channelTypes = getEffectiveTransitChannelTypes(station);
   const primary = sourceChannelPriority.filter((type) => channelTypes.includes(type));
   const tags = primary.map((type) => ({
     id: `channel-${type}`,
@@ -398,7 +409,7 @@ export function getNormalizedSourceTags(
 export function getTransitReviewTags(
   station: TransitStation
 ): { id: string; label: string; tone: "warn" | "danger" | "neutral" }[] {
-  const disclosed = station.channelTypes.some((type) => type !== "undisclosed");
+  const disclosed = getEffectiveTransitChannelTypes(station).some((type) => type !== "undisclosed");
   const tags: { id: string; label: string; tone: "warn" | "danger" | "neutral" }[] = [];
 
   if (!disclosed) tags.push({ id: "undisclosed", label: "未披露", tone: "warn" });
@@ -410,6 +421,68 @@ export function getTransitReviewTags(
   return dedupeTags(tags);
 }
 
+export function getEffectiveTransitChannelTypes(station: TransitStation): TransitChannelType[] {
+  const inferred: TransitChannelType[] = [];
+  if (station.accountPools.some((pool) => pool === "plus" || pool === "pro" || pool === "max" || pool === "team")) {
+    inferred.push("first_party_pool");
+  }
+  if (station.accountPools.includes("kiro")) {
+    inferred.push("reverse_engineered");
+  }
+
+  const explicit = station.channelTypes.filter((type) => type !== "undisclosed");
+  const merged = dedupeValues([...explicit, ...inferred]);
+  return merged.length ? merged : ["undisclosed"];
+}
+
+export function getActiveTransitCommercialOffers(
+  station: TransitStation
+): TransitCommercialOffer[] {
+  return (station.commercialOffers || []).filter((offer) => offer.enabled);
+}
+
+export function getPrimaryTransitCommercialOffer(
+  station: TransitStation
+): TransitCommercialOffer | null {
+  const offers = getActiveTransitCommercialOffers(station);
+  return offers.find((offer) => offer.type === "coupon") ?? offers[0] ?? null;
+}
+
+export function getTransitVerificationEvents(
+  station: TransitStation
+): TransitVerificationEvent[] {
+  const events = station.verificationEvents || [];
+  if (events.length) {
+    return [...events].sort((left, right) =>
+      new Date(right.happenedAt).getTime() - new Date(left.happenedAt).getTime()
+    );
+  }
+
+  const fallbackEvents: TransitVerificationEvent[] = [];
+  if (station.availability.lastCheckedAt) {
+    fallbackEvents.push({
+      id: `${station.id}-availability`,
+      source: "priceai",
+      status: station.availability.sevenDayRate === null ? "warning" : "success",
+      title: "可用性样本已记录",
+      description: station.availability.note ?? null,
+      happenedAt: station.availability.lastCheckedAt,
+    });
+  }
+  if (station.lastUpdatedAt) {
+    fallbackEvents.push({
+      id: `${station.id}-updated`,
+      source: "priceai",
+      status: station.dataStatus === "verified" ? "success" : "info",
+      title: `资料状态：${station.dataStatus === "verified" ? "已核验" : "待继续核验"}`,
+      description: station.feedback.publicNotes,
+      happenedAt: station.lastUpdatedAt,
+    });
+  }
+
+  return fallbackEvents;
+}
+
 function dedupeTags<T extends { id: string; label: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   return items.filter((item) => {
@@ -418,6 +491,10 @@ function dedupeTags<T extends { id: string; label: string }>(items: T[]): T[] {
     seen.add(key);
     return true;
   });
+}
+
+function dedupeValues<T extends string>(items: T[]): T[] {
+  return Array.from(new Set(items));
 }
 
 export function compareStations(

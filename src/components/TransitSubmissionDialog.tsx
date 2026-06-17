@@ -281,6 +281,12 @@ function MerchantFields() {
         <Field label="公开监测页">
           <input className={fieldClassName} name="monitorUrl" placeholder="https://example.com/status" type="url" />
         </Field>
+        <Field label="用户优惠码">
+          <input className={fieldClassName} name="couponCode" placeholder="例如 PRICEAI / 首充折扣码" />
+        </Field>
+        <Field label="优惠 / AFF 链接">
+          <input className={fieldClassName} name="commercialUrl" placeholder="https://example.com/register?aff=..." type="url" />
+        </Field>
       </div>
       <AccessModeSection accessMode={accessMode} onChange={setAccessMode} />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -315,6 +321,13 @@ function MerchantFields() {
           name="groupPricingNotes"
           className={`${fieldClassName} min-h-24 resize-y py-2 leading-6`}
           placeholder="例如充值 1:1；GPT Plus 0.30x，GPT Pro 0.40x；Claude Code / AWS / 官方池分别是什么倍率"
+        />
+      </Field>
+      <Field label="优惠和商业关系说明">
+        <textarea
+          name="commercialNotes"
+          className={`${fieldClassName} min-h-20 resize-y py-2 leading-6`}
+          placeholder="例如首充 9 折、AFF 比例、是否愿意公开标注赞助 / AFF"
         />
       </Field>
       <Field label="补充说明">
@@ -414,6 +427,7 @@ function TestKeyFields() {
           <input className={fieldClassName} name="credentialAllowedModelsText" placeholder="例如 GPT 5.5, Claude Opus 4.8" />
         </Field>
       </div>
+      <CredentialScopeFields />
       <CredentialSafetyConfirm label="我确认这是低额度专用测试 Key，不是主账号或长期高额度 Key。" />
     </div>
   );
@@ -442,6 +456,7 @@ function TestAccountFields() {
           <input className={fieldClassName} name="credentialAllowedModelsText" placeholder="例如只测 GPT 分组 / Claude 分组" />
         </Field>
       </div>
+      <CredentialScopeFields />
       <Field label="登录或创建 Key 说明">
         <textarea
           name="credentialNotes"
@@ -450,6 +465,29 @@ function TestAccountFields() {
         />
       </Field>
       <CredentialSafetyConfirm label="我确认这是专用测试账号，不是主账号；账号内只保留低额度测试余额。" />
+    </div>
+  );
+}
+
+function CredentialScopeFields() {
+  return (
+    <div className="grid grid-cols-1 gap-3 rounded-lg bg-[#f8fafa] p-3 md:grid-cols-2">
+      <Field label="Key 所属分组">
+        <input className={fieldClassName} name="credentialGroupName" placeholder="例如 gpt-pro号池 / kiro / Plus-经济通道" />
+      </Field>
+      <Field label="分组 ID（可选）">
+        <input className={fieldClassName} name="credentialGroupId" placeholder="例如 8 / 4" />
+      </Field>
+      <Field label="监测模型族">
+        <select className={fieldClassName} name="credentialFamily" defaultValue="">
+          <option value="">自动判断</option>
+          <option value="gpt">GPT</option>
+          <option value="claude">Claude</option>
+        </select>
+      </Field>
+      <Field label="号池标签">
+        <input className={fieldClassName} name="credentialAccountPool" placeholder="例如 Plus / Pro / Max / Kiro" />
+      </Field>
     </div>
   );
 }
@@ -538,12 +576,18 @@ function buildSubmissionPayload(mode: DialogMode, formData: FormData) {
     ...splitLooseList(get("credentialAllowedModelsText")),
     ...getAll("models"),
   ];
+  const credentialGroupName = get("credentialGroupName");
+  const credentialAllowedGroups = [
+    credentialGroupName,
+    ...splitLooseList(get("credentialAllowedGroupsText")),
+  ].filter(Boolean);
   const notes = [
     get("notes"),
     get("priceHint") ? `价格线索：${get("priceHint")}` : "",
     get("sourceHint") ? `来源：${get("sourceHint")}` : "",
     get("supplyScale") ? `供给规模：${get("supplyScale")}` : "",
     get("groupPricingNotes") ? `分组倍率说明：${get("groupPricingNotes")}` : "",
+    get("commercialNotes") ? `优惠/商业说明：${get("commercialNotes")}` : "",
   ].filter(Boolean).join("\n");
 
   return {
@@ -565,12 +609,20 @@ function buildSubmissionPayload(mode: DialogMode, formData: FormData) {
       commercialRule: get("commercialRule") || null,
       systemType: get("systemType") || null,
       monitorUrl: get("monitorUrl") || null,
+      couponCode: get("couponCode") || null,
+      commercialUrl: get("commercialUrl") || null,
+      commercialNotes: get("commercialNotes") || null,
       channelClaims: getAll("channelClaims"),
       groupPricingNotes: get("groupPricingNotes") || null,
       accessMode: mode === "merchant" ? accessMode : "public_only",
       credentialBudgetLimit: get("credentialBudgetLimit") || null,
       credentialExpiresAt: get("credentialExpiresAt") || null,
       credentialAllowedModels,
+      credentialAllowedGroups,
+      credentialGroupName: credentialGroupName || null,
+      credentialGroupId: get("credentialGroupId") || null,
+      credentialAccountPool: get("credentialAccountPool") || null,
+      credentialFamily: get("credentialFamily") || null,
       monitorBudgetLimit: get("monitorBudgetLimit") || null,
     },
   };
@@ -578,6 +630,7 @@ function buildSubmissionPayload(mode: DialogMode, formData: FormData) {
 
 function buildCredentialPayload(accessMode: AccessMode, formData: FormData, allowedModels: string[]) {
   const get = (name: string) => String(formData.get(name) || "").trim();
+  const groupName = get("credentialGroupName");
   if (accessMode === "public_only") return { accessMode };
 
   return {
@@ -590,6 +643,11 @@ function buildCredentialPayload(accessMode: AccessMode, formData: FormData, allo
     budgetLimit: get("credentialBudgetLimit") || undefined,
     expiresAt: get("credentialExpiresAt") || undefined,
     allowedModels,
+    allowedGroups: [groupName, ...splitLooseList(get("credentialAllowedGroupsText"))].filter(Boolean),
+    groupName: groupName || undefined,
+    groupId: get("credentialGroupId") || undefined,
+    accountPool: get("credentialAccountPool") || undefined,
+    family: get("credentialFamily") || undefined,
     notes: get("credentialNotes") || undefined,
   };
 }

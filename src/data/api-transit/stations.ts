@@ -10,6 +10,7 @@ export const seedStations: TransitStation[] = [
     sourceType: "manual_collected",
     commercialRelation: "listed",
     summary: "公开价格页较完整，Claude 与 GPT 线路分组清楚，展示可用率和延迟监控。当前作为价格口径样例，不代表推荐或担保。",
+    monitorUrl: "https://www.packyapi.com/status",
     channelTypes: ["cloud", "first_party_pool", "first_party_wholesale"],
     accountPools: ["pro", "max", "official_api"],
     paymentMethods: ["微信", "支付宝"],
@@ -36,6 +37,15 @@ export const seedStations: TransitStation[] = [
       price("gpt", "GPT 5.4", "gpt-lite 池", "1:1", 0.07, 0.18, 0.72, 0.018, null, "pro", "first_party_pool", 0.992, 126),
     ],
     feedback: feedback(0, 0, "价格页信息完整，适合后续作为入驻资料模板。"),
+    strengths: ["公开价格页较完整", "Claude / GPT 分组清楚", "支持公开监控"],
+    cautions: ["当前仍作为样例口径展示", "首次使用仍建议小额充值"],
+    commercialOffers: [
+      offer("packy-first", "coupon", "首充 9 折", "站点公开优惠示例，使用前请回原站确认。", "PRICEAI", "https://www.packyapi.com", null, "该优惠不代表 PriceAI 担保。"),
+    ],
+    verificationEvents: [
+      event("packy-price", "priceai", "success", "公开价格页已解析", "已收录 Claude / GPT 主流模型倍率。", "2026-06-15 10:40"),
+      event("packy-monitor", "official", "info", "发现公开监测入口", "后续可优先接入官方监测页。", "2026-06-15 10:30"),
+    ],
   },
   {
     id: "stn-saki",
@@ -114,6 +124,7 @@ export const seedStations: TransitStation[] = [
     sourceType: "merchant_submitted",
     commercialRelation: "partner",
     summary: "商家提交资料较完整，提供 Claude/GPT 分池说明和少量测试额度。可用性样本还不足，入驻关系需要前台明确披露。",
+    monitorUrl: "https://micuapi.ai/status",
     channelTypes: ["first_party_pool", "reseller"],
     accountPools: ["pro", "max", "mixed"],
     paymentMethods: ["微信", "支付宝", "USDT"],
@@ -138,6 +149,15 @@ export const seedStations: TransitStation[] = [
       price("gpt", "GPT 5.4", "GPT Pro 池", "1:1.2", 0.09, 0.24, 0.96, 0.024, null, "pro", "reseller", 0.969, 8),
     ],
     feedback: feedback(0, 0, "已提交入驻资料，等待更多样本验证。"),
+    strengths: ["商家资料较完整", "支持低门槛充值", "已说明部分 Claude / GPT 分池"],
+    cautions: ["可用性样本仍不足", "入驻关系需要前台披露", "部分线路来源仍需继续核验"],
+    commercialOffers: [
+      offer("micu-entry", "affiliate", "入驻站点优惠入口", "如站点提供首充码，可在后台补充后展示。", null, "https://micuapi.ai", null, "该站点为入驻关系，可能包含商业合作。"),
+    ],
+    verificationEvents: [
+      event("micu-merchant", "merchant", "info", "商家提交入驻资料", "提交了分组倍率、支付方式和测试额度说明。", "2026-06-15 11:00"),
+      event("micu-sample", "priceai", "warning", "样本量不足", "当前仅有少量探测样本，不作为强推荐依据。", "2026-06-15 11:05"),
+    ],
   },
   {
     id: "stn-kk",
@@ -288,5 +308,46 @@ function feedback(
     merchantRespondedCount: 0,
     mainThemes: pendingCount ? ["可用性", "售后", "价格变动"] : [],
     publicNotes,
+  };
+}
+
+function offer(
+  id: string,
+  type: NonNullable<TransitStation["commercialOffers"]>[number]["type"],
+  title: string,
+  description: string | null,
+  code: string | null,
+  url: string | null,
+  validUntil: string | null,
+  disclosure: string | null
+): NonNullable<TransitStation["commercialOffers"]>[number] {
+  return {
+    id,
+    type,
+    title,
+    description,
+    code,
+    url,
+    validUntil,
+    disclosure,
+    enabled: true,
+  };
+}
+
+function event(
+  id: string,
+  source: NonNullable<TransitStation["verificationEvents"]>[number]["source"],
+  status: NonNullable<TransitStation["verificationEvents"]>[number]["status"],
+  title: string,
+  description: string | null,
+  happenedAt: string
+): NonNullable<TransitStation["verificationEvents"]>[number] {
+  return {
+    id,
+    source,
+    status,
+    title,
+    description,
+    happenedAt,
   };
 }

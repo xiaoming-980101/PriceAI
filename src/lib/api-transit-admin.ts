@@ -1,11 +1,13 @@
 import "server-only";
 
+import { getOfficialTransitUnitPrice } from "@/lib/api-transit";
 import { clearTransitStationsCache } from "@/lib/api-transit-db";
 import type {
   ApiTransitAdminData,
   ApiTransitAdminLoadError,
   ApiTransitAdminMetrics,
   ApiTransitAdminOffer,
+  ApiTransitCommercialOffer,
   ApiTransitOfferCandidate,
   ApiTransitAdminRun,
   ApiTransitAdminStation,
@@ -20,6 +22,7 @@ import type {
   ApiTransitSubmissionReviewStatus,
   ApiTransitSubmissionType,
   ApiTransitUsageAdvice,
+  ApiTransitVerificationEvent,
 } from "@/lib/api-transit-admin-types";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getSupabaseServerClient } from "@/lib/supabase";
@@ -96,6 +99,7 @@ export async function updateApiTransitStation(input: {
   websiteUrl?: string;
   apiBaseUrl?: string | null;
   pricingUrl?: string | null;
+  monitorUrl?: string | null;
   summary?: string | null;
   sourceType?: string;
   commercialRelation?: string;
@@ -114,6 +118,10 @@ export async function updateApiTransitStation(input: {
   usageAdvice?: ApiTransitUsageAdvice;
   status?: ApiTransitStationStatus;
   adminNote?: string | null;
+  strengths?: string[];
+  cautions?: string[];
+  commercialOffers?: ApiTransitCommercialOffer[];
+  verificationEvents?: ApiTransitVerificationEvent[];
 }): Promise<ApiTransitAdminStation> {
   const supabase = getSupabaseOrThrow();
   const row: DbRow = {
@@ -127,13 +135,14 @@ export async function updateApiTransitStation(input: {
     row.pricing_url = cleanNullable(input.pricingUrl);
     row.pricing_endpoint_url = cleanNullable(input.pricingUrl);
   }
+  if (input.monitorUrl !== undefined) row.monitor_url = cleanNullable(input.monitorUrl);
   if (input.summary !== undefined) row.summary = cleanNullable(input.summary) || "";
   if (input.sourceType !== undefined) row.source_type = input.sourceType;
   if (input.commercialRelation !== undefined) row.commercial_relation = input.commercialRelation;
   if (input.collectorKind !== undefined) row.collector_kind = cleanRequired(input.collectorKind, "采集器类型不能为空。");
   if (input.collectionStatus) row.collection_status = input.collectionStatus;
-  if (input.channelTypes !== undefined) row.channel_types = uniqueText(input.channelTypes);
-  if (input.accountPools !== undefined) row.account_pools = uniqueText(input.accountPools);
+  if (input.channelTypes !== undefined) row.channel_types = normalizeChannelTypes(input.channelTypes);
+  if (input.accountPools !== undefined) row.account_pools = normalizeAccountPools(input.accountPools);
   if (input.paymentMethods !== undefined) row.payment_methods = uniqueText(input.paymentMethods);
   if (input.minimumTopUp !== undefined) row.minimum_top_up = cleanNullable(input.minimumTopUp);
   if (input.balanceExpiry !== undefined) row.balance_expiry = cleanNullable(input.balanceExpiry);
@@ -145,6 +154,10 @@ export async function updateApiTransitStation(input: {
   if (input.usageAdvice) row.usage_advice = input.usageAdvice;
   if (input.status) row.status = input.status;
   if (input.adminNote !== undefined) row.admin_note = cleanNullable(input.adminNote);
+  if (input.strengths !== undefined) row.strengths = uniqueText(input.strengths);
+  if (input.cautions !== undefined) row.cautions = uniqueText(input.cautions);
+  if (input.commercialOffers !== undefined) row.commercial_offers = sanitizeCommercialOffers(input.commercialOffers);
+  if (input.verificationEvents !== undefined) row.verification_events = sanitizeVerificationEvents(input.verificationEvents);
 
   const { data, error } = await supabase
     .from("api_transit_stations")
@@ -215,8 +228,8 @@ export async function updateApiTransitOffer(input: {
   if (input.cacheReadPrice !== undefined) row.cache_read_price = input.cacheReadPrice;
   if (input.cacheWritePrice !== undefined) row.cache_write_price = input.cacheWritePrice;
   if (input.currency !== undefined) row.currency = cleanRequired(input.currency, "币种不能为空。");
-  if (input.accountPool !== undefined) row.account_pool = cleanRequired(input.accountPool, "号池不能为空。");
-  if (input.channelType !== undefined) row.channel_type = cleanRequired(input.channelType, "渠道类型不能为空。");
+  if (input.accountPool !== undefined) row.account_pool = normalizeAccountPool(input.accountPool) || cleanRequired(input.accountPool, "号池不能为空。");
+  if (input.channelType !== undefined) row.channel_type = normalizeChannelType(input.channelType) || cleanRequired(input.channelType, "渠道类型不能为空。");
   if (input.priceSource !== undefined) row.price_source = cleanRequired(input.priceSource, "价格来源不能为空。");
   if (input.sourceUrl !== undefined) row.source_url = cleanNullable(input.sourceUrl);
   if (input.status) row.status = input.status;
@@ -496,6 +509,7 @@ function mapStation(
     websiteUrl: stringValue(row.website_url),
     apiBaseUrl: nullableString(row.api_base_url),
     pricingUrl: nullableString(row.pricing_url || row.pricing_endpoint_url),
+    monitorUrl: nullableString(row.monitor_url),
     status: stationStatus(row.status),
     sourceType: stringValue(row.source_type) || "manual_collected",
     commercialRelation: stringValue(row.commercial_relation) || "unknown",
@@ -517,6 +531,10 @@ function mapStation(
     lastUpdatedAt: nullableString(row.last_updated_at),
     published: Boolean(row.published),
     adminNote: nullableString(row.admin_note),
+    strengths: stringArray(row.strengths),
+    cautions: stringArray(row.cautions),
+    commercialOffers: commercialOffers(row.commercial_offers),
+    verificationEvents: verificationEvents(row.verification_events),
     createdAt: timestampValue(row.created_at),
     updatedAt: nullableString(row.updated_at),
     offerCount: stationStats.total,
@@ -530,21 +548,31 @@ function mapStation(
 
 function mapOffer(row: DbRow): ApiTransitAdminOffer {
   const station = nestedRow(row.api_transit_stations);
+  const standardModel = stringValue(row.standard_model);
+  const inputPrice = numberValue(row.input_price);
+  const outputPrice = numberValue(row.output_price);
+  const cacheReadPrice = numberValue(row.cache_read_price);
+  const cacheWritePrice = numberValue(row.cache_write_price);
+
   return {
     id: stringValue(row.id),
     stationId: stringValue(row.station_id),
     stationName: stringValue(station?.name) || stringValue(row.station_id),
     stationPublished: Boolean(station?.published),
     family: stringValue(row.family),
-    standardModel: stringValue(row.standard_model),
+    standardModel,
     rawModelName: stringValue(row.raw_model_name),
     groupName: stringValue(row.group_name),
     rechargeRatio: nullableString(row.recharge_ratio),
     modelMultiplier: numberValue(row.model_multiplier),
-    inputPrice: numberValue(row.input_price),
-    outputPrice: numberValue(row.output_price),
-    cacheReadPrice: numberValue(row.cache_read_price),
-    cacheWritePrice: numberValue(row.cache_write_price),
+    inputPrice,
+    outputPrice,
+    cacheReadPrice,
+    cacheWritePrice,
+    inputUnitPriceUsd: getAdminUnitPriceUsd(standardModel, "input", inputPrice),
+    outputUnitPriceUsd: getAdminUnitPriceUsd(standardModel, "output", outputPrice),
+    cacheReadUnitPriceUsd: getAdminUnitPriceUsd(standardModel, "cacheRead", cacheReadPrice),
+    cacheWriteUnitPriceUsd: getAdminUnitPriceUsd(standardModel, "cacheWrite", cacheWritePrice),
     currency: stringValue(row.currency) || "CNY",
     accountPool: stringValue(row.account_pool) || "undisclosed",
     channelType: stringValue(row.channel_type) || "undisclosed",
@@ -664,6 +692,10 @@ function toOfferCandidate(group: ApiTransitAdminOffer[]): ApiTransitOfferCandida
     outputPrice: representative.outputPrice,
     cacheReadPrice: representative.cacheReadPrice,
     cacheWritePrice: representative.cacheWritePrice,
+    inputUnitPriceUsd: representative.inputUnitPriceUsd,
+    outputUnitPriceUsd: representative.outputUnitPriceUsd,
+    cacheReadUnitPriceUsd: representative.cacheReadUnitPriceUsd,
+    cacheWriteUnitPriceUsd: representative.cacheWriteUnitPriceUsd,
     currency: representative.currency,
     accountPool: representative.accountPool,
     channelType: representative.channelType,
@@ -838,6 +870,12 @@ function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function objectArray(value: unknown): DbRow[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is DbRow => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+    : [];
+}
+
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value : value === null || value === undefined ? "" : String(value);
 }
@@ -867,6 +905,36 @@ function numberValue(value: unknown): number | null {
   return null;
 }
 
+function getAdminUnitPriceUsd(
+  standardModel: string,
+  metric: "input" | "output" | "cacheRead" | "cacheWrite",
+  multiplier: number | null
+): number | null {
+  if (multiplier === null) return null;
+  const official = getOfficialUnitPriceSafe(standardModel, metric);
+  if (official === null) return null;
+  return roundNumber(official * multiplier, 6);
+}
+
+function getOfficialUnitPriceSafe(
+  standardModel: string,
+  metric: "input" | "output" | "cacheRead" | "cacheWrite"
+): number | null {
+  try {
+    return getOfficialTransitUnitPrice(
+      standardModel as Parameters<typeof getOfficialTransitUnitPrice>[0],
+      metric
+    );
+  } catch {
+    return null;
+  }
+}
+
+function roundNumber(value: number, digits: number): number {
+  const base = 10 ** digits;
+  return Math.round(value * base) / base;
+}
+
 function integerValue(value: unknown): number | null {
   const parsed = numberValue(value);
   return parsed === null ? null : Math.trunc(parsed);
@@ -884,6 +952,149 @@ function stringArray(value: unknown): string[] {
 
 function uniqueText(values: string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+const CHANNEL_TYPE_ALIASES: Record<string, string> = {
+  officialapi: "official_api",
+  official_api: "official_api",
+  官方api: "official_api",
+  官方: "official_api",
+  云厂商: "cloud",
+  云: "cloud",
+  cloud: "cloud",
+  firstpartypool: "first_party_pool",
+  first_party_pool: "first_party_pool",
+  一手自建号池: "first_party_pool",
+  一手号池: "first_party_pool",
+  自建号池: "first_party_pool",
+  plus: "first_party_pool",
+  pro: "first_party_pool",
+  max: "first_party_pool",
+  team: "first_party_pool",
+  reverseengineered: "reverse_engineered",
+  reverse_engineered: "reverse_engineered",
+  逆向: "reverse_engineered",
+  kiro: "reverse_engineered",
+  firstpartywholesale: "first_party_wholesale",
+  first_party_wholesale: "first_party_wholesale",
+  一手批发: "first_party_wholesale",
+  reseller: "reseller",
+  二级分销: "reseller",
+  mixed: "mixed",
+  混合渠道: "mixed",
+  混合: "mixed",
+  undisclosed: "undisclosed",
+  未披露: "undisclosed",
+};
+
+const ACCOUNT_POOL_ALIASES: Record<string, string> = {
+  pro: "pro",
+  plus: "plus",
+  max: "max",
+  team: "team",
+  kiro: "kiro",
+  企业池: "enterprise",
+  enterprise: "enterprise",
+  officialapi: "official_api",
+  official_api: "official_api",
+  官方api: "official_api",
+  官方: "official_api",
+  mixed: "mixed",
+  混池: "mixed",
+  混合: "mixed",
+  undisclosed: "undisclosed",
+  未披露: "undisclosed",
+};
+
+function normalizeChannelTypes(values: string[]): string[] {
+  return Array.from(new Set(values.map(normalizeChannelType).filter((value): value is string => Boolean(value))));
+}
+
+function normalizeAccountPools(values: string[]): string[] {
+  return Array.from(new Set(values.map(normalizeAccountPool).filter((value): value is string => Boolean(value))));
+}
+
+function normalizeChannelType(value: string): string | null {
+  return normalizeAliasValue(value, CHANNEL_TYPE_ALIASES);
+}
+
+function normalizeAccountPool(value: string): string | null {
+  return normalizeAliasValue(value, ACCOUNT_POOL_ALIASES);
+}
+
+function normalizeAliasValue(value: string, aliases: Record<string, string>): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase().replace(/[\s/／\\-]+/g, "");
+  return aliases[key] || aliases[raw] || null;
+}
+
+function commercialOffers(value: unknown): ApiTransitCommercialOffer[] {
+  return objectArray(value).map((item, index) => ({
+    id: nullableString(item.id) || `offer-${index}`,
+    type: commercialOfferType(item.type),
+    title: stringValue(item.title) || "可用优惠",
+    description: nullableString(item.description),
+    code: nullableString(item.code),
+    url: nullableString(item.url),
+    validUntil: nullableString(item.validUntil || item.valid_until),
+    disclosure: nullableString(item.disclosure),
+    enabled: item.enabled === undefined ? true : Boolean(item.enabled),
+  })).filter((item) => item.title);
+}
+
+function verificationEvents(value: unknown): ApiTransitVerificationEvent[] {
+  return objectArray(value).map((item, index) => ({
+    id: nullableString(item.id) || `event-${index}`,
+    source: verificationEventSource(item.source),
+    status: verificationEventStatus(item.status),
+    title: stringValue(item.title) || "核验记录",
+    description: nullableString(item.description),
+    happenedAt: timestampValue(item.happenedAt || item.happened_at),
+  })).filter((item) => item.title);
+}
+
+function sanitizeCommercialOffers(values: ApiTransitCommercialOffer[]): ApiTransitCommercialOffer[] {
+  return values
+    .map((item, index) => ({
+      id: cleanNullable(item.id) || `offer-${index}`,
+      type: commercialOfferType(item.type),
+      title: cleanNullable(item.title) || "",
+      description: cleanNullable(item.description),
+      code: cleanNullable(item.code),
+      url: cleanNullable(item.url),
+      validUntil: cleanNullable(item.validUntil),
+      disclosure: cleanNullable(item.disclosure),
+      enabled: Boolean(item.enabled),
+    }))
+    .filter((item) => item.title)
+    .slice(0, 8);
+}
+
+function sanitizeVerificationEvents(values: ApiTransitVerificationEvent[]): ApiTransitVerificationEvent[] {
+  return values
+    .map((item, index) => ({
+      id: cleanNullable(item.id) || `event-${index}`,
+      source: verificationEventSource(item.source),
+      status: verificationEventStatus(item.status),
+      title: cleanNullable(item.title) || "",
+      description: cleanNullable(item.description),
+      happenedAt: cleanNullable(item.happenedAt) || new Date().toISOString(),
+    }))
+    .filter((item) => item.title)
+    .slice(0, 12);
+}
+
+function commercialOfferType(value: unknown): ApiTransitCommercialOffer["type"] {
+  return value === "affiliate" || value === "sponsored" || value === "coupon" ? value : "coupon";
+}
+
+function verificationEventSource(value: unknown): ApiTransitVerificationEvent["source"] {
+  return value === "official" || value === "user" || value === "merchant" || value === "priceai" ? value : "priceai";
+}
+
+function verificationEventStatus(value: unknown): ApiTransitVerificationEvent["status"] {
+  return value === "warning" || value === "failed" || value === "info" || value === "success" ? value : "info";
 }
 
 function stationStatus(value: unknown): ApiTransitStationStatus {

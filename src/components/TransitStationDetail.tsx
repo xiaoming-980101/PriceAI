@@ -1,20 +1,32 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import type { MouseEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  CheckCircle2,
   Clock,
+  Copy,
   ExternalLink,
+  Gift,
   HelpCircle,
+  ShieldCheck,
   Users,
+  X,
 } from "lucide-react";
 import { DataTableHead, StatusChip } from "@/components/ComparisonUi";
 import { FeedbackDialog, transitStationFeedbackTypes } from "@/components/FeedbackLink";
+import {
+  getTransitStationOutboundUrl,
+  useTransitAffPreference,
+} from "@/components/TransitAffPreference";
+import { TransitAvailabilityStrip } from "@/components/TransitAvailabilityStrip";
 import { TransitPriceBreakdown } from "@/components/TransitPriceBreakdown";
 import { TransitStationSystemIcon } from "@/components/TransitStationSystemIcon";
-import { formatDateDay, formatDateMinute } from "@/lib/utils";
+import { formatDateDay, formatDateMinute, formatDateShortMinute } from "@/lib/utils";
 import type {
   TransitModelFamily,
   TransitModelPrice,
@@ -23,23 +35,27 @@ import type {
 import {
   TRANSIT_ACCOUNT_POOL_LABELS,
   TRANSIT_CHANNEL_TYPE_LABELS,
-  TRANSIT_COMMERCIAL_LABELS,
+  TRANSIT_COMMERCIAL_OFFER_TYPE_LABELS,
   TRANSIT_DATA_STATUS_LABELS,
   TRANSIT_MODEL_FAMILY_LABELS,
   TRANSIT_STATION_STATUS_LABELS,
   TRANSIT_USAGE_ADVICE_LABELS,
+  TRANSIT_VERIFICATION_EVENT_SOURCE_LABELS,
 } from "@/data/api-transit/types";
 import {
+  getActiveTransitCommercialOffers,
   formatAvailability,
   formatPercent,
   formatRate,
   getCombinedRateForPrice,
   getFamilyPrices,
   getFamilyRateSummary,
+  getPrimaryTransitCommercialOffer,
   getRechargeCoefficientFromRatio,
   getNormalizedSourceTags,
   getRateBadgeClass,
   getStationRechargeCoefficient,
+  getTransitVerificationEvents,
   getTransitReviewTags,
   getTransitStationSystemLabel,
   getUsageAdviceBadgeClass,
@@ -50,9 +66,51 @@ interface Props {
   backHref: string;
 }
 
+type TransitPriceGroup = {
+  groupName: string;
+  prices: TransitModelPrice[];
+  primaryPrice: TransitModelPrice;
+  combinedRate: number | null;
+  rechargeCoefficient: number | null;
+  modelMultiplierMin: number | null;
+  modelMultiplierMax: number | null;
+  sevenDayRate: number | null;
+  sevenDaySamples: number;
+  lastCheckedAt: string | null;
+  latestVerifiedAt: string;
+  priceSource: string;
+};
+
+type TransitOutboundIntent = {
+  url: string;
+  isAff: boolean;
+};
+
+type StoredRiskConfirmation = {
+  expiresAt: number;
+  version: string;
+};
+
+const TRANSIT_RISK_CONFIRMATION_VERSION = "v1";
+const TRANSIT_RISK_CONFIRMATION_DAYS = 30;
+const TRANSIT_RISK_CONFIRMATION_STORAGE_PREFIX = "priceai.apiTransit.riskConfirmation";
+const TRANSIT_RISK_WARNING_TEXT =
+  "中转站存在跑路、余额损失、价格变动和渠道不可控风险。首次使用建议小额充值，勿囤积余额，充值前请回原站核验价格与规则。PriceAI 不售卖 API，也不替任何商家担保。";
+
 export default function TransitStationDetail({ station, backHref }: Props) {
   const router = useRouter();
+  const [affEnabled] = useTransitAffPreference();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [copiedOfferId, setCopiedOfferId] = useState<string | null>(null);
+  const [pendingOutbound, setPendingOutbound] = useState<TransitOutboundIntent | null>(null);
+  const [rememberRiskConfirmation, setRememberRiskConfirmation] = useState(false);
+  const claudeSummary = getFamilyRateSummary(station, "claude");
+  const gptSummary = getFamilyRateSummary(station, "gpt");
+  const primaryOffer = getPrimaryTransitCommercialOffer(station);
+  const commercialOffers = getActiveTransitCommercialOffers(station);
+  const verificationEvents = getTransitVerificationEvents(station);
+  const outboundUrl = getTransitStationOutboundUrl(station, primaryOffer, affEnabled);
+  const hasAffLink = affEnabled && station.commercialRelation === "affiliate" && Boolean(primaryOffer?.url);
 
   const handleBack = useCallback(() => {
     if (backHref.includes("?")) {
@@ -62,8 +120,46 @@ export default function TransitStationDetail({ station, backHref }: Props) {
     }
   }, [backHref, router]);
 
+  const copyOfferCode = useCallback(async (offerId: string, code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedOfferId(offerId);
+      window.setTimeout(() => setCopiedOfferId(null), 1600);
+    } catch {
+      setCopiedOfferId(null);
+    }
+  }, []);
+
+  const requestOutboundVisit = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>, intent: TransitOutboundIntent) => {
+      if (hasValidRiskConfirmation(station.slug, intent.url)) return;
+      event.preventDefault();
+      setRememberRiskConfirmation(false);
+      setPendingOutbound(intent);
+    },
+    [station.slug],
+  );
+
+  const closeOutboundRiskDialog = useCallback(() => {
+    setPendingOutbound(null);
+    setRememberRiskConfirmation(false);
+  }, []);
+
+  const confirmOutboundVisit = useCallback(() => {
+    if (!pendingOutbound) return;
+    const targetUrl = pendingOutbound.url;
+    if (rememberRiskConfirmation) {
+      writeRiskConfirmation(station.slug, targetUrl);
+    }
+    closeOutboundRiskDialog();
+    const opened = window.open(targetUrl, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      window.location.assign(targetUrl);
+    }
+  }, [closeOutboundRiskDialog, pendingOutbound, rememberRiskConfirmation, station.slug]);
+
   return (
-    <div>
+    <div className="pb-16 sm:pb-14">
       <button
         type="button"
         onClick={handleBack}
@@ -73,23 +169,32 @@ export default function TransitStationDetail({ station, backHref }: Props) {
         返回中转站列表
       </button>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
-          <section className="rounded-lg border border-[#dfe4e5] bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
+      <section className="rounded-lg border border-[#dfe4e5] bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] lg:items-start">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-start gap-4">
               <TransitStationSystemIcon station={station} size="lg" />
               <div className="min-w-0 flex-1">
-                <h1 className="font-[family-name:var(--font-serif)] text-2xl font-semibold leading-tight text-[#202829]">
-                  {station.name}
-                </h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="font-[family-name:var(--font-serif)] text-2xl font-semibold leading-tight text-[#202829]">
+                    {station.name}
+                  </h1>
+                  {primaryOffer ? (
+                    <StatusChip tone={primaryOffer.type === "sponsored" ? "warning" : "success"}>
+                      {TRANSIT_COMMERCIAL_OFFER_TYPE_LABELS[primaryOffer.type]}
+                    </StatusChip>
+                  ) : null}
+                </div>
                 <a
-                  href={station.websiteUrl}
+                  href={outboundUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-flex items-center gap-1 text-sm text-[#5a6061] transition-colors hover:text-[#2d3435]"
+                  onClick={(event) => requestOutboundVisit(event, { url: outboundUrl, isAff: hasAffLink })}
+                  aria-label={`访问 ${station.name} 官网`}
+                  className="mt-1 inline-flex max-w-full items-center gap-1 text-sm font-semibold text-[#5a6061] transition-colors hover:text-[#2d3435]"
                 >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  {station.websiteUrl}
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">官网</span>
                 </a>
               </div>
             </div>
@@ -99,7 +204,6 @@ export default function TransitStationDetail({ station, backHref }: Props) {
                 {TRANSIT_STATION_STATUS_LABELS[station.status]}
               </StatusChip>
               <StatusChip tone="info">{getTransitStationSystemLabel(station)}</StatusChip>
-              <StatusChip tone="info">{TRANSIT_COMMERCIAL_LABELS[station.commercialRelation]}</StatusChip>
               <StatusChip tone={station.dataStatus === "verified" ? "success" : station.dataStatus === "sample" ? "warning" : "muted"}>
                 数据状态：{TRANSIT_DATA_STATUS_LABELS[station.dataStatus]}
               </StatusChip>
@@ -109,18 +213,42 @@ export default function TransitStationDetail({ station, backHref }: Props) {
               </span>
             </div>
 
-            <p className="mt-4 text-sm leading-relaxed text-[#2d3435]">{station.summary}</p>
+            <p className="mt-4 max-w-[86ch] text-sm leading-relaxed text-[#2d3435]">{station.summary}</p>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+              <MetricCard label="Claude 倍率" value={formatRate(claudeSummary.combinedRateMin)} helper={`${claudeSummary.priceCount} 个分组`} />
+              <MetricCard label="GPT 倍率" value={formatRate(gptSummary.combinedRateMin)} helper={`${gptSummary.priceCount} 个分组`} />
+              <MetricCard label="可用率" value={formatPercent(station.availability.sevenDayRate)} helper={`样本 ${station.availability.sevenDaySamples}`} />
+              <MetricCard label="最后检查" value={formatDateMinute(station.availability.lastCheckedAt)} helper={station.monitorUrl ? "含监测入口" : "站点样本"} />
+            </div>
+          </div>
+
+          <div className="rounded-lg bg-[#f7f9f9] p-4 ring-1 ring-[#adb3b4]/15">
+            <CommercialOfferCard
+              offers={commercialOffers}
+              affEnabled={affEnabled}
+              copiedOfferId={copiedOfferId}
+              onCopy={copyOfferCode}
+            />
+            <div className="mt-4 flex flex-wrap gap-2">
               <a
-                href={station.websiteUrl}
+                href={outboundUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(event) => requestOutboundVisit(event, { url: outboundUrl, isAff: hasAffLink })}
                 className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#2d3435] px-4 text-sm font-bold text-[#f8f8f8] transition-colors hover:bg-[#202829]"
               >
-                访问站点
+                访问官网
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
+              {hasAffLink ? (
+                <span
+                  className="inline-flex h-10 items-center rounded-full border border-dashed border-[#adb3b4]/70 px-3 text-xs font-extrabold text-[#5a6061]"
+                  title="该优惠访问链接为 AFF 链接，不影响页面价格口径。"
+                >
+                  AFF
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setFeedbackOpen(true)}
@@ -129,16 +257,20 @@ export default function TransitStationDetail({ station, backHref }: Props) {
                 提交反馈
               </button>
             </div>
-          </section>
+          </div>
+        </div>
+      </section>
 
-          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <MetricCard label="充值倍率" value={formatRate(getStationRechargeCoefficient(station))} helper={station.prices[0]?.rechargeRatio ?? "未公开充值比例"} />
-            <MetricCard label="监测状态" value={formatPercent(station.availability.sevenDayRate)} helper={`当前样本 ${station.availability.sevenDaySamples}`} />
-            <MetricCard label="最后检查" value={formatDateMinute(station.availability.lastCheckedAt)} helper={station.availability.note ?? "尚未接入可用性检测"} />
-          </section>
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-5">
+          <PriceTable station={station} family="claude" />
+          <PriceTable station={station} family="gpt" />
+          <AvailabilityTable station={station} />
         </div>
 
         <aside className="space-y-5">
+          <TrustNotes station={station} />
+          <VerificationTimeline events={verificationEvents} monitorUrl={station.monitorUrl} />
           <section className="rounded-lg border border-[#dfe4e5] bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
             <h3 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold text-[#202829]">
               <AlertTriangle className="h-4 w-4" />
@@ -146,52 +278,18 @@ export default function TransitStationDetail({ station, backHref }: Props) {
             </h3>
             <InfoGroup label="公开标签" items={getNormalizedSourceTags(station).map((item) => item.label)} />
             <InfoGroup label="支付方式" items={station.paymentMethods} />
-          </section>
-
-          <section className="rounded-lg border border-[#dfe4e5] bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
-            <h3 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold text-[#202829]">
-              <AlertTriangle className="h-4 w-4" />
-              核验提示
-            </h3>
-            <div className="flex flex-wrap gap-1.5">
-              {getTransitReviewTags(station).map((tag) => (
-                <span key={tag.id} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${tag.tone === "neutral" ? "bg-[#f2f4f4] text-[#5a6061]" : "bg-[#fff7e8] text-[#7a541b]"}`}>
-                  {tag.label}
-                </span>
-              ))}
-              <span className={`rounded-full px-3 py-1 text-xs font-bold ${getUsageAdviceBadgeClass(station.usageAdvice)}`}>
-                {TRANSIT_USAGE_ADVICE_LABELS[station.usageAdvice]}
-              </span>
-            </div>
-
-            {station.feedback.publicNotes ? (
-              <div className="mt-4 border-t border-[#dfe4e5] pt-4">
-                <h4 className="mb-2 flex items-center gap-1 text-xs font-bold text-[#5a6061]">
-                  <Users className="h-3.5 w-3.5" />
-                  用户反馈
-                </h4>
-                <div className="mb-2 grid grid-cols-2 gap-2 text-xs">
-                  <span className="text-[#7a8182]">
-                    待核验：<strong className="text-[#7a541b]">{station.feedback.pendingCount}</strong>
-                  </span>
-                  <span className="text-[#7a8182]">
-                    已核验风险：<strong className="text-[#9b3328]">{station.feedback.verifiedRiskCount}</strong>
-                  </span>
-                </div>
-                {station.feedback.mainThemes.length ? (
-                  <div className="mb-2 flex flex-wrap gap-1">
-                    {station.feedback.mainThemes.map((theme) => (
-                      <span key={theme} className="rounded-full bg-[#fff7e8] px-2 py-0.5 text-[10px] text-[#7a541b]">
-                        {theme}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                <p className="text-xs leading-relaxed text-[#5a6061]">{station.feedback.publicNotes}</p>
-              </div>
+            {station.monitorUrl ? (
+              <a
+                href={station.monitorUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex max-w-full items-center gap-1 text-xs font-semibold text-[#47657a] hover:text-[#202829]"
+              >
+                <ExternalLink className="h-3 w-3 shrink-0" />
+                <span className="truncate">公开监测页</span>
+              </a>
             ) : null}
           </section>
-
           <section className="rounded-lg border border-[#dfe4e5] bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
             <h3 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold text-[#202829]">
               <HelpCircle className="h-4 w-4" />
@@ -204,15 +302,7 @@ export default function TransitStationDetail({ station, backHref }: Props) {
               <TextLine label="余额有效期" value={station.balanceExpiry} />
             </div>
           </section>
-
         </aside>
-      </div>
-
-      <div className="mt-5 space-y-5">
-        <PriceTable station={station} family="claude" />
-        <PriceTable station={station} family="gpt" />
-        <AvailabilityTable station={station} />
-        <DisclaimerNotice />
       </div>
 
       {feedbackOpen ? (
@@ -233,17 +323,454 @@ export default function TransitStationDetail({ station, backHref }: Props) {
           ].join("\n")}
         />
       ) : null}
+      {pendingOutbound ? (
+        <OutboundRiskDialog
+          station={station}
+          intent={pendingOutbound}
+          remember={rememberRiskConfirmation}
+          onRememberChange={setRememberRiskConfirmation}
+          onClose={closeOutboundRiskDialog}
+          onConfirm={confirmOutboundVisit}
+        />
+      ) : null}
+      <TransitRiskTicker />
     </div>
   );
 }
 
-function DisclaimerNotice() {
+function OutboundRiskDialog({
+  station,
+  intent,
+  remember,
+  onRememberChange,
+  onClose,
+  onConfirm,
+}: {
+  station: TransitStation;
+  intent: TransitOutboundIntent;
+  remember: boolean;
+  onRememberChange: (checked: boolean) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const targetHost = getUrlHost(intent.url);
+
+  useEffect(() => {
+    confirmButtonRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-[#202829]/35 px-3 py-4 backdrop-blur-[2px] sm:items-center sm:px-5">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className="w-full max-w-[720px] rounded-lg border border-[#dfe4e5] bg-[#f9f9f9] p-5 shadow-[0_24px_70px_rgba(32,40,41,0.18)] sm:p-6"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#c7efd5] bg-[#ecfff3] text-[#2f7a4b]">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-xs font-extrabold text-[#2f7a4b]">风险提示</p>
+              <h2 id={titleId} className="mt-1 text-xl font-extrabold leading-snug text-[#202829]">
+                请在离站前阅读以下说明
+              </h2>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭风险提示"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#5a6061] transition-colors hover:bg-[#e9eeee] hover:text-[#202829] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2f7a4b]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <p id={descriptionId} className="mt-5 max-w-[70ch] text-sm leading-7 text-[#2d3435]">
+          <strong className="font-extrabold text-[#2f7a4b]">外部站点不由 PriceAI 运营。</strong>
+          PriceAI 只整理公开资料、监测结果和用户反馈，不等于背书、付款建议或服务承诺。中转站可能出现服务中断、价格变化、扣费异常、停运跑路、隐私泄露、余额无法退回等风险。请先核对目标站域名、服务条款、退款规则和密钥权限，并建议
+          <strong className="font-extrabold text-[#202829]"> 按需小额充值，随用随充，不要一次性存入大额余额。</strong>
+        </p>
+
+        <div className="mt-5 rounded-lg border border-[#dfe4e5] bg-white px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold text-[#7a8182]">目标站点</div>
+              <div className="mt-1 text-sm font-extrabold text-[#202829]">{station.name}</div>
+              <div className="mt-0.5 text-xs text-[#5a6061]">{targetHost}</div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {intent.isAff ? (
+                <span className="rounded-full border border-dashed border-[#adb3b4]/70 px-3 py-1 text-xs font-extrabold text-[#5a6061]">
+                  AFF
+                </span>
+              ) : null}
+              <span className="rounded-full bg-[#e8f3ec] px-3 py-1 text-xs font-bold text-[#2f7a4b]">正在核验</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-[#5a6061]">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(event) => onRememberChange(event.target.checked)}
+              className="h-4 w-4 rounded border-[#adb3b4] text-[#2f7a4b] focus:ring-[#2f7a4b]"
+            />
+            30 天内不再提示这个站点
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-10 items-center rounded-full border border-[#dfe4e5] bg-white px-4 text-sm font-bold text-[#2d3435] transition-colors hover:bg-[#f2f4f4] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2f7a4b]"
+            >
+              返回详情页
+            </button>
+            <button
+              type="button"
+              ref={confirmButtonRef}
+              onClick={onConfirm}
+              className="inline-flex h-10 items-center rounded-full bg-[#bfeeca] px-5 text-sm font-extrabold text-[#1f5d36] transition-colors hover:bg-[#aee5ba] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2f7a4b]"
+            >
+              我已了解，继续访问
+            </button>
+          </div>
+        </div>
+        <p className="mt-3 text-center text-[11px] leading-5 text-[#9aa1a2]">
+          勾选后，将按当前站点和目标域名记住 30 天；风险文案更新后会重新提示。
+        </p>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+function TransitRiskTicker() {
+  const riskItems = [
+    TRANSIT_RISK_WARNING_TEXT,
+    "充值前请回原站核验价格、倍率、退款规则和服务条款。",
+    "PriceAI 只整理公开资料、监测结果和用户反馈，不售卖 API，也不替任何商家担保。",
+  ];
+
   return (
-    <div className="rounded-lg border border-[#fff1cf] bg-[#fff7e8] px-4 py-3 text-xs leading-6 text-[#7a541b]">
-      <span className="font-bold">免责声明：</span>
-      PriceAI 只整理公开资料、公开价格和用户反馈，不售卖 API，也不替任何商家担保。首次使用建议控制充值金额，并在原站再次核验价格与规则。
+    <div
+      className="fixed inset-x-0 bottom-0 z-[70] border-t border-[#d97706]/50 bg-[#f59e0b] text-white shadow-[0_-8px_24px_rgba(45,52,53,0.10)]"
+      role="status"
+      aria-label="API 中转风险提示"
+    >
+      <div className="transit-risk-marquee overflow-hidden whitespace-nowrap">
+        <div className="transit-risk-marquee-track inline-flex min-w-max items-center gap-8 py-2 text-sm font-extrabold">
+          <TickerItems items={riskItems} />
+          <span aria-hidden="true" className="inline-flex items-center gap-8">
+            <TickerItems items={riskItems} />
+          </span>
+        </div>
+      </div>
+      <style>{`
+        .transit-risk-marquee-track {
+          animation: transit-risk-marquee 34s linear infinite;
+        }
+
+        .transit-risk-marquee:hover .transit-risk-marquee-track,
+        .transit-risk-marquee:focus-within .transit-risk-marquee-track {
+          animation-play-state: paused;
+        }
+
+        @keyframes transit-risk-marquee {
+          from {
+            transform: translateX(0);
+          }
+          to {
+            transform: translateX(-50%);
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .transit-risk-marquee-track {
+            animation: none;
+            transform: none;
+          }
+        }
+      `}</style>
     </div>
   );
+}
+
+function TickerItems({ items }: { items: string[] }) {
+  return (
+    <>
+      {items.map((item) => (
+        <span key={item} className="inline-flex items-center gap-8">
+          <span>{item}</span>
+          <span className="text-white/70">·</span>
+        </span>
+      ))}
+    </>
+  );
+}
+
+function getRiskConfirmationStorageKey(stationSlug: string, url: string) {
+  return [
+    TRANSIT_RISK_CONFIRMATION_STORAGE_PREFIX,
+    TRANSIT_RISK_CONFIRMATION_VERSION,
+    stationSlug,
+    getUrlHost(url),
+  ].join(".");
+}
+
+function hasValidRiskConfirmation(stationSlug: string, url: string) {
+  if (typeof window === "undefined") return false;
+  try {
+    const key = getRiskConfirmationStorageKey(stationSlug, url);
+    const rawValue = window.localStorage.getItem(key);
+    if (!rawValue) return false;
+    const parsed = JSON.parse(rawValue) as Partial<StoredRiskConfirmation>;
+    if (parsed.version !== TRANSIT_RISK_CONFIRMATION_VERSION || typeof parsed.expiresAt !== "number") {
+      window.localStorage.removeItem(key);
+      return false;
+    }
+    if (parsed.expiresAt <= Date.now()) {
+      window.localStorage.removeItem(key);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function writeRiskConfirmation(stationSlug: string, url: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const value: StoredRiskConfirmation = {
+      expiresAt: Date.now() + TRANSIT_RISK_CONFIRMATION_DAYS * 24 * 60 * 60 * 1000,
+      version: TRANSIT_RISK_CONFIRMATION_VERSION,
+    };
+    window.localStorage.setItem(getRiskConfirmationStorageKey(stationSlug, url), JSON.stringify(value));
+  } catch {
+    // localStorage may be disabled; in that case the dialog simply appears next time.
+  }
+}
+
+function getUrlHost(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "unknown";
+  }
+}
+
+function CommercialOfferCard({
+  offers,
+  affEnabled,
+  copiedOfferId,
+  onCopy,
+}: {
+  offers: NonNullable<TransitStation["commercialOffers"]>;
+  affEnabled: boolean;
+  copiedOfferId: string | null;
+  onCopy: (offerId: string, code: string) => void;
+}) {
+  const offer = offers[0];
+  const shouldShowDisclosure =
+    Boolean(offer?.disclosure) && (affEnabled || !/\bAFF\b/i.test(offer?.disclosure || ""));
+
+  if (!offer) {
+    return (
+      <div>
+        <h3 className="flex items-center gap-1.5 text-sm font-extrabold text-[#202829]">
+          <Gift className="h-4 w-4" />
+          可用优惠
+        </h3>
+        <p className="mt-2 text-xs leading-5 text-[#5a6061]">
+          当前未收录公开优惠或 AFF 链接。使用前请回原站核验价格、充值比例和退款规则。
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-1.5 text-sm font-extrabold text-[#202829]">
+          <Gift className="h-4 w-4" />
+          可用优惠
+        </h3>
+        <StatusChip tone={offer.type === "sponsored" ? "warning" : "success"} className="px-2 py-0.5 text-[11px]">
+          {TRANSIT_COMMERCIAL_OFFER_TYPE_LABELS[offer.type]}
+        </StatusChip>
+      </div>
+      <p className="mt-2 text-sm font-bold leading-6 text-[#202829]">{offer.title}</p>
+      {offer.description ? <p className="mt-1 text-xs leading-5 text-[#5a6061]">{offer.description}</p> : null}
+      {offer.code ? (
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#dfe4e5] bg-white p-2">
+          <code className="min-w-0 flex-1 truncate text-sm font-extrabold text-[#202829]">{offer.code}</code>
+          <button
+            type="button"
+            onClick={() => onCopy(offer.id, offer.code || "")}
+            className="inline-flex h-8 items-center gap-1 rounded-full bg-[#dde4e5] px-3 text-xs font-bold text-[#2d3435] hover:bg-[#cfd8d9]"
+          >
+            <Copy className="h-3.5 w-3.5" />
+            {copiedOfferId === offer.id ? "已复制" : "复制"}
+          </button>
+        </div>
+      ) : null}
+      {offer.validUntil ? <p className="mt-2 text-xs text-[#5a6061]">有效期：{offer.validUntil}</p> : null}
+      {shouldShowDisclosure ? (
+        <p className="mt-2 rounded-lg bg-[#fff7e8] px-3 py-2 text-xs leading-5 text-[#7a541b]">{offer.disclosure}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function TrustNotes({ station }: { station: TransitStation }) {
+  const strengths = station.strengths || [];
+  const cautions = station.cautions || [];
+  const reviewTags = getTransitReviewTags(station);
+
+  return (
+    <section className="rounded-lg border border-[#dfe4e5] bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
+      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold text-[#202829]">
+        <ShieldCheck className="h-4 w-4" />
+        核验提示
+      </h3>
+      <div className="mb-4 flex flex-wrap gap-1.5">
+        {reviewTags.map((tag) => (
+          <span key={tag.id} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${tag.tone === "neutral" ? "bg-[#f2f4f4] text-[#5a6061]" : "bg-[#fff7e8] text-[#7a541b]"}`}>
+            {tag.label}
+          </span>
+        ))}
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${getUsageAdviceBadgeClass(station.usageAdvice)}`}>
+          {TRANSIT_USAGE_ADVICE_LABELS[station.usageAdvice]}
+        </span>
+      </div>
+
+      <div className="grid gap-3">
+        <NoteList title="优点" items={strengths.length ? strengths : ["已收录公开价格或运营整理信息"]} tone="success" />
+        <NoteList title="注意事项" items={cautions.length ? cautions : ["首次使用建议小额充值，并回原站复核价格和规则"]} tone="warning" />
+      </div>
+
+      {station.feedback.publicNotes ? (
+        <div className="mt-4 border-t border-[#dfe4e5] pt-4">
+          <h4 className="mb-2 flex items-center gap-1 text-xs font-bold text-[#5a6061]">
+            <Users className="h-3.5 w-3.5" />
+            用户反馈
+          </h4>
+          <div className="mb-2 grid grid-cols-2 gap-2 text-xs">
+            <span className="text-[#7a8182]">
+              待核验：<strong className="text-[#7a541b]">{station.feedback.pendingCount}</strong>
+            </span>
+            <span className="text-[#7a8182]">
+              已核验风险：<strong className="text-[#9b3328]">{station.feedback.verifiedRiskCount}</strong>
+            </span>
+          </div>
+          {station.feedback.mainThemes.length ? (
+            <div className="mb-2 flex flex-wrap gap-1">
+              {station.feedback.mainThemes.map((theme) => (
+                <span key={theme} className="rounded-full bg-[#fff7e8] px-2 py-0.5 text-[10px] text-[#7a541b]">
+                  {theme}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <p className="text-xs leading-relaxed text-[#5a6061]">{station.feedback.publicNotes}</p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function NoteList({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone: "success" | "warning";
+}) {
+  const className = tone === "success" ? "bg-[#f5fbf7] text-[#2f7a4b]" : "bg-[#fffaf0] text-[#7a541b]";
+  return (
+    <div className={`rounded-lg px-3 py-3 ${className}`}>
+      <div className="mb-1.5 text-xs font-extrabold">{title}</div>
+      <ul className="space-y-1 text-xs leading-5">
+        {items.slice(0, 4).map((item) => (
+          <li key={item} className="flex gap-1.5">
+            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function VerificationTimeline({
+  events,
+  monitorUrl,
+}: {
+  events: NonNullable<TransitStation["verificationEvents"]>;
+  monitorUrl?: string | null;
+}) {
+  return (
+    <section className="rounded-lg border border-[#dfe4e5] bg-white p-5 shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-1.5 text-sm font-extrabold text-[#202829]">
+          <Clock className="h-4 w-4" />
+          核验记录
+        </h3>
+        {monitorUrl ? (
+          <StatusChip tone="info" className="px-2 py-0.5 text-[11px]">有监测页</StatusChip>
+        ) : null}
+      </div>
+      <div className="space-y-3">
+        {events.slice(0, 6).map((event) => (
+          <div key={event.id} className="relative pl-4">
+            <span className={`absolute left-0 top-1.5 h-2 w-2 rounded-full ${verificationDotClass(event.status)}`} />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-bold text-[#202829]">{event.title}</span>
+              <span className="rounded-full bg-[#f2f4f4] px-2 py-0.5 text-[10px] font-bold text-[#5a6061]">
+                {TRANSIT_VERIFICATION_EVENT_SOURCE_LABELS[event.source]}
+              </span>
+            </div>
+            <p className="mt-0.5 text-[11px] text-[#7a8182]">{formatDateMinute(event.happenedAt)}</p>
+            {event.description ? <p className="mt-1 text-xs leading-5 text-[#5a6061]">{event.description}</p> : null}
+          </div>
+        ))}
+        {!events.length ? (
+          <p className="text-xs leading-5 text-[#5a6061]">暂无结构化核验记录，仅展示现有价格与反馈数据。</p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function verificationDotClass(status: NonNullable<TransitStation["verificationEvents"]>[number]["status"]) {
+  if (status === "success") return "bg-[#2f7a4b]";
+  if (status === "warning") return "bg-[#c7861d]";
+  if (status === "failed") return "bg-[#9b3328]";
+  return "bg-[#47657a]";
 }
 
 function PriceTable({
@@ -253,7 +780,7 @@ function PriceTable({
   station: TransitStation;
   family: TransitModelFamily;
 }) {
-  const prices = getFamilyPrices(station, family);
+  const groups = getFamilyPriceGroups(station, family);
   const summary = getFamilyRateSummary(station, family);
 
   return (
@@ -266,34 +793,31 @@ function PriceTable({
           最低综合倍率 {formatRate(summary.combinedRateMin)}
         </span>
       </div>
-      {prices.length ? (
+      {groups.length ? (
         <div>
           <table className="w-full table-fixed border-collapse">
             <colgroup>
+              <col className="w-[30%]" />
+              <col className="w-[14%]" />
               <col className="w-[28%]" />
-              <col className="w-[12%]" />
               <col className="w-[28%]" />
-              <col className="w-[32%]" />
             </colgroup>
             <thead>
               <tr className="bg-[#f2f4f4]/50">
-                <DataTableHead compact>标准模型 / 分组</DataTableHead>
+                <DataTableHead compact>分组 / 模型</DataTableHead>
                 <DataTableHead compact>综合倍率</DataTableHead>
-                <DataTableHead compact>价格口径</DataTableHead>
-                <DataTableHead compact>渠道 / 确认</DataTableHead>
+                <DataTableHead compact>监测模型价格</DataTableHead>
+                <DataTableHead compact>监测 / 确认</DataTableHead>
               </tr>
             </thead>
             <tbody>
-              {prices.map((price, index) => {
-                const key = `${price.standardModel}-${price.groupName}-${index}`;
-                return (
-                  <PriceRow
-                    key={key}
-                    station={station}
-                    price={price}
-                  />
-                );
-              })}
+              {groups.map((group) => (
+                <PriceGroupRow
+                  key={`${family}-${group.groupName}`}
+                  station={station}
+                  group={group}
+                />
+              ))}
             </tbody>
           </table>
         </div>
@@ -304,87 +828,243 @@ function PriceTable({
   );
 }
 
-function PriceRow({
+function PriceGroupRow({
   station,
-  price,
+  group,
 }: {
   station: TransitStation;
-  price: TransitModelPrice;
+  group: TransitPriceGroup;
 }) {
-  const combinedRate = getCombinedRateForPrice(station, price);
-  const rechargeCoefficient =
-    getRechargeCoefficientFromRatio(price.rechargeRatio) ??
-    getStationRechargeCoefficient(station);
+  const primaryPrice = group.primaryPrice;
+  const channelLabels = uniqueStrings(group.prices.map((price) => TRANSIT_CHANNEL_TYPE_LABELS[price.channelType]));
+  const poolLabels = uniqueStrings(group.prices.map((price) => TRANSIT_ACCOUNT_POOL_LABELS[price.accountPool]));
 
   return (
     <tr className="border-b border-[#dfe4e5] align-top transition hover:bg-[#f7f9f9]">
       <td className="px-4 py-4">
-        <div className="break-words text-xs font-semibold text-[#202829]">{price.standardModel}</div>
-        <div className="mt-1 break-words text-xs text-[#5a6061]">{price.groupName}</div>
+        <div className="break-words text-sm font-extrabold text-[#202829]">{group.groupName}</div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {group.prices.map((price) => (
+            <span
+              key={`${group.groupName}-${price.standardModel}`}
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                price.standardModel === primaryPrice.standardModel
+                  ? "bg-[#e8f3ec] text-[#2f7a4b]"
+                  : "bg-[#f2f4f4] text-[#5a6061]"
+              }`}
+            >
+              {shortModelLabel(price.standardModel)}
+            </span>
+          ))}
+        </div>
+        <ProbePolicyTag
+          className="mt-2"
+          label={`监测 ${shortModelLabel(primaryPrice.standardModel)}`}
+          title="PriceAI 先拉取该分组 Key 的可用模型列表，再按最新且级别最高的可用模型发起一次请求。模型可用性计划每 5 分钟监测；价格和分组倍率计划每天刷新一次。"
+        />
       </td>
       <td className="px-4 py-4">
-        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-extrabold ${getRateBadgeClass(combinedRate)}`}>
-          {formatRate(combinedRate)}
+        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-extrabold ${getRateBadgeClass(group.combinedRate)}`}>
+          {formatRate(group.combinedRate)}
         </span>
         <div className="mt-2 space-y-1 text-[11px] font-semibold text-[#5a6061]">
-          <div>充值 {formatRate(rechargeCoefficient)}</div>
-          <div>模型 {formatModelRate(price.modelMultiplier)}</div>
+          <div>充值 {formatRate(group.rechargeCoefficient)}</div>
+          <div>模型 {formatModelRateRange(group.modelMultiplierMin, group.modelMultiplierMax)}</div>
+          <div>{group.prices.length} 个模型</div>
         </div>
       </td>
       <td className="px-4 py-3">
-        <TransitPriceBreakdown station={station} price={price} mode="detail" />
+        <TransitPriceBreakdown station={station} price={primaryPrice} mode="detail" />
+        <p className="mt-1.5 text-[11px] leading-5 text-[#5a6061]">
+          按 {primaryPrice.standardModel} 官方价换算
+        </p>
       </td>
       <td className="px-4 py-4">
-        <div className="flex flex-wrap gap-1">
-          <StatusChip tone="success" className="px-2 py-0.5 text-[10px]">
-            {TRANSIT_CHANNEL_TYPE_LABELS[price.channelType]}
-          </StatusChip>
-          <StatusChip tone="info" className="px-2 py-0.5 text-[10px]">
-            {TRANSIT_ACCOUNT_POOL_LABELS[price.accountPool]}
-          </StatusChip>
+        <div className="flex flex-wrap gap-1.5">
+          {channelLabels.map((label) => (
+            <StatusChip key={label} tone="success" className="px-2 py-0.5 text-[10px]">
+              {label}
+            </StatusChip>
+          ))}
+          {poolLabels.map((label) => (
+            <StatusChip key={label} tone="info" className="px-2 py-0.5 text-[10px]">
+              {label}
+            </StatusChip>
+          ))}
         </div>
-        <div className="mt-2 break-words text-xs font-semibold text-[#2d3435]">{price.priceSource || "未公开"}</div>
-        <div className="mt-1 text-[11px] text-[#5a6061]">{formatDateMinute(price.lastVerifiedAt)}</div>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-xs font-bold text-[#202829]">{formatPercent(group.sevenDayRate)}</span>
+          <TransitAvailabilityStrip
+            rate={group.sevenDayRate}
+            samples={group.sevenDaySamples}
+            lastCheckedAt={group.lastCheckedAt}
+          />
+        </div>
+        <div className="mt-2 break-words text-xs font-semibold text-[#2d3435]">{group.priceSource || "未公开"}</div>
+        <div className="mt-1 whitespace-nowrap text-[11px] text-[#5a6061]">
+          {formatDateShortMinute(group.latestVerifiedAt)}
+        </div>
       </td>
     </tr>
+  );
+}
+
+function getFamilyPriceGroups(station: TransitStation, family: TransitModelFamily): TransitPriceGroup[] {
+  const grouped = new Map<string, TransitModelPrice[]>();
+  for (const price of getFamilyPrices(station, family)) {
+    const groupName = price.groupName || "默认分组";
+    const prices = grouped.get(groupName) || [];
+    prices.push(price);
+    grouped.set(groupName, prices);
+  }
+
+  return Array.from(grouped.entries())
+    .map(([groupName, prices]) => buildPriceGroup(station, groupName, prices))
+    .sort((left, right) => nullableSortValue(left.combinedRate) - nullableSortValue(right.combinedRate));
+}
+
+function buildPriceGroup(
+  station: TransitStation,
+  groupName: string,
+  prices: TransitModelPrice[],
+): TransitPriceGroup {
+  const sortedPrices = [...prices].sort(comparePricePriority);
+  const primaryPrice = sortedPrices[0];
+  const rechargeCoefficient =
+    getRechargeCoefficientFromRatio(primaryPrice.rechargeRatio) ??
+    getStationRechargeCoefficient(station);
+  const modelMultipliers = prices
+    .map((price) => price.modelMultiplier)
+    .filter((value): value is number => value !== null && Number.isFinite(value));
+  const availabilitySamples = prices.reduce((total, price) => total + price.availability.sevenDaySamples, 0);
+  const weightedAvailability =
+    availabilitySamples > 0
+      ? prices.reduce((total, price) => total + (price.availability.sevenDayRate ?? 0) * price.availability.sevenDaySamples, 0) / availabilitySamples
+      : null;
+  const lastCheckedAt =
+    prices
+      .map((price) => price.availability.lastCheckedAt)
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) ?? null;
+  const latestVerifiedAt =
+    prices
+      .map((price) => price.lastVerifiedAt)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? primaryPrice.lastVerifiedAt;
+
+  return {
+    groupName,
+    prices: sortedPrices,
+    primaryPrice,
+    combinedRate: getCombinedRateForPrice(station, primaryPrice),
+    rechargeCoefficient,
+    modelMultiplierMin: modelMultipliers.length ? Math.min(...modelMultipliers) : null,
+    modelMultiplierMax: modelMultipliers.length ? Math.max(...modelMultipliers) : null,
+    sevenDayRate: weightedAvailability,
+    sevenDaySamples: availabilitySamples,
+    lastCheckedAt,
+    latestVerifiedAt,
+    priceSource: primaryPrice.priceSource,
+  };
+}
+
+function comparePricePriority(left: TransitModelPrice, right: TransitModelPrice): number {
+  return modelPriority(right.standardModel) - modelPriority(left.standardModel) ||
+    new Date(right.lastVerifiedAt).getTime() - new Date(left.lastVerifiedAt).getTime();
+}
+
+function modelPriority(model: TransitModelPrice["standardModel"]): number {
+  if (model === "Claude Opus 4.8") return 408;
+  if (model === "Claude Opus 4.7") return 407;
+  if (model === "Claude Opus 4.6") return 406;
+  if (model === "Claude Sonnet 4.6") return 306;
+  if (model === "GPT 5.5") return 505;
+  if (model === "GPT 5.4") return 504;
+  return 0;
+}
+
+function shortModelLabel(model: TransitModelPrice["standardModel"]): string {
+  return model
+    .replace("Claude ", "")
+    .replace("GPT ", "GPT ");
+}
+
+function ProbePolicyTag({
+  label,
+  title,
+  className = "",
+}: {
+  label: string;
+  title: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`inline-flex w-fit items-center rounded-full border border-dashed border-[#9aa5a7] px-2 py-0.5 text-[10px] font-bold text-[#5a6061] ${className}`}
+      title={title}
+    >
+      {label}
+    </span>
   );
 }
 
 function AvailabilityTable({ station }: { station: TransitStation }) {
   return (
     <section className="overflow-hidden rounded-lg border border-[#dfe4e5] bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
-      <div className="border-b border-[#dfe4e5] bg-[#f2f4f4] px-5 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#dfe4e5] bg-[#f2f4f4] px-5 py-3">
         <h2 className="text-base font-extrabold text-[#202829]">监测样本</h2>
+        <ProbePolicyTag
+          label="5 分钟模型探测"
+          title="模型可用性：先拉取可用模型列表，再按最新且级别最高的可用模型实际请求。频率计划为每 5 分钟一次；价格和分组倍率计划每天刷新一次。"
+        />
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse">
+        <table className="w-full min-w-[780px] border-collapse">
           <thead>
             <tr className="bg-[#f2f4f4]/50">
               <DataTableHead>范围</DataTableHead>
-              <DataTableHead>可用率</DataTableHead>
+              <DataTableHead>可用状态</DataTableHead>
               <DataTableHead>样本数</DataTableHead>
-              <DataTableHead>最后检查</DataTableHead>
+              <DataTableHead>监测区间</DataTableHead>
+              <DataTableHead>监测模型</DataTableHead>
               <DataTableHead>说明</DataTableHead>
             </tr>
           </thead>
           <tbody>
             <tr className="border-b border-[#dfe4e5]">
               <td className="px-4 py-3 text-xs font-semibold text-[#202829]">站点整体</td>
-              <td className="px-4 py-3 text-sm text-[#2d3435]">{formatPercent(station.availability.sevenDayRate)}</td>
+              <td className="px-4 py-3">
+                <AvailabilityStatus
+                  rate={station.availability.sevenDayRate}
+                  samples={station.availability.sevenDaySamples}
+                  lastCheckedAt={station.availability.lastCheckedAt}
+                />
+              </td>
               <td className="px-4 py-3 text-sm text-[#2d3435]">{station.availability.sevenDaySamples}</td>
-              <td className="px-4 py-3 text-xs text-[#5a6061]">{formatDateMinute(station.availability.lastCheckedAt)}</td>
+              <td className="px-4 py-3 text-xs text-[#5a6061]">{formatMonitoringWindow(station.availability)}</td>
+              <td className="px-4 py-3 text-xs text-[#5a6061]">GPT + Claude 代表模型</td>
               <td className="px-4 py-3 text-xs text-[#5a6061]">{station.availability.note ?? "—"}</td>
             </tr>
             {(["claude", "gpt"] as const).map((family) => {
               const summary = getFamilyRateSummary(station, family);
+              const monitorModel = getFamilyMonitorModelLabel(station, family);
               return (
                 <tr key={family} className="border-b border-[#dfe4e5]">
                   <td className="px-4 py-3 text-xs font-semibold text-[#202829]">
                     {TRANSIT_MODEL_FAMILY_LABELS[family]}
                   </td>
-                  <td className="px-4 py-3 text-sm text-[#2d3435]">{formatPercent(summary.sevenDayRate)}</td>
+                  <td className="px-4 py-3">
+                    <AvailabilityStatus
+                      rate={summary.sevenDayRate}
+                      samples={summary.sevenDaySamples}
+                      lastCheckedAt={summary.lastCheckedAt}
+                    />
+                  </td>
                   <td className="px-4 py-3 text-sm text-[#2d3435]">{summary.sevenDaySamples}</td>
-                  <td className="px-4 py-3 text-xs text-[#5a6061]">{formatDateMinute(summary.lastCheckedAt)}</td>
+                  <td className="px-4 py-3 text-xs text-[#5a6061]">{formatMonitoringWindow(summary)}</td>
+                  <td className="px-4 py-3 text-xs text-[#5a6061]">{monitorModel}</td>
                   <td className="px-4 py-3 text-xs text-[#5a6061]">{formatAvailability({ sevenDayRate: summary.sevenDayRate, sevenDaySamples: summary.sevenDaySamples })}</td>
                 </tr>
               );
@@ -394,6 +1074,43 @@ function AvailabilityTable({ station }: { station: TransitStation }) {
       </div>
     </section>
   );
+}
+
+function AvailabilityStatus({
+  rate,
+  samples,
+  lastCheckedAt,
+}: {
+  rate: number | null;
+  samples: number;
+  lastCheckedAt: string | null;
+}) {
+  return (
+    <div className="min-w-[126px]">
+      <div className="whitespace-nowrap text-sm font-semibold text-[#2d3435]">
+        {formatPercent(rate)}
+        <span className="ml-1.5 text-xs font-medium text-[#5a6061]">样本 {samples}</span>
+      </div>
+      <TransitAvailabilityStrip
+        rate={rate}
+        samples={samples}
+        lastCheckedAt={lastCheckedAt}
+        className="mt-1"
+      />
+    </div>
+  );
+}
+
+function getFamilyMonitorModelLabel(station: TransitStation, family: TransitModelFamily): string {
+  const groups = getFamilyPriceGroups(station, family);
+  const models = uniqueStrings(groups.map((group) => group.primaryPrice.standardModel));
+  return models.length ? models.map((model) => shortModelLabel(model as TransitModelPrice["standardModel"])).join("、") : "暂无监测模型";
+}
+
+function formatMonitoringWindow(input: { firstCheckedAt?: string | null; lastCheckedAt: string | null; sevenDaySamples: number }): string {
+  if (!input.lastCheckedAt || input.sevenDaySamples <= 0) return "暂无监测区间";
+  const start = input.firstCheckedAt || input.lastCheckedAt;
+  return `${formatDateShortMinute(start)} - ${formatDateShortMinute(input.lastCheckedAt)}`;
 }
 
 function MetricCard({
@@ -442,4 +1159,18 @@ function TextLine({ label, value }: { label: string; value: string | null }) {
 
 function formatModelRate(value: number | null) {
   return value === null || !Number.isFinite(value) ? "未公开" : `${value.toFixed(2)}x`;
+}
+
+function formatModelRateRange(min: number | null, max: number | null): string {
+  if (min === null || max === null) return "未公开";
+  if (min === max) return formatModelRate(min);
+  return `${formatModelRate(min)}–${formatModelRate(max)}`;
+}
+
+function nullableSortValue(value: number | null): number {
+  return value === null || !Number.isFinite(value) ? Number.POSITIVE_INFINITY : value;
+}
+
+function uniqueStrings(items: string[]): string[] {
+  return Array.from(new Set(items.filter(Boolean)));
 }

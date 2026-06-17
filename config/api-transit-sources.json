@@ -1,5 +1,41 @@
 [
   {
+    "id": "sudocode-chat",
+    "name": "SudoCode",
+    "websiteUrl": "https://sudocode.chat/",
+    "apiBaseUrl": "https://sudocode.chat/v1",
+    "pricingUrl": "https://sudocode.chat/#model-pricing",
+    "pricingEndpointUrl": "https://sudocode.chat/api/pricing",
+    "collectorKind": "new_api_pricing",
+    "channelTypes": ["undisclosed"],
+    "accountPools": ["undisclosed"],
+    "summary": "公开 New API 价格接口可读取，已进入 PriceAI API 中转站自动价格采集池；稳定性和真实扣费仍需测试 Key 或人工样本补充。"
+  },
+  {
+    "id": "packyapi-com",
+    "name": "PackyAPI",
+    "websiteUrl": "https://www.packyapi.com/",
+    "apiBaseUrl": "https://www.packyapi.com/v1",
+    "pricingUrl": "https://www.packyapi.com/pricing",
+    "pricingEndpointUrl": "https://www.packyapi.com/api/pricing",
+    "collectorKind": "new_api_pricing",
+    "channelTypes": ["undisclosed"],
+    "accountPools": ["undisclosed"],
+    "summary": "公开 New API 价格接口可读取，已进入 PriceAI API 中转站自动价格采集池；稳定性和真实扣费仍需测试 Key 或人工样本补充。"
+  },
+  {
+    "id": "9527code-com",
+    "name": "9527Code",
+    "websiteUrl": "https://9527code.com/",
+    "apiBaseUrl": "https://9527code.com/v1",
+    "pricingUrl": "https://9527code.com/pricing",
+    "pricingEndpointUrl": "https://9527code.com/api/pricing",
+    "collectorKind": "new_api_pricing",
+    "channelTypes": ["undisclosed"],
+    "accountPools": ["undisclosed"],
+    "summary": "公开 New API 价格接口可读取，已进入 PriceAI API 中转站自动价格采集池；稳定性和真实扣费仍需测试 Key 或人工样本补充。"
+  },
+  {
     "id": "kksj-org",
     "name": "KK API",
     "websiteUrl": "https://api.kksj.org/",

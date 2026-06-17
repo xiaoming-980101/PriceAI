@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpDown, ChevronRight, ExternalLink, Filter } from "lucide-react";
+import { ArrowUpDown, ChevronRight, Filter } from "lucide-react";
 import {
   DataTableHead,
   DataTableShell,
@@ -12,9 +12,13 @@ import {
   SelectFilter,
   StatusChip,
 } from "@/components/ComparisonUi";
+import {
+  TransitAffPreferenceToggle,
+} from "@/components/TransitAffPreference";
+import { TransitAvailabilityStrip } from "@/components/TransitAvailabilityStrip";
 import { TransitStationSystemIcon } from "@/components/TransitStationSystemIcon";
 import { TransitViewTabs } from "@/components/TransitViewTabs";
-import { formatDateDay } from "@/lib/utils";
+import { formatDateDay, formatDateMinute, formatDateShortMinute } from "@/lib/utils";
 import type {
   TransitAccountPool,
   TransitChannelType,
@@ -32,7 +36,9 @@ import {
   formatMultiplierRange,
   formatRate,
   getRateBadgeClass,
+  getEffectiveTransitChannelTypes,
   getNormalizedSourceTags,
+  getPrimaryTransitCommercialOffer,
   getStationComparisonSummary,
   getStationRechargeCoefficient,
   getSummaryStats,
@@ -142,7 +148,7 @@ export default function TransitStationExplorer({ stations }: Props) {
     }
 
     if (channelFilter !== "all") {
-      result = result.filter((station) => station.channelTypes.includes(channelFilter));
+      result = result.filter((station) => getEffectiveTransitChannelTypes(station).includes(channelFilter));
     }
 
     if (poolFilter !== "all") {
@@ -221,6 +227,7 @@ export default function TransitStationExplorer({ stations }: Props) {
               <Filter className="h-3.5 w-3.5" />
               筛选{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
             </button>
+            <TransitAffPreferenceToggle />
           </div>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#5a6061]">
@@ -446,10 +453,7 @@ function StationRow({
         <SourceChannelCell station={station} />
       </td>
       <td className="px-5 py-4">
-        <div className="text-xs text-[#5a6061]">{formatDateDay(station.lastUpdatedAt)}</div>
-        <div className="mt-1 text-[10px] font-bold text-[#7f8889]">
-          {TRANSIT_DATA_STATUS_LABELS[station.dataStatus]}
-        </div>
+        <UpdatedAtCell station={station} />
       </td>
       <td className="px-5 py-4 text-center">
         <Link
@@ -505,7 +509,7 @@ function StationCard({
       </div>
       <SourceChannelCell station={station} />
       <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[#5a6061]">
-        <span>更新于 {formatDateDay(station.lastUpdatedAt)} · {TRANSIT_DATA_STATUS_LABELS[station.dataStatus]}</span>
+        <span>更新于 {formatDateShortMinute(station.lastUpdatedAt)} · {TRANSIT_DATA_STATUS_LABELS[station.dataStatus]}</span>
         <span className="inline-flex items-center gap-1 font-semibold text-[#2d3435]">
           查看 <ChevronRight size={13} />
         </span>
@@ -524,75 +528,84 @@ function AvailabilityCell({ station, compact = false }: { station: TransitStatio
       ) : (
         <div className="text-xs font-semibold text-[#202829]">{formatAvailability(station.availability)}</div>
       )}
-      <AvailabilityStrip rate={station.availability.sevenDayRate} samples={station.availability.sevenDaySamples} />
-      <div className="mt-1 text-[10px] text-[#7f8889]">
-        {station.availability.lastCheckedAt ?? "暂无检查时间"}
+      <TransitAvailabilityStrip
+        rate={station.availability.sevenDayRate}
+        samples={station.availability.sevenDaySamples}
+        lastCheckedAt={station.availability.lastCheckedAt}
+        className="mt-1"
+      />
+      <div className="mt-1 whitespace-nowrap text-[10px] text-[#7f8889]">
+        {formatDateShortMinute(station.availability.lastCheckedAt)}
       </div>
     </div>
   );
 }
 
-function AvailabilityStrip({ rate, samples }: { rate: number | null; samples: number }) {
-  const bars = buildAvailabilityBars(rate, samples);
+function UpdatedAtCell({ station }: { station: TransitStation }) {
   return (
-    <div
-      className="mt-1 flex h-4 items-end gap-[2px]"
-      aria-label={rate === null || samples <= 0 ? "稳定性样本不足" : `稳定性样本概览 ${(rate * 100).toFixed(1)}%`}
-      title="样本概览，真实逐次监控接入后会替换为时间线状态"
+    <span
+      className="inline-flex whitespace-nowrap rounded-full bg-[#f2f4f4] px-2.5 py-1 text-[11px] font-semibold text-[#5a6061]"
+      title={`${formatDateMinute(station.lastUpdatedAt)} · ${TRANSIT_DATA_STATUS_LABELS[station.dataStatus]}`}
     >
-      {bars.map((tone, index) => (
-        <span
-          key={`${tone}-${index}`}
-          className={`block w-[4px] rounded-full ${availabilityBarClass(tone)}`}
-          style={{ height: `${tone === "empty" ? 3 : index % 4 === 0 ? 12 : 15}px` }}
-        />
-      ))}
-    </div>
+      {formatDateShortMinute(station.lastUpdatedAt)}
+    </span>
   );
 }
 
-function buildAvailabilityBars(
-  rate: number | null,
-  samples: number,
-): Array<"good" | "warn" | "bad" | "empty"> {
-  const total = 16;
-  if (rate === null || samples <= 0) return Array(total).fill("empty");
-  const clamped = Math.max(0, Math.min(1, rate));
-  const goodCount = Math.round(clamped * total);
-  const weakCount = Math.max(0, total - goodCount);
-  return Array.from({ length: total }, (_, index) => {
-    if (index < goodCount) return "good";
-    if (weakCount <= 2) return "warn";
-    return index % 3 === 0 ? "bad" : "warn";
-  });
-}
+function StationIdentity({
+  station,
+  compact = false,
+}: {
+  station: TransitStation;
+  compact?: boolean;
+}) {
+  const offer = getPrimaryTransitCommercialOffer(station);
+  const offerLabel = offer ? formatListOfferLabel(offer) : null;
+  const offerTitle = offer ? offer.title : "";
 
-function availabilityBarClass(tone: "good" | "warn" | "bad" | "empty"): string {
-  if (tone === "good") return "bg-[#45bf78]";
-  if (tone === "warn") return "bg-[#d99a2b]";
-  if (tone === "bad") return "bg-[#d95745]";
-  return "bg-[#dfe4e5]";
-}
-
-function StationIdentity({ station, compact = false }: { station: TransitStation; compact?: boolean }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
       <TransitStationSystemIcon station={station} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-[#202829]">{station.name}</div>
-        <div className="mt-1 flex min-w-0 items-center gap-1 text-xs text-[#5a6061]">
-          <ExternalLink className="h-3 w-3 shrink-0" />
-          <span className="truncate">{station.websiteUrl.replace(/^https?:\/\//, "")}</span>
-        </div>
-        <div className="mt-2 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden">
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
           <span className="inline-flex h-5 w-[72px] shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] px-2 text-[10px] font-bold text-[#5a6061]">
             <span className="truncate">{getTransitStationSystemLabel(station)}</span>
           </span>
+          {offerLabel ? (
+            <span
+              className="inline-flex h-5 max-w-[116px] shrink-0 items-center justify-center rounded-full bg-[#fff7e8] px-2 text-[10px] font-bold text-[#7a541b]"
+              title={offerTitle}
+            >
+              <span className="truncate">{offerLabel}</span>
+            </span>
+          ) : null}
           <ModelCoverage station={station} compact={compact} />
         </div>
       </div>
     </div>
   );
+}
+
+function formatListOfferLabel(offer: NonNullable<TransitStation["commercialOffers"]>[number]): string {
+  const amount = extractRegistrationBonusAmount([
+    offer.title,
+    offer.description,
+  ].filter(Boolean).join(" "));
+  if (amount) return offer.code ? `填码送 $${amount}` : `注册送 $${amount}`;
+  if (/首充|充值/.test(offer.title)) return "首充优惠";
+  return offer.title;
+}
+
+function extractRegistrationBonusAmount(text: string): string | null {
+  const normalized = text.replace(/\s+/g, " ");
+  const registrationMatch = normalized.match(/注册[^0-9$¥￥]*(?:赠送|赠|送)[^0-9$¥￥]*(?:[$¥￥]\s*)?(\d+(?:\.\d+)?)(?:\s*(?:刀|美元|美金|余额|额度))?/);
+  if (registrationMatch?.[1]) return registrationMatch[1];
+
+  const dollarMatch = normalized.match(/(?:[$]\s*)(\d+(?:\.\d+)?)(?:\s*(?:余额|额度))?/);
+  if (dollarMatch?.[1]) return dollarMatch[1];
+
+  return null;
 }
 
 function ModelCoverage({ station, compact = false }: { station: TransitStation; compact?: boolean }) {

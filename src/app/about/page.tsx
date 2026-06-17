@@ -48,7 +48,7 @@ const sourcePrinciples = [
 const disclosures = [
   {
     title: "广告与赞助",
-    body: "当前首页不放赞助位。后续如果出现广告、赞助、入驻或返佣关系，会明确标识，不能伪装成自然推荐。",
+    body: "当前首页不放赞助位。后续如果出现广告、赞助、入驻或 AFF 关系，会明确标识，不能伪装成自然推荐。",
   },
   {
     title: "排序与推荐",
@@ -150,7 +150,7 @@ export default function AboutPage() {
                 盈利可以做，但必须标清楚。
               </h2>
               <p className="mt-4 text-sm leading-7 text-[var(--color-text-muted)]">
-                未来如果进入赞助、广告、入驻或返佣阶段，信息呈现必须和普通比较结果区分开。
+                未来如果进入赞助、广告、入驻或 AFF 阶段，信息呈现必须和普通比较结果区分开。
               </p>
             </div>
 

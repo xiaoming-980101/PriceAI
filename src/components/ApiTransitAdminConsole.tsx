@@ -28,9 +28,11 @@ import type {
   ApiTransitAdminRun,
   ApiTransitAdminStation,
   ApiTransitAdminSubmission,
+  ApiTransitCommercialOffer,
   ApiTransitOfferCandidate,
   ApiTransitOfferStatus,
   ApiTransitSubmissionReviewStatus,
+  ApiTransitVerificationEvent,
 } from "@/lib/api-transit-admin-types";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
 
@@ -49,6 +51,7 @@ type ApiTransitStationEditInput = {
   websiteUrl: string;
   apiBaseUrl: string | null;
   pricingUrl: string | null;
+  monitorUrl: string | null;
   summary: string | null;
   sourceType: string;
   commercialRelation: string;
@@ -67,6 +70,10 @@ type ApiTransitStationEditInput = {
   usageAdvice: string;
   published: boolean;
   adminNote: string | null;
+  strengths: string[];
+  cautions: string[];
+  commercialOffers: ApiTransitCommercialOffer[];
+  verificationEvents: ApiTransitVerificationEvent[];
 };
 type ApiTransitOfferEditInput = {
   id: string;
@@ -142,8 +149,10 @@ export function ApiTransitAdminPanel({
           station.name,
           station.websiteUrl,
           station.pricingUrl,
+          station.monitorUrl,
           station.collectorKind,
           station.adminNote,
+          station.commercialOffers.map((offer) => `${offer.title} ${offer.code || ""}`).join(" "),
         ]),
       ),
     [data.stations, normalizedQuery],
@@ -788,7 +797,7 @@ function OfferCandidatesPanel({
                     <span className="font-mono text-sm font-semibold text-[#202829]">{formatRatio(candidate.modelMultiplier)}</span>
                     <div className="mt-1 text-xs text-[#5a6061]">{candidate.rechargeRatio || "未标"}</div>
                     <div className="mt-1 font-mono text-xs text-[#5a6061]">
-                      {formatCurrency(candidate.inputPrice, candidate.currency)} / {formatCurrency(candidate.outputPrice, candidate.currency)}
+                      {formatCurrency(candidate.inputUnitPriceUsd, "USD")} / {formatCurrency(candidate.outputUnitPriceUsd, "USD")}
                     </div>
                   </td>
                   <td className="px-3 py-3 align-top">
@@ -960,8 +969,8 @@ function OffersPanel({
                     <div className="mt-1 text-xs text-[#5a6061]">{offer.rechargeRatio || "未标"}</div>
                   </td>
                   <td className="px-3 py-3 align-top">
-                    <div className="font-mono text-xs text-[#202829]">{formatCurrency(offer.inputPrice, offer.currency)}</div>
-                    <div className="mt-1 font-mono text-xs text-[#5a6061]">{formatCurrency(offer.outputPrice, offer.currency)}</div>
+                    <div className="font-mono text-xs text-[#202829]">{formatCurrency(offer.inputUnitPriceUsd, "USD")}</div>
+                    <div className="mt-1 font-mono text-xs text-[#5a6061]">{formatCurrency(offer.outputUnitPriceUsd, "USD")}</div>
                   </td>
                   <td className="px-3 py-3 align-top">
                     <div className="text-xs text-[#5a6061]">{offer.priceSource}</div>
@@ -1180,6 +1189,7 @@ function StationEditDialog({
             websiteUrl: formText(formData, "websiteUrl") || station.websiteUrl,
             apiBaseUrl: formNullableText(formData, "apiBaseUrl"),
             pricingUrl: formNullableText(formData, "pricingUrl"),
+            monitorUrl: formNullableText(formData, "monitorUrl"),
             summary: formNullableText(formData, "summary"),
             sourceType: formText(formData, "sourceType") || station.sourceType,
             commercialRelation: formText(formData, "commercialRelation") || station.commercialRelation,
@@ -1198,6 +1208,10 @@ function StationEditDialog({
             usageAdvice: formText(formData, "usageAdvice") || station.usageAdvice,
             published: formData.get("published") === "on",
             adminNote: formNullableText(formData, "adminNote"),
+            strengths: splitList(formText(formData, "strengths")),
+            cautions: splitList(formText(formData, "cautions")),
+            commercialOffers: buildCommercialOffersFromForm(formData, station),
+            verificationEvents: parseVerificationEvents(formText(formData, "verificationEvents")),
           });
         }}
       >
@@ -1213,6 +1227,9 @@ function StationEditDialog({
           </AdminField>
           <AdminField label="价格页 / 价格接口">
             <input name="pricingUrl" defaultValue={station.pricingUrl || ""} className={adminFieldClassName} type="url" />
+          </AdminField>
+          <AdminField label="公开监测页">
+            <input name="monitorUrl" defaultValue={station.monitorUrl || ""} className={adminFieldClassName} type="url" />
           </AdminField>
           <AdminField label="系统 / 采集器类型">
             <input name="collectorKind" defaultValue={station.collectorKind} className={adminFieldClassName} />
@@ -1238,7 +1255,7 @@ function StationEditDialog({
               <option value="none">无</option>
               <option value="listed">收录</option>
               <option value="partner">合作</option>
-              <option value="affiliate">返佣</option>
+              <option value="affiliate">AFF</option>
               <option value="sponsored">赞助</option>
               <option value="unknown">未知</option>
             </select>
@@ -1273,10 +1290,10 @@ function StationEditDialog({
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <AdminField label="渠道标签">
-            <input name="channelTypes" defaultValue={station.channelTypes.join("，")} className={adminFieldClassName} placeholder="官方 API，云厂商，一手号池" />
+            <input name="channelTypes" defaultValue={station.channelTypes.join("，")} className={adminFieldClassName} placeholder="一手自建号池，逆向，云厂商，官方 API" />
           </AdminField>
           <AdminField label="号池标签">
-            <input name="accountPools" defaultValue={station.accountPools.join("，")} className={adminFieldClassName} placeholder="plus，pro，aws" />
+            <input name="accountPools" defaultValue={station.accountPools.join("，")} className={adminFieldClassName} placeholder="Plus，Pro，Max，Kiro" />
           </AdminField>
           <AdminField label="支付方式">
             <input name="paymentMethods" defaultValue={station.paymentMethods.join("，")} className={adminFieldClassName} />
@@ -1293,6 +1310,58 @@ function StationEditDialog({
         </div>
         <AdminField label="风险标签">
           <input name="riskLabels" defaultValue={station.riskLabels.join("，")} className={adminFieldClassName} />
+        </AdminField>
+        <div className="grid gap-3 md:grid-cols-2">
+          <AdminField label="优点，一行一个">
+            <textarea name="strengths" defaultValue={station.strengths.join("\n")} className={`${adminFieldClassName} min-h-24 resize-y py-2 leading-6`} />
+          </AdminField>
+          <AdminField label="注意事项，一行一个">
+            <textarea name="cautions" defaultValue={station.cautions.join("\n")} className={`${adminFieldClassName} min-h-24 resize-y py-2 leading-6`} />
+          </AdminField>
+        </div>
+        <section className="rounded-lg border border-[#adb3b4]/25 bg-[#f8fafa] p-3">
+          <div className="mb-3 text-sm font-semibold text-[#202829]">可用优惠 / AFF</div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <AdminField label="优惠标题">
+              <input name="offerTitle" defaultValue={station.commercialOffers[0]?.title || ""} className={adminFieldClassName} placeholder="例如 首充 9 折 / PriceAI 专属优惠" />
+            </AdminField>
+            <AdminField label="优惠类型">
+              <select name="offerType" defaultValue={station.commercialOffers[0]?.type || "coupon"} className={adminFieldClassName}>
+                <option value="coupon">优惠码</option>
+                <option value="affiliate">AFF 链接</option>
+                <option value="sponsored">赞助权益</option>
+              </select>
+            </AdminField>
+            <AdminField label="优惠码">
+              <input name="offerCode" defaultValue={station.commercialOffers[0]?.code || ""} className={adminFieldClassName} />
+            </AdminField>
+            <AdminField label="优惠 / AFF 链接">
+              <input name="offerUrl" defaultValue={station.commercialOffers[0]?.url || ""} className={adminFieldClassName} type="url" />
+            </AdminField>
+            <AdminField label="有效期">
+              <input name="offerValidUntil" defaultValue={station.commercialOffers[0]?.validUntil || ""} className={adminFieldClassName} placeholder="例如 2026-07-01 / 长期有效" />
+            </AdminField>
+            <label className="flex h-11 items-center gap-2 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-sm font-medium text-[#2d3435]">
+              <input name="offerEnabled" type="checkbox" defaultChecked={station.commercialOffers[0]?.enabled ?? false} className="h-4 w-4 accent-[#2d3435]" />
+              前台展示优惠
+            </label>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <AdminField label="优惠说明">
+              <textarea name="offerDescription" defaultValue={station.commercialOffers[0]?.description || ""} className={`${adminFieldClassName} min-h-20 resize-y py-2 leading-6`} />
+            </AdminField>
+            <AdminField label="披露文案">
+              <textarea name="offerDisclosure" defaultValue={station.commercialOffers[0]?.disclosure || ""} className={`${adminFieldClassName} min-h-20 resize-y py-2 leading-6`} placeholder="例如 该链接可能包含 AFF，不影响排序口径。" />
+            </AdminField>
+          </div>
+        </section>
+        <AdminField label="核验记录，一行一条：日期 | 来源 | 状态 | 标题 | 说明">
+          <textarea
+            name="verificationEvents"
+            defaultValue={formatVerificationEventsForInput(station.verificationEvents)}
+            className={`${adminFieldClassName} min-h-28 resize-y py-2 leading-6`}
+            placeholder="2026-06-17 | priceai | success | 价格页已解析 | 已核验 Claude / GPT 倍率"
+          />
         </AdminField>
         <AdminField label="站点简介">
           <textarea name="summary" defaultValue={station.summary} className={`${adminFieldClassName} min-h-20 resize-y py-2 leading-6`} />
@@ -1393,10 +1462,10 @@ function OfferEditDialog({
             <input name="currency" defaultValue={offer.currency} className={adminFieldClassName} />
           </AdminField>
           <AdminField label="号池">
-            <input name="accountPool" defaultValue={offer.accountPool} className={adminFieldClassName} />
+            <input name="accountPool" defaultValue={offer.accountPool} className={adminFieldClassName} placeholder="Plus / Pro / Max / Kiro" />
           </AdminField>
           <AdminField label="渠道类型">
-            <input name="channelType" defaultValue={offer.channelType} className={adminFieldClassName} />
+            <input name="channelType" defaultValue={offer.channelType} className={adminFieldClassName} placeholder="一手自建号池 / 逆向 / 云厂商" />
           </AdminField>
           <AdminField label="价格来源">
             <input name="priceSource" defaultValue={offer.priceSource} className={adminFieldClassName} />
@@ -1517,8 +1586,14 @@ function SubmissionMetaSummary({ submission }: { submission: ApiTransitAdminSubm
     ["API", submission.apiBaseUrl],
     ["价格页", submission.pricingUrl],
     ["监测", stringMeta(meta, "monitorUrl")],
+    ["优惠码", stringMeta(meta, "couponCode")],
+    ["优惠链接", stringMeta(meta, "commercialUrl")],
     ["凭据额度", stringMeta(meta, "credentialBudgetLimit")],
     ["过期", stringMeta(meta, "credentialExpiresAt")],
+    ["凭据分组", stringMeta(meta, "credentialGroupName")],
+    ["分组 ID", stringMeta(meta, "credentialGroupId")],
+    ["号池", stringMeta(meta, "credentialAccountPool")],
+    ["模型族", stringMeta(meta, "credentialFamily")],
     ["监测频率", stringMeta(meta, "monitorBudgetLimit")],
   ].filter((row): row is [string, string] => Boolean(row[1]));
   const chips = [
@@ -1673,6 +1748,81 @@ function formNullableNumber(formData: FormData, name: string): number | null {
 
 function splitList(value: string): string[] {
   return value.split(/[,，\n|｜]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function buildCommercialOffersFromForm(
+  formData: FormData,
+  station: ApiTransitAdminStation,
+): ApiTransitCommercialOffer[] {
+  const title = formText(formData, "offerTitle");
+  const existing = station.commercialOffers[0];
+  if (!title) return [];
+
+  return [
+    {
+      id: existing?.id || "primary-offer",
+      type: commercialOfferTypeFromText(formText(formData, "offerType")),
+      title,
+      description: formNullableText(formData, "offerDescription"),
+      code: formNullableText(formData, "offerCode"),
+      url: formNullableText(formData, "offerUrl"),
+      validUntil: formNullableText(formData, "offerValidUntil"),
+      disclosure: formNullableText(formData, "offerDisclosure"),
+      enabled: formData.get("offerEnabled") === "on",
+    },
+  ];
+}
+
+function commercialOfferTypeFromText(value: string): ApiTransitCommercialOffer["type"] {
+  if (value === "affiliate" || value === "sponsored" || value === "coupon") return value;
+  return "coupon";
+}
+
+function formatVerificationEventsForInput(events: ApiTransitVerificationEvent[]): string {
+  return events
+    .map((event) => [
+      event.happenedAt,
+      event.source,
+      event.status,
+      event.title,
+      event.description || "",
+    ].join(" | "))
+    .join("\n");
+}
+
+function parseVerificationEvents(value: string): ApiTransitVerificationEvent[] {
+  return value
+    .split(/\n+/)
+    .map((line, index) => {
+      const parts = line.split("|").map((part) => part.trim());
+      const [happenedAt, source, status, title, description] = parts;
+      if (!title && !parts[0]) return null;
+      return {
+        id: `event-${index}`,
+        happenedAt: happenedAt || new Date().toISOString(),
+        source: verificationEventSourceFromText(source),
+        status: verificationEventStatusFromText(status),
+        title: title || parts[0] || "核验记录",
+        description: description || null,
+      };
+    })
+    .filter((event): event is ApiTransitVerificationEvent => Boolean(event));
+}
+
+function verificationEventSourceFromText(value: string | undefined): ApiTransitVerificationEvent["source"] {
+  if (value === "official" || value === "user" || value === "merchant" || value === "priceai") return value;
+  if (value === "官方监测") return "official";
+  if (value === "用户反馈") return "user";
+  if (value === "商家提交") return "merchant";
+  return "priceai";
+}
+
+function verificationEventStatusFromText(value: string | undefined): ApiTransitVerificationEvent["status"] {
+  if (value === "warning" || value === "failed" || value === "info" || value === "success") return value;
+  if (value === "失败") return "failed";
+  if (value === "警告") return "warning";
+  if (value === "成功") return "success";
+  return "info";
 }
 
 function stringMeta(meta: Record<string, unknown>, key: string): string | null {

@@ -1350,6 +1350,7 @@ create table if not exists api_transit_stations (
   website_url text not null,
   api_base_url text,
   pricing_url text,
+  monitor_url text,
   status text not null default 'unknown' check (status in ('active', 'limited', 'unavailable', 'unknown')),
   source_type text not null default 'manual_collected' check (source_type in ('manual_collected', 'user_submitted', 'merchant_submitted')),
   commercial_relation text not null default 'unknown' check (commercial_relation in ('none', 'listed', 'partner', 'affiliate', 'sponsored', 'unknown')),
@@ -1373,6 +1374,10 @@ create table if not exists api_transit_stations (
   feedback_merchant_responded_count integer not null default 0,
   feedback_main_themes text[] not null default '{}'::text[],
   feedback_public_notes text,
+  strengths text[] not null default '{}'::text[],
+  cautions text[] not null default '{}'::text[],
+  commercial_offers jsonb not null default '[]'::jsonb,
+  verification_events jsonb not null default '[]'::jsonb,
   collector_kind text not null default 'manual_review',
   pricing_endpoint_url text,
   collection_status text not null default 'pending' check (collection_status in ('pending', 'success', 'partial', 'failed', 'manual_review')),
@@ -1492,6 +1497,8 @@ create index if not exists api_transit_offers_family_idx on api_transit_offers(f
 create index if not exists api_transit_offers_status_idx on api_transit_offers(status);
 create index if not exists api_transit_submissions_review_status_idx on api_transit_submissions(review_status, created_at desc);
 create index if not exists api_transit_submissions_submitted_url_idx on api_transit_submissions(submitted_url);
+create index if not exists api_transit_stations_commercial_offers_idx on api_transit_stations using gin (commercial_offers);
+create index if not exists api_transit_stations_verification_events_idx on api_transit_stations using gin (verification_events);
 create index if not exists api_transit_credentials_submission_id_idx on api_transit_credentials(submission_id);
 create index if not exists api_transit_credentials_status_idx on api_transit_credentials(status, created_at desc);
 create index if not exists api_transit_detection_runs_started_at_idx on api_transit_detection_runs(started_at desc);

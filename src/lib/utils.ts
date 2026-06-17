@@ -142,7 +142,7 @@ export function normalizeStatus(value: string | null | undefined): OfferStatus {
 export function formatCurrency(value: number | null, currency = "CNY"): string {
   if (value === null || Number.isNaN(value)) return "暂无价格";
 
-  const symbol = currency === "CNY" ? "¥" : `${currency} `;
+  const symbol = currency === "CNY" ? "¥" : currency === "USD" ? "$" : `${currency} `;
   return `${symbol}${value.toLocaleString("zh-CN", {
     minimumFractionDigits: value % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2,
@@ -179,6 +179,11 @@ export function formatDateMinute(value: string | null | undefined): string {
   if (!value) return "未记录";
 
   const text = value.trim();
+  if (hasExplicitTimeZone(text)) {
+    const date = new Date(text);
+    if (!Number.isNaN(date.getTime())) return formatBeijingDateMinute(date);
+  }
+
   const isoMatch = text.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
   if (isoMatch) return `${isoMatch[1]} ${isoMatch[2]}:${isoMatch[3]}`;
 
@@ -192,10 +197,26 @@ export function formatDateMinute(value: string | null | undefined): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+export function formatDateShortMinute(value: string | null | undefined): string {
+  const formatted = formatDateMinute(value);
+  const match = formatted.match(/^\d{4}-(\d{2}-\d{2}) (\d{2}:\d{2})$/);
+  if (match) return `${match[1]} ${match[2]}`;
+
+  const dayMatch = formatted.match(/^\d{4}-(\d{2}-\d{2})$/);
+  if (dayMatch) return dayMatch[1];
+
+  return formatted;
+}
+
 export function formatDateDay(value: string | null | undefined): string {
   if (!value) return "未记录";
 
   const text = value.trim();
+  if (hasExplicitTimeZone(text)) {
+    const date = new Date(text);
+    if (!Number.isNaN(date.getTime())) return formatBeijingDateDay(date);
+  }
+
   const dateMatch = text.match(/^(\d{4}-\d{2}-\d{2})/);
   if (dateMatch) return dateMatch[1];
 
@@ -204,4 +225,30 @@ export function formatDateDay(value: string | null | undefined): string {
 
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function hasExplicitTimeZone(value: string): boolean {
+  return /(?:T|\s)\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/.test(value);
+}
+
+function formatBeijingDateMinute(date: Date): string {
+  const parts = datePartsInBeijing(date, true);
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+function formatBeijingDateDay(date: Date): string {
+  const parts = datePartsInBeijing(date, false);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function datePartsInBeijing(date: Date, includeTime: boolean): Record<string, string> {
+  const formatter = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    ...(includeTime ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" as const } : {}),
+  });
+  const entries = formatter.formatToParts(date).map((part) => [part.type, part.value]);
+  return Object.fromEntries(entries);
 }

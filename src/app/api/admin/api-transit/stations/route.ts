@@ -22,6 +22,7 @@ const patchSchema = z.discriminatedUnion("action", [
     websiteUrl: z.string().url().max(2048).optional(),
     apiBaseUrl: z.string().url().max(2048).nullable().optional(),
     pricingUrl: z.string().url().max(2048).nullable().optional(),
+    monitorUrl: z.string().url().max(2048).nullable().optional(),
     summary: z.string().trim().max(1000).nullable().optional(),
     sourceType: z.enum(["manual_collected", "user_submitted", "merchant_submitted"]).optional(),
     commercialRelation: z.enum(["none", "listed", "partner", "affiliate", "sponsored", "unknown"]).optional(),
@@ -40,6 +41,27 @@ const patchSchema = z.discriminatedUnion("action", [
     usageAdvice: z.enum(["try_small", "cautious", "not_recommended", "pending"]).optional(),
     status: z.enum(["active", "limited", "unavailable", "unknown"]).optional(),
     adminNote: z.string().trim().max(1000).nullable().optional(),
+    strengths: z.array(z.string().trim().max(120)).max(12).optional(),
+    cautions: z.array(z.string().trim().max(160)).max(12).optional(),
+    commercialOffers: z.array(z.object({
+      id: z.string().trim().max(80),
+      type: z.enum(["coupon", "affiliate", "sponsored"]),
+      title: z.string().trim().max(120),
+      description: z.string().trim().max(300).nullable(),
+      code: z.string().trim().max(80).nullable(),
+      url: z.string().url().max(2048).nullable(),
+      validUntil: z.string().trim().max(80).nullable(),
+      disclosure: z.string().trim().max(220).nullable(),
+      enabled: z.boolean(),
+    })).max(8).optional(),
+    verificationEvents: z.array(z.object({
+      id: z.string().trim().max(80),
+      source: z.enum(["priceai", "official", "user", "merchant"]),
+      status: z.enum(["success", "warning", "failed", "info"]),
+      title: z.string().trim().max(120),
+      description: z.string().trim().max(400).nullable(),
+      happenedAt: z.string().trim().max(100),
+    })).max(12).optional(),
   }),
 ]);
 
@@ -63,6 +85,7 @@ export async function PATCH(request: Request) {
       websiteUrl: payload.websiteUrl,
       apiBaseUrl: payload.apiBaseUrl,
       pricingUrl: payload.pricingUrl,
+      monitorUrl: payload.monitorUrl,
       summary: payload.summary,
       sourceType: payload.sourceType,
       commercialRelation: payload.commercialRelation,
@@ -81,6 +104,10 @@ export async function PATCH(request: Request) {
       usageAdvice: payload.usageAdvice,
       status: payload.status,
       adminNote: payload.adminNote,
+      strengths: payload.strengths,
+      cautions: payload.cautions,
+      commercialOffers: payload.commercialOffers,
+      verificationEvents: payload.verificationEvents,
     });
     clearApiTransitAdminCaches();
     return Response.json({ ok: true, station });
