@@ -113,9 +113,7 @@ async function readStationsFromSupabase(): Promise<TransitStation[]> {
 
     const stationRows = dbRows(stationsResult.data);
     if (!stationRows.length) return [];
-    const stationIds = stationRows.map((row) => stringValue(row.id)).filter(Boolean);
     const enhancementRows = await readStationEnhancementRows();
-    const availabilityWindows = await readAvailabilityWindows(stationIds);
     const enhancementsByStation = new Map<string, DbRow>();
     for (const row of enhancementRows) {
       const id = stringValue(row.id);
@@ -134,9 +132,7 @@ async function readStationsFromSupabase(): Promise<TransitStation[]> {
       return mapStationRow(
         row,
         offersByStation.get(id) || [],
-        enhancementsByStation.get(id),
-        availabilityWindows.stations.get(id),
-        availabilityWindows.models
+        enhancementsByStation.get(id)
       );
     });
   } catch (error) {
@@ -169,66 +165,14 @@ async function readStationsFromSupabase(): Promise<TransitStation[]> {
       return [];
     }
   }
-
-  async function readAvailabilityWindows(stationIds: string[]): Promise<{
-    stations: Map<string, AvailabilityWindow>;
-    models: Map<string, AvailabilityWindow>;
-  }> {
-    const stations = new Map<string, AvailabilityWindow>();
-    const models = new Map<string, AvailabilityWindow>();
-    if (!stationIds.length) return { stations, models };
-
-    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const { data, error } = await client
-      .from("api_transit_detection_runs")
-      .select("station_id,started_at,finished_at,raw_snapshot")
-      .in("station_id", stationIds)
-      .eq("run_type", "api_probe")
-      .gte("started_at", since)
-      .order("started_at", { ascending: true })
-      .limit(1000);
-
-    if (error) throw error;
-
-    for (const row of dbRows(data)) {
-      const stationId = stringValue(row.station_id);
-      if (!stationId) continue;
-      const checkedAt = nullableTimestamp(row.finished_at || row.started_at);
-      if (!checkedAt) continue;
-
-      const snapshot = row.raw_snapshot && typeof row.raw_snapshot === "object" ? row.raw_snapshot as DbRow : {};
-      const targetResults = Array.isArray(snapshot.targetResults) ? snapshot.targetResults : [];
-      const targetSamples = targetResults.filter(isTargetAvailabilitySample);
-
-      if (targetSamples.length) {
-        for (const item of targetSamples) {
-          mergeWindow(stations, stationId, checkedAt);
-          const standardModel = standardModelValue((item as DbRow).standardModel);
-          if (standardModel) mergeWindow(models, modelWindowKey(stationId, standardModel), checkedAt);
-        }
-        continue;
-      }
-
-      const modelList = snapshot.modelList;
-      if (modelList && typeof modelList === "object") mergeWindow(stations, stationId, checkedAt);
-    }
-
-    return { stations, models };
-  }
 }
 
 type DbRow = Record<string, unknown>;
-type AvailabilityWindow = {
-  firstCheckedAt: string | null;
-  lastCheckedAt: string | null;
-};
 
 function mapStationRow(
   row: DbRow,
   offerRows: DbRow[],
-  enhancementRow?: DbRow,
-  stationWindow?: AvailabilityWindow,
-  modelWindows?: Map<string, AvailabilityWindow>
+  enhancementRow?: DbRow
 ): TransitStation {
   const id = stringValue(row.id);
   const updatedAt = timestampValue(row.last_updated_at || row.updated_at);
@@ -259,11 +203,11 @@ function mapStationRow(
     availability: {
       sevenDayRate: numberValue(row.availability_seven_day_rate),
       sevenDaySamples: integerValue(row.availability_seven_day_samples) || 0,
-      firstCheckedAt: stationWindow?.firstCheckedAt ?? null,
+      firstCheckedAt: null,
       lastCheckedAt: nullableTimestamp(row.availability_last_checked_at),
       note: nullableString(row.availability_note) || undefined,
     },
-    prices: offerRows.map((offer) => mapOfferRow(offer, modelWindows)).filter((price): price is TransitModelPrice => Boolean(price)),
+    prices: offerRows.map((offer) => mapOfferRow(offer)).filter((price): price is TransitModelPrice => Boolean(price)),
     feedback: {
       pendingCount: integerValue(row.feedback_pending_count) || 0,
       verifiedRiskCount: integerValue(row.feedback_verified_risk_count) || 0,
@@ -278,12 +222,10 @@ function mapStationRow(
   };
 }
 
-function mapOfferRow(row: DbRow, modelWindows?: Map<string, AvailabilityWindow>): TransitModelPrice | null {
+function mapOfferRow(row: DbRow): TransitModelPrice | null {
   const family = modelFamily(row.family);
   const standardModel = standardModelValue(row.standard_model);
   if (!family || !standardModel) return null;
-  const stationId = stringValue(row.station_id);
-  const window = modelWindows?.get(modelWindowKey(stationId, standardModel));
 
   return {
     family,
@@ -303,7 +245,7 @@ function mapOfferRow(row: DbRow, modelWindows?: Map<string, AvailabilityWindow>)
     availability: {
       sevenDayRate: numberValue(row.availability_seven_day_rate),
       sevenDaySamples: integerValue(row.availability_seven_day_samples) || 0,
-      firstCheckedAt: window?.firstCheckedAt ?? null,
+      firstCheckedAt: null,
       lastCheckedAt: nullableTimestamp(row.availability_last_checked_at),
       note: nullableString(row.availability_note) || undefined,
     },
@@ -354,27 +296,6 @@ function nullableTimestamp(value: unknown): string | null {
   const text = nullableString(value);
   if (!text) return null;
   return text;
-}
-
-function mergeWindow(windows: Map<string, AvailabilityWindow>, key: string, checkedAt: string): void {
-  const existing = windows.get(key);
-  if (!existing) {
-    windows.set(key, { firstCheckedAt: checkedAt, lastCheckedAt: checkedAt });
-    return;
-  }
-
-  windows.set(key, {
-    firstCheckedAt: !existing.firstCheckedAt || checkedAt < existing.firstCheckedAt ? checkedAt : existing.firstCheckedAt,
-    lastCheckedAt: !existing.lastCheckedAt || checkedAt > existing.lastCheckedAt ? checkedAt : existing.lastCheckedAt,
-  });
-}
-
-function modelWindowKey(stationId: string, standardModel: string): string {
-  return `${stationId}::${standardModel}`;
-}
-
-function isTargetAvailabilitySample(item: unknown): item is DbRow {
-  return Boolean(item && typeof item === "object" && !Array.isArray(item) && typeof (item as DbRow).ok === "boolean");
 }
 
 function stringArray(value: unknown): string[] {

@@ -5,6 +5,8 @@ import { getSupabaseServerClient } from "@/lib/supabase";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const HEALTH_SUPABASE_TIMEOUT_MS = 2_500;
+
 type HealthStatus = "ok" | "degraded" | "not_configured";
 
 export async function GET() {
@@ -33,7 +35,8 @@ export async function GET() {
     const { error } = await supabase
       .from("sources")
       .select("id", { head: true })
-      .limit(1);
+      .limit(1)
+      .abortSignal(AbortSignal.timeout(HEALTH_SUPABASE_TIMEOUT_MS));
 
     if (error) throw error;
 

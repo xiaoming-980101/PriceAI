@@ -48,10 +48,12 @@ const PUBLIC_FALLBACK_MAX_ROWS = 5000;
 const PUBLIC_DATA_CACHE_TTL_MS = 120_000;
 const EXPLORER_DATA_CACHE_TTL_MS = 120_000;
 const PRODUCT_OFFERS_CACHE_TTL_MS = 120_000;
+const PUBLIC_SUPABASE_READ_TIMEOUT_MS = 2_500;
 const DASHBOARD_DATA_CACHE_TTL_MS = 30_000;
 const ADMIN_DATA_CACHE_TTL_MS = 120_000;
 const ADMIN_OFFER_SAMPLE_LIMIT = 80;
 const EXPLORER_OFFER_SEARCH_TEXT_MAX_LENGTH = 480;
+const STALE_PUBLIC_DATA_MESSAGE = "报价服务响应变慢，已先显示最近缓存结果。";
 const RAW_OFFER_PUBLIC_SELECT = [
   "id",
   "source_id",
@@ -235,7 +237,8 @@ async function listVisibleRawOfferRows(): Promise<Record<string, unknown>[]> {
       .select(RAW_OFFER_PUBLIC_SELECT)
       .eq("hidden", false)
       .order("captured_at", { ascending: false })
-      .range(from, to);
+      .range(from, to)
+      .abortSignal(publicSupabaseReadSignal());
 
     if (error) throw error;
 
@@ -255,13 +258,15 @@ async function readPublicOfferData(): Promise<PublicOfferData> {
 
   if (publicOfferDataPromise) return publicOfferDataPromise;
 
+  const staleValue = publicOfferDataCache?.value || null;
   publicOfferDataPromise = loadPublicOfferData()
     .then((value) => {
+      const nextValue = preferStalePublicOfferData(staleValue, value);
       publicOfferDataCache = {
         expiresAt: Date.now() + PUBLIC_DATA_CACHE_TTL_MS,
-        value,
+        value: nextValue,
       };
-      return value;
+      return nextValue;
     })
     .finally(() => {
       publicOfferDataPromise = null;
@@ -322,13 +327,15 @@ export async function getExplorerData(): Promise<ExplorerData> {
 
   if (explorerDataPromise) return explorerDataPromise;
 
+  const staleValue = explorerDataCache?.value || null;
   explorerDataPromise = buildExplorerData()
     .then((value) => {
+      const nextValue = preferStaleExplorerData(staleValue, value);
       explorerDataCache = {
         expiresAt: Date.now() + EXPLORER_DATA_CACHE_TTL_MS,
-        value,
+        value: nextValue,
       };
-      return value;
+      return nextValue;
     })
     .finally(() => {
       explorerDataPromise = null;
@@ -359,7 +366,9 @@ async function getExplorerDataFromDatabase(): Promise<ExplorerData | null> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
-  const { data, error } = await supabase.rpc("list_public_product_summaries");
+  const { data, error } = await supabase
+    .rpc("list_public_product_summaries")
+    .abortSignal(publicSupabaseReadSignal());
   if (error) {
     console.error("Product summary RPC failed:", error.message);
     return null;
@@ -758,6 +767,45 @@ function errorMessage(error: unknown): string {
     }
   }
   return String(error || "未知错误");
+}
+
+function publicSupabaseReadSignal(): AbortSignal {
+  return AbortSignal.timeout(PUBLIC_SUPABASE_READ_TIMEOUT_MS);
+}
+
+function preferStalePublicOfferData(staleValue: PublicOfferData | null, value: PublicOfferData): PublicOfferData {
+  if (!value.degraded || !staleValue?.offers.length) return value;
+
+  return {
+    ...staleValue,
+    degraded: true,
+    message: STALE_PUBLIC_DATA_MESSAGE,
+  };
+}
+
+function preferStaleExplorerData(staleValue: ExplorerData | null, value: ExplorerData): ExplorerData {
+  if (!value.degraded || !staleValue?.products.length || !staleValue.offerTotal) return value;
+
+  return {
+    ...staleValue,
+    degraded: true,
+    message: STALE_PUBLIC_DATA_MESSAGE,
+  };
+}
+
+function preferStaleProductOffers<T extends {
+  offers: RawOffer[];
+  total: number;
+  degraded?: boolean;
+  message?: string | null;
+}>(staleValue: T | null, value: T): T {
+  if (!value.degraded || value.offers.length || !staleValue?.offers.length) return value;
+
+  return {
+    ...staleValue,
+    degraded: true,
+    message: STALE_PUBLIC_DATA_MESSAGE,
+  };
 }
 
 function filterAdminOfferMaintenanceRows(offers: RawOffer[], query: string): RawOffer[] {
@@ -1357,9 +1405,11 @@ async function getPublicProductSummaryFromDatabase(id: string): Promise<Explorer
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
-  const { data, error } = await supabase.rpc("get_public_product_summary", {
-    p_product_key: id,
-  });
+  const { data, error } = await supabase
+    .rpc("get_public_product_summary", {
+      p_product_key: id,
+    })
+    .abortSignal(publicSupabaseReadSignal());
 
   if (error) {
     console.warn("Falling back to explorer product summary because RPC failed:", error.message);
@@ -1386,10 +1436,12 @@ export async function listPublicProductOffers(id: string, filters: ProductOfferL
     return cached.value;
   }
 
+  const staleValue = cached?.value || null;
   const value = await loadPublicProductOffers(id, { limit, offset, filterTags, query, excludeQuery });
+  const nextValue = preferStaleProductOffers(staleValue, value);
   productOffersCache.set(cacheKey, {
     expiresAt: Date.now() + PRODUCT_OFFERS_CACHE_TTL_MS,
-    value,
+    value: nextValue,
   });
 
   if (productOffersCache.size > 120) {
@@ -1401,7 +1453,7 @@ export async function listPublicProductOffers(id: string, filters: ProductOfferL
     }
   }
 
-  return value;
+  return nextValue;
 }
 
 async function loadPublicProductOffers(
@@ -1487,7 +1539,9 @@ async function getPublicProductOffersFromDatabase(
         p_limit: filters.limit,
         p_offset: filters.offset,
       };
-  const { data, error } = await supabase.rpc(rpcName, params);
+  const { data, error } = await supabase
+    .rpc(rpcName, params)
+    .abortSignal(publicSupabaseReadSignal());
 
   if (error) {
     console.error("Product offers RPC failed:", error.message);
@@ -1520,9 +1574,11 @@ async function getPublicProductOfferFilterFacetsFromDatabase(id: string): Promis
   const cached = productOfferFacetsCache.get(cacheKey);
   if (cached && cached.expiresAt > now) return cached.value;
 
-  const { data, error } = await supabase.rpc("list_public_product_offer_filter_facets", {
-    p_product_id: id,
-  });
+  const { data, error } = await supabase
+    .rpc("list_public_product_offer_filter_facets", {
+      p_product_id: id,
+    })
+    .abortSignal(publicSupabaseReadSignal());
 
   if (error) {
     console.warn("Product offer filter facet RPC failed:", error.message);
@@ -1681,17 +1737,19 @@ async function listPublicOffersFromDatabase(filters: OfferListFilters = {}) {
 
   const limit = Math.min(Math.max(filters.limit || 80, 1), PUBLIC_OFFER_LIMIT);
   const offset = Math.max(filters.offset || 0, 0);
-  const { data, error } = await supabase.rpc("list_public_offers_page", {
-    p_query: filters.query || null,
-    p_platform: filters.platform || null,
-    p_product_type: filters.productType || null,
-    p_stock: filters.stock || null,
-    p_sort: filters.sort || null,
-    p_min_price: filters.minPrice ?? null,
-    p_max_price: filters.maxPrice ?? null,
-    p_limit: limit,
-    p_offset: offset,
-  });
+  const { data, error } = await supabase
+    .rpc("list_public_offers_page", {
+      p_query: filters.query || null,
+      p_platform: filters.platform || null,
+      p_product_type: filters.productType || null,
+      p_stock: filters.stock || null,
+      p_sort: filters.sort || null,
+      p_min_price: filters.minPrice ?? null,
+      p_max_price: filters.maxPrice ?? null,
+      p_limit: limit,
+      p_offset: offset,
+    })
+    .abortSignal(publicSupabaseReadSignal());
 
   if (error) {
     console.error("Public offers RPC failed:", error.message);
@@ -1793,7 +1851,8 @@ async function listActiveCanonicalProducts(): Promise<CanonicalProduct[]> {
   const { data, error } = await supabase
     .from("canonical_products")
     .select("*")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .abortSignal(publicSupabaseReadSignal());
 
   if (error) throw error;
 
