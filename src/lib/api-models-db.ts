@@ -40,6 +40,7 @@ type ApiProviderMatchCandidate = {
 };
 
 const API_MODEL_CACHE_TTL_MS = 30_000;
+const PUBLIC_API_MODEL_READ_TIMEOUT_MS = 2_500;
 
 let apiModelCache: { expiresAt: number; value: ApiModelDataset } | null = null;
 let apiModelPromise: Promise<ApiModelDataset> | null = null;
@@ -326,30 +327,37 @@ async function readApiModelDataset(): Promise<ApiModelDataset> {
   if (!supabase) return getPublicApiModelDataset(staticApiModelDataset);
 
   try {
+    const signal = publicApiModelReadSignal();
     const [familiesResult, modelsResult, providersResult, plansResult, planModelsResult, offersResult] = await Promise.all([
       supabase
         .from("api_model_families")
         .select("id,name,slug,sort_order,updated_at")
-        .order("sort_order", { ascending: true }),
+        .order("sort_order", { ascending: true })
+        .abortSignal(signal),
       supabase
         .from("api_models")
         .select("id,family_id,display_name,model_id,context_window,description,status,source_url,source_label,capabilities,suitable_tools,data_updated_at,updated_at")
-        .eq("status", "active"),
+        .eq("status", "active")
+        .abortSignal(signal),
       supabase
         .from("api_providers")
         .select("id,name,type,billing_mode,official_url,pricing_url,logo_url,description,limit_summary,limitations,source_label,enabled,data_updated_at,updated_at")
-        .eq("enabled", true),
+        .eq("enabled", true)
+        .abortSignal(signal),
       supabase
         .from("api_plans")
         .select("id,provider_id,name,type,price_label,price_usd_monthly,price_cny_monthly,quota_summary,reset_summary,limit_summary,limitations,coverage_label,compatibility,suitable_tools,source_url,source_label,enabled,data_updated_at,updated_at")
-        .eq("enabled", true),
+        .eq("enabled", true)
+        .abortSignal(signal),
       supabase
         .from("api_plan_models")
-        .select("plan_id,model_id"),
+        .select("plan_id,model_id")
+        .abortSignal(signal),
       supabase
         .from("api_model_offers")
         .select("id,model_id,provider_id,route_model_id,input_price,output_price,cache_read_price,cache_write_price,free_or_plan,limit_summary,limitations,compatibility,suitable_tools,pricing_url,source_label,collected_at,status,notes,updated_at")
-        .eq("status", "active"),
+        .eq("status", "active")
+        .abortSignal(signal),
     ]);
 
     const error =
@@ -429,6 +437,10 @@ async function readApiModelDataset(): Promise<ApiModelDataset> {
       source: "static",
     });
   }
+}
+
+function publicApiModelReadSignal(): AbortSignal {
+  return AbortSignal.timeout(PUBLIC_API_MODEL_READ_TIMEOUT_MS);
 }
 
 function buildStaticApiModelAdminData({

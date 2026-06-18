@@ -37,6 +37,7 @@ type OfficialRegionConfigRow = {
 };
 
 const OFFICIAL_PRICE_CACHE_TTL_MS = 30_000;
+const PUBLIC_OFFICIAL_PRICE_READ_TIMEOUT_MS = 2_500;
 
 let officialPriceCache: { expiresAt: number; value: OfficialPricesDataset } | null = null;
 let officialPricePromise: Promise<OfficialPricesDataset> | null = null;
@@ -148,17 +149,20 @@ async function readOfficialPricesDataset(): Promise<OfficialPricesDataset> {
   if (!supabase) return staticOfficialPricesDataset;
 
   try {
+    const signal = publicOfficialPriceReadSignal();
     const [appsResult, regionsResult] = await Promise.all([
       supabase
         .from("official_subscription_apps")
         .select("id,slug,display_name,provider,app_store_id,app_store_slug,enabled,sort_order,updated_at")
         .eq("enabled", true)
-        .order("sort_order", { ascending: true }),
+        .order("sort_order", { ascending: true })
+        .abortSignal(signal),
       supabase
         .from("official_subscription_regions")
         .select("id,country_code,country_label,currency_code,enabled,priority")
         .eq("enabled", true)
-        .order("priority", { ascending: true }),
+        .order("priority", { ascending: true })
+        .abortSignal(signal),
     ]);
 
     if (appsResult.error || regionsResult.error) {
@@ -286,7 +290,8 @@ async function readPlanRows(appIds: string[]): Promise<DbRow[]> {
     .select("id,app_id,slug,label,billing_period,notes,enabled,sort_order")
     .in("app_id", appIds)
     .eq("enabled", true)
-    .order("sort_order", { ascending: true });
+    .order("sort_order", { ascending: true })
+    .abortSignal(publicOfficialPriceReadSignal());
 
   if (error) throw error;
   return dbRows(data);
@@ -333,7 +338,8 @@ async function readCurrentPriceRows(): Promise<DbRow[]> {
     )
     .eq("status", "available")
     .not("cny_price", "is", null)
-    .order("cny_price", { ascending: true });
+    .order("cny_price", { ascending: true })
+    .abortSignal(publicOfficialPriceReadSignal());
 
   if (error) throw error;
   return dbRows(data);
@@ -384,7 +390,8 @@ async function readFxSummary(rows: OfficialPriceRow[]): Promise<OfficialPriceFxS
     .from("fx_rates")
     .select("base_currency,target_currency,rate,date,source")
     .eq("date", latestFxDate)
-    .order("target_currency", { ascending: true });
+    .order("target_currency", { ascending: true })
+    .abortSignal(publicOfficialPriceReadSignal());
 
   if (error || !data?.length) {
     return {
@@ -404,6 +411,10 @@ async function readFxSummary(rows: OfficialPriceRow[]): Promise<OfficialPriceFxS
     date: latestFxDate,
     rates: { USD: 1, ...rates },
   };
+}
+
+function publicOfficialPriceReadSignal(): AbortSignal {
+  return AbortSignal.timeout(PUBLIC_OFFICIAL_PRICE_READ_TIMEOUT_MS);
 }
 
 function dbRows(value: unknown): DbRow[] {

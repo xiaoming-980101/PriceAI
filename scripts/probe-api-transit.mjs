@@ -15,6 +15,7 @@ const envPath = path.join(repoRoot, ".env.local");
 const DEFAULT_TIMEOUT_MS = 20000;
 const DEFAULT_TARGET_LIMIT = 4;
 const MAX_MODELS_SNAPSHOT = 200;
+const AVAILABILITY_ROLLUP_RUN_LIMIT = 80;
 const userAgent = "Mozilla/5.0 PriceAI/1.0 APITransitProbe";
 let cachedFileEnv = null;
 
@@ -507,7 +508,7 @@ async function refreshAvailabilityRollup(supabase, stationId) {
     .eq("run_type", "api_probe")
     .gte("started_at", since)
     .order("started_at", { ascending: false })
-      .limit(300),
+      .limit(AVAILABILITY_ROLLUP_RUN_LIMIT),
     supabase
       .from("api_transit_offers")
       .select("standard_model,group_name,status")
