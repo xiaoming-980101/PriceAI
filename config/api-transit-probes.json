@@ -171,33 +171,6 @@
     ]
   },
   {
-    "profileId": "sub-callai-one-gpt",
-    "stationId": "sub-callai-one",
-    "apiBaseUrl": "https://sub.callai.one/v1",
-    "apiKeyEnv": "API_TRANSIT_SUB_CALLAI_ONE_GPT_KEY",
-    "protocol": "openai_compatible",
-    "enabled": true,
-    "groupName": "gpt",
-    "targetLimit": 1,
-    "targetPriority": "latest_highest_available",
-    "targets": [
-      {
-        "family": "gpt",
-        "standardModel": "GPT 5.4",
-        "groupName": "gpt",
-        "candidates": ["gpt-5.4"],
-        "keywords": ["gpt", "5.4"]
-      },
-      {
-        "family": "gpt",
-        "standardModel": "GPT 5.5",
-        "groupName": "gpt",
-        "candidates": ["gpt-5.5"],
-        "keywords": ["gpt", "5.5"]
-      }
-    ]
-  },
-  {
     "profileId": "sub-callai-one-gpt-pro",
     "stationId": "sub-callai-one",
     "apiBaseUrl": "https://sub.callai.one/v1",
