@@ -2,18 +2,18 @@
 
 import {
   CheckCircle2,
+  Copy,
   ExternalLink,
   Loader2,
   MessageCircle,
   Send,
-  UsersRound,
   X,
 } from "lucide-react";
 import Image from "next/image";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
-import { qqGroupNumber, qqGroupUrl, telegramUrl } from "@/lib/community";
+import { qqGroupNumber, qqGroupQrCodeUrl, qqGroupUrl, telegramUrl } from "@/lib/community";
 
 const githubUrl = "https://github.com/physics-dimension/PriceAI";
 
@@ -141,21 +141,161 @@ export function QQGroupLink({
   compact?: boolean;
   labelFrom?: HeaderActionLabelFrom;
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <a
-      href={qqGroupUrl}
-      target="_blank"
-      rel="noreferrer"
-      className={`inline-flex shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-[#2d3435] shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:-translate-y-0.5 hover:bg-[#f5f7f7] hover:text-[#202829] ${
-        compact ? getCompactButtonClassName(labelFrom, "sm:px-3", "2xl:px-3") : "h-10 gap-2 px-3.5"
-      }`}
-      aria-label={`加入 PriceAI QQ 交流群，群号 ${qqGroupNumber}`}
-      title={`QQ 群：${qqGroupNumber}`}
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={`inline-flex shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-[#2d3435] shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:-translate-y-0.5 hover:bg-[#f5f7f7] hover:text-[#202829] ${
+          compact ? getCompactButtonClassName(labelFrom, "sm:px-3", "2xl:px-3") : "h-10 gap-2 px-3.5"
+        }`}
+        aria-label={`查看 PriceAI QQ 交流群加入方式，群号 ${qqGroupNumber}`}
+        title={`QQ 群：${qqGroupNumber}`}
+      >
+        <QQIcon className="h-5 w-5" />
+        <span className={getLabelClassName(compact, labelFrom)}>QQ 群</span>
+      </button>
+      {open ? <QQGroupDialog onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
+export function QQGroupDialog({ onClose }: { onClose: () => void }) {
+  const titleId = useId();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  async function copyGroupNumber() {
+    try {
+      await navigator.clipboard.writeText(qqGroupNumber);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[110] overflow-y-auto bg-[#202829]/35 px-3 py-4 backdrop-blur-sm sm:px-5 sm:py-8"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
-      <UsersRound size={16} />
-      <span className={getLabelClassName(compact, labelFrom)}>QQ 群</span>
-      <ExternalLink size={14} className={getExternalIconClassName(labelFrom)} />
-    </a>
+      <div className="flex min-h-full items-center justify-center">
+        <div className="w-full max-w-[520px] rounded-lg bg-[#f9f9f9] shadow-[0_30px_80px_rgba(45,52,53,0.18)] ring-1 ring-[#adb3b4]/30">
+          <div className="flex items-start justify-between gap-4 border-b border-[#adb3b4]/20 px-5 py-4">
+            <div className="min-w-0">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-[0_8px_22px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25">
+                <QQIcon className="h-6 w-6" />
+              </div>
+              <h2 id={titleId} className="mt-3 text-base font-bold text-[#202829]">
+                加入 PriceAI QQ 交流群
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-[#5a6061]">
+                反馈价格错误、缺货、渠道风险，或继续补充截图和链接。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#5a6061] transition hover:bg-[#edf0f1] hover:text-[#202829]"
+              aria-label="关闭 QQ 群加入方式"
+            >
+              <X size={17} />
+            </button>
+          </div>
+
+          <div className="grid gap-4 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-start">
+            <div className="space-y-3">
+              <div className="rounded-lg border border-[#dfe4e5] bg-white px-3 py-3">
+                <p className="text-xs font-semibold text-[#5a6061]">QQ群号</p>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <p className="text-xl font-extrabold tracking-wide text-[#202829]">{qqGroupNumber}</p>
+                  <button
+                    type="button"
+                    onClick={copyGroupNumber}
+                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[#eef3f8] px-3 text-xs font-bold text-[#47657a] transition hover:bg-[#e4edf5]"
+                  >
+                    {copied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                    {copied ? "已复制" : "复制"}
+                  </button>
+                </div>
+              </div>
+              <p className="text-sm leading-6 text-[#5a6061]">
+                手机用户可以直接点击按钮打开 QQ；桌面用户可以用手机 QQ 扫描右侧二维码。
+              </p>
+              <a
+                href={qqGroupUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[#2d3435] px-4 text-sm font-semibold text-white transition hover:bg-[#202829] sm:w-auto"
+              >
+                打开 QQ 加群链接
+                <ExternalLink size={15} />
+              </a>
+            </div>
+
+            <div className="rounded-lg border border-[#dfe4e5] bg-white p-2">
+              <Image
+                src={qqGroupQrCodeUrl}
+                alt={`PriceAI QQ 交流群二维码，群号 ${qqGroupNumber}`}
+                width={1284}
+                height={2289}
+                className="mx-auto h-auto max-h-[280px] w-full rounded-md object-contain sm:max-h-[320px]"
+                sizes="(max-width: 640px) 90vw, 180px"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function QQIcon({ className }: { className?: string }) {
+  return (
+    <Image
+      src="/brand-icons/qq.svg"
+      alt=""
+      aria-hidden="true"
+      width={20}
+      height={20}
+      className={`shrink-0 object-contain ${className ?? ""}`}
+    />
+  );
+}
+
+export function QQGroupPromptButton() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white px-3 text-xs font-semibold text-[#2d3435] shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:-translate-y-0.5 hover:bg-[#f5f7f7] hover:text-[#202829]"
+        aria-label={`查看 PriceAI QQ 交流群加入方式，群号 ${qqGroupNumber}`}
+      >
+        <QQIcon className="h-3.5 w-3.5" />
+        QQ 群
+      </button>
+      {open ? <QQGroupDialog onClose={() => setOpen(false)} /> : null}
+    </>
   );
 }
 
@@ -201,16 +341,7 @@ export function CommunityPrompt({
     <div className={`rounded-lg border border-[#dfe4e5] bg-[#f7fafa] px-3 py-2 text-sm leading-6 text-[#4f5b5d] ${className}`}>
       <p>{children}</p>
       <div className="mt-2 flex flex-wrap gap-2">
-        <a
-          href={qqGroupUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#2d3435] px-3 text-xs font-bold text-white transition hover:bg-[#202829]"
-          aria-label={`加入 PriceAI QQ 交流群，群号 ${qqGroupNumber}`}
-        >
-          <UsersRound size={13} />
-          QQ 群
-        </a>
+        <QQGroupPromptButton />
         <a
           href={telegramUrl}
           target="_blank"

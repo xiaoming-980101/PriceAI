@@ -3,13 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ExternalLink, Info, Menu, MessageCircle, UsersRound, X } from "lucide-react";
+import { ExternalLink, Info, Menu, MessageCircle, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AppLogo } from "@/components/AppLogo";
-import { FeedbackDialog, FeedbackLink, GitHubLink, QQGroupLink, TelegramLink } from "@/components/FeedbackLink";
+import { FeedbackDialog, FeedbackLink, GitHubLink, QQGroupDialog, QQGroupLink, TelegramLink } from "@/components/FeedbackLink";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { qqGroupNumber, qqGroupUrl, telegramUrl } from "@/lib/community";
+import { qqGroupNumber, telegramUrl } from "@/lib/community";
 
 const navItems = [
   { key: "channels", href: "/channels", label: "卡网订阅", mobileLabel: "卡网", match: (pathname: string) => pathname.startsWith("/channels") || pathname.startsWith("/products") },
@@ -41,6 +41,7 @@ export function SiteHeader({
   const activeNavItem = navItems.find((item) => (activeSection && activeSection !== "home" && activeSection !== "guides" ? item.key === activeSection : item.match(pathname)));
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [qqGroupOpen, setQqGroupOpen] = useState(false);
 
   return (
     <header>
@@ -103,9 +104,14 @@ export function SiteHeader({
             setMobileDrawerOpen(false);
             setFeedbackOpen(true);
           }}
+          onQQGroup={() => {
+            setMobileDrawerOpen(false);
+            setQqGroupOpen(true);
+          }}
         />
       ) : null}
       {feedbackOpen ? <FeedbackDialog onClose={() => setFeedbackOpen(false)} /> : null}
+      {qqGroupOpen ? <QQGroupDialog onClose={() => setQqGroupOpen(false)} /> : null}
     </header>
   );
 }
@@ -115,11 +121,13 @@ function MobileModuleDrawer({
   aboutActive,
   onClose,
   onFeedback,
+  onQQGroup,
 }: {
   activeKey?: (typeof navItems)[number]["key"];
   aboutActive: boolean;
   onClose: () => void;
   onFeedback: () => void;
+  onQQGroup: () => void;
 }) {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -209,20 +217,17 @@ function MobileModuleDrawer({
                 意见反馈
               </span>
             </button>
-            <a
-              href={qqGroupUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex h-11 items-center justify-between rounded-lg px-3 text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
-              onClick={onClose}
+            <button
+              type="button"
+              onClick={onQQGroup}
+              className="flex h-11 w-full items-center justify-between rounded-lg px-3 text-left text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
               title={`QQ 群：${qqGroupNumber}`}
             >
               <span className="inline-flex items-center gap-3">
-                <UsersRound size={17} />
+                <Image src="/brand-icons/qq.svg" alt="" aria-hidden="true" width={18} height={18} className="h-[18px] w-[18px] shrink-0 object-contain" />
                 QQ 交流群
               </span>
-              <ExternalLink size={14} className="text-[var(--color-text-soft)]" />
-            </a>
+            </button>
             <a
               href={telegramUrl}
               target="_blank"
