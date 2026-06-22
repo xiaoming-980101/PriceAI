@@ -2282,6 +2282,7 @@ export async function createOfferFeedback(input: {
 export async function runOfferFeedbackRiskPrecheck(feedbackId: string): Promise<OfferFeedback> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase 尚未配置，无法运行风险预审。");
+  await ensureOfferFeedbackVerificationSchema(supabase);
 
   const { data: row, error } = await supabase
     .from("offer_feedback")
@@ -2317,6 +2318,27 @@ export async function runOfferFeedbackRiskPrecheck(feedbackId: string): Promise<
   if (!updatedRow) throw new Error("反馈记录不存在。");
 
   return mapOfferFeedbackRow(updatedRow);
+}
+
+async function ensureOfferFeedbackVerificationSchema(supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>): Promise<void> {
+  const { error } = await supabase
+    .from("offer_feedback")
+    .select("id,verification_status,verification_checked_at,created_collection_job_id")
+    .limit(1);
+
+  if (!error) return;
+  if (isMissingOfferFeedbackVerificationSchemaError(error)) {
+    throw new Error("反馈核验字段尚未迁移，请先应用 Supabase migration 后再重试。");
+  }
+  throw error;
+}
+
+function isMissingOfferFeedbackVerificationSchemaError(error: unknown): boolean {
+  const record = error && typeof error === "object" ? error as { code?: unknown; message?: unknown } : {};
+  const message = typeof record.message === "string" ? record.message : "";
+  return record.code === "42703" ||
+    record.code === "PGRST204" ||
+    /verification_(status|checked_at)|created_collection_job_id/.test(message);
 }
 
 function toRiskFeedbackReviewInput(feedback: OfferFeedback): RiskFeedbackReviewInput {

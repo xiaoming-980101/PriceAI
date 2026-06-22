@@ -108,8 +108,23 @@ export async function PATCH(request: Request) {
   } catch (error) {
     logApiError("admin feedback update", error);
     return Response.json(
-      { ok: false, message: safeApiErrorMessage(error, "处理反馈失败。") },
+      { ok: false, message: safeAdminFeedbackErrorMessage(error) },
       { status: error instanceof z.ZodError ? 400 : 500 },
     );
   }
+}
+
+function safeAdminFeedbackErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  const code = error && typeof error === "object" ? String((error as { code?: unknown }).code || "") : "";
+  if (
+    message.includes("反馈核验字段尚未迁移") ||
+    code === "42703" ||
+    code === "PGRST204" ||
+    /verification_(status|result|message|checked_at)|created_collection_job_id/.test(message)
+  ) {
+    return "反馈核验字段尚未迁移，请先应用 Supabase migration 后再重试。";
+  }
+
+  return safeApiErrorMessage(error, "处理反馈失败。");
 }

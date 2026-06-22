@@ -4421,6 +4421,8 @@ function FeedbackFact({
 }
 
 function FeedbackEvidenceLink({ url }: { url: string }) {
+  const [imageFailed, setImageFailed] = useState(false);
+
   if (isFeedbackEvidenceImageReference(url)) {
     const imageUrl = `/api/admin/feedback-evidence?ref=${encodeURIComponent(url)}`;
     return (
@@ -4430,14 +4432,23 @@ function FeedbackEvidenceLink({ url }: { url: string }) {
         rel="noopener noreferrer"
         className="group inline-flex max-w-full items-center gap-3 rounded-md bg-white px-2 py-2 text-[#47657a] ring-1 ring-[#adb3b4]/20 transition hover:text-[#2d3435] hover:ring-[#adb3b4]/35"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={imageUrl}
-          alt="用户上传的图片证据"
-          className="h-16 w-24 shrink-0 rounded object-cover ring-1 ring-[#adb3b4]/20"
-          loading="lazy"
-        />
-        <span className="min-w-0 truncate text-xs font-semibold">图片证据</span>
+        {imageFailed ? (
+          <span className="flex h-16 w-24 shrink-0 items-center justify-center rounded bg-[#f2f4f4] px-2 text-center text-[0.68rem] leading-4 text-[#8a9293] ring-1 ring-[#adb3b4]/20">
+            图片暂不可用
+          </span>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageUrl}
+            alt="用户上传的图片证据"
+            className="h-16 w-24 shrink-0 rounded object-cover ring-1 ring-[#adb3b4]/20"
+            loading="lazy"
+            onError={() => setImageFailed(true)}
+          />
+        )}
+        <span className="min-w-0 truncate text-xs font-semibold">
+          {imageFailed ? "图片证据未找到" : "图片证据"}
+        </span>
         <ExternalLink size={12} className="shrink-0 opacity-70 transition group-hover:opacity-100" />
       </a>
     );
