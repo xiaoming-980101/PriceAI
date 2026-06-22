@@ -52,8 +52,8 @@ export const RISK_PRECHECK_ENV = {
   timeoutMs: "PRICEAI_RISK_REVIEW_TIMEOUT_MS",
 } as const;
 
-export const DEFAULT_RISK_REVIEW_BASE_URL = "https://opencode.ai/zen/v1";
-export const DEFAULT_RISK_REVIEW_MODEL = "mimo-v2.5-free";
+export const DEFAULT_RISK_REVIEW_BASE_URL = "https://opencode.ai/zen/go/v1";
+export const DEFAULT_RISK_REVIEW_MODEL = "mimo-v2.5";
 export const RISK_PRECHECK_PUBLIC_TTL_HOURS = 72;
 
 export function feedbackRequiresEvidence(

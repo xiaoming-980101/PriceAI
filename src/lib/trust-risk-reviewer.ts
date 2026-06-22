@@ -1,12 +1,9 @@
 import "server-only";
 
-import { getRuntimeEnv } from "@/lib/runtime-env";
+import { getRiskReviewRuntimeConfig, type RiskReviewRuntimeConfig } from "@/lib/risk-review-settings";
 import {
   AFTERSALES_FEEDBACK_REASON,
-  DEFAULT_RISK_REVIEW_BASE_URL,
-  DEFAULT_RISK_REVIEW_MODEL,
   HIGH_RISK_FEEDBACK_REASONS,
-  RISK_PRECHECK_ENV,
   RISK_PRECHECK_PUBLIC_TTL_HOURS,
   getPublicRiskPrecheck,
   type RiskPrecheckCategory,
@@ -64,19 +61,22 @@ type ModelRiskReviewJson = {
 };
 
 const RISK_REVIEW_PROVIDER = "opencode";
-const DEFAULT_REVIEW_TIMEOUT_MS = 12_000;
 
 export function shouldRunRiskPrecheck(input: Pick<RiskFeedbackReviewInput, "reason" | "evidenceText" | "evidenceUrls">): boolean {
   if (!HIGH_RISK_FEEDBACK_REASONS.has(input.reason)) return false;
   return Boolean(input.evidenceText?.trim() || input.evidenceUrls?.length);
 }
 
-export function buildSkippedRiskPrecheck(input: RiskFeedbackReviewInput, reason: string): RiskFeedbackReviewResult {
+export function buildSkippedRiskPrecheck(
+  input: RiskFeedbackReviewInput,
+  reason: string,
+  config?: Pick<RiskReviewRuntimeConfig, "provider" | "model">,
+): RiskFeedbackReviewResult {
   const reviewedAt = new Date().toISOString();
   return {
     status: "skipped",
-    provider: RISK_REVIEW_PROVIDER,
-    model: riskReviewModel(),
+    provider: config?.provider || RISK_REVIEW_PROVIDER,
+    model: config?.model || "not_required",
     reviewedAt,
     canShowPublicly: false,
     riskLevel: "low",
@@ -92,23 +92,24 @@ export function buildSkippedRiskPrecheck(input: RiskFeedbackReviewInput, reason:
 }
 
 export async function reviewRiskFeedback(input: RiskFeedbackReviewInput): Promise<RiskFeedbackReviewResult> {
+  const config = await getRiskReviewRuntimeConfig();
+
   if (!shouldRunRiskPrecheck(input)) {
-    return buildSkippedRiskPrecheck(input, "非高风险反馈或缺少证据，不进入前台临时风险预警。");
+    return buildSkippedRiskPrecheck(input, "非高风险反馈或缺少证据，不进入前台临时风险预警。", config);
   }
 
-  const apiKey = getRuntimeEnv(RISK_PRECHECK_ENV.apiKey);
-  if (!apiKey) {
-    return buildFailedRiskPrecheck(input, "风险预审模型 API Key 未配置。");
+  if (!config.apiKey) {
+    return buildFailedRiskPrecheck(input, "风险预审模型 API Key 未配置。", config);
   }
 
   const reviewedAt = new Date().toISOString();
-  const model = riskReviewModel();
+  const model = config.model;
 
   try {
-    const response = await fetch(`${riskReviewBaseUrl()}/chat/completions`, {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
+        "Authorization": `Bearer ${config.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -126,7 +127,7 @@ export async function reviewRiskFeedback(input: RiskFeedbackReviewInput): Promis
           },
         ],
       }),
-      signal: AbortSignal.timeout(riskReviewTimeoutMs()),
+      signal: AbortSignal.timeout(config.timeoutMs),
     });
 
     const text = await response.text();
@@ -135,9 +136,9 @@ export async function reviewRiskFeedback(input: RiskFeedbackReviewInput): Promis
     const json = JSON.parse(text) as Record<string, unknown>;
     const content = extractChatCompletionContent(json);
     const parsed = parseModelRiskReviewContent(content);
-    return normalizeModelRiskReview(input, parsed, reviewedAt, model);
+    return normalizeModelRiskReview(input, parsed, reviewedAt, config);
   } catch (error) {
-    return buildFailedRiskPrecheck(input, error instanceof Error ? error.message : "风险预审模型调用失败。");
+    return buildFailedRiskPrecheck(input, error instanceof Error ? error.message : "风险预审模型调用失败。", config);
   }
 }
 
@@ -155,7 +156,7 @@ function normalizeModelRiskReview(
   input: RiskFeedbackReviewInput,
   parsed: ModelRiskReviewJson,
   reviewedAt: string,
-  model: string,
+  config: Pick<RiskReviewRuntimeConfig, "provider" | "model">,
 ): RiskFeedbackReviewResult {
   const riskCategory = normalizeRiskCategory(parsed.risk_category || input.reason);
   const riskScope = normalizeRiskScope(parsed.risk_scope, input);
@@ -171,8 +172,8 @@ function normalizeModelRiskReview(
   const expiresInHours = clampNumber(parsed.expires_in_hours, 1, 168, RISK_PRECHECK_PUBLIC_TTL_HOURS);
   const result: RiskFeedbackReviewResult = {
     status: "ready",
-    provider: RISK_REVIEW_PROVIDER,
-    model,
+    provider: config.provider,
+    model: config.model,
     reviewedAt,
     canShowPublicly,
     riskLevel: normalizeEnum(parsed.risk_level, ["low", "medium", "high"] as const, input.reason === "bad_source" ? "high" : "medium"),
@@ -189,12 +190,16 @@ function normalizeModelRiskReview(
   return getPublicRiskPrecheck({ riskPrecheck: result }) ? result : { ...result, canShowPublicly: false, expiresAt: null };
 }
 
-function buildFailedRiskPrecheck(input: RiskFeedbackReviewInput, error: string): RiskFeedbackReviewResult {
+function buildFailedRiskPrecheck(
+  input: RiskFeedbackReviewInput,
+  error: string,
+  config?: Pick<RiskReviewRuntimeConfig, "provider" | "model">,
+): RiskFeedbackReviewResult {
   const reviewedAt = new Date().toISOString();
   return {
     status: "failed",
-    provider: RISK_REVIEW_PROVIDER,
-    model: riskReviewModel(),
+    provider: config?.provider || RISK_REVIEW_PROVIDER,
+    model: config?.model || "unconfigured",
     reviewedAt,
     canShowPublicly: false,
     riskLevel: "medium",
@@ -275,19 +280,6 @@ function parseModelRiskReviewContent(content: string): ModelRiskReviewJson {
     if (objectText) return JSON.parse(objectText) as ModelRiskReviewJson;
     throw new Error("模型响应不是合法 JSON。");
   }
-}
-
-function riskReviewBaseUrl(): string {
-  return (getRuntimeEnv(RISK_PRECHECK_ENV.baseUrl) || DEFAULT_RISK_REVIEW_BASE_URL).replace(/\/+$/, "");
-}
-
-function riskReviewModel(): string {
-  return getRuntimeEnv(RISK_PRECHECK_ENV.model) || DEFAULT_RISK_REVIEW_MODEL;
-}
-
-function riskReviewTimeoutMs(): number {
-  const value = Number(getRuntimeEnv(RISK_PRECHECK_ENV.timeoutMs));
-  return Number.isFinite(value) && value >= 3_000 && value <= 60_000 ? value : DEFAULT_REVIEW_TIMEOUT_MS;
 }
 
 function normalizeRiskCategory(value: unknown): RiskPrecheckCategory {

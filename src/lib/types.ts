@@ -183,6 +183,21 @@ export type AdminSummary = DashboardData & {
   sourceOfferStats: SourceOfferStats[];
   hiddenRawOffers: RawOffer[];
   feedbackRawOffers: RawOffer[];
+  riskReviewSettings: RiskReviewSettingsSummary;
+};
+
+export type RiskReviewSettingsSummary = {
+  configured: boolean;
+  tableReady: boolean;
+  source: "database" | "environment" | "default" | "unconfigured";
+  provider: string;
+  baseUrl: string;
+  model: string;
+  timeoutMs: number;
+  hasApiKey: boolean;
+  apiKeyLast4: string | null;
+  updatedAt: string | null;
+  message: string | null;
 };
 
 export type AdminLoadError = {

@@ -17,6 +17,7 @@ import {
   type OfferFilterTagFacet,
   type OfferFilterTagId,
 } from "./offer-filter-tags";
+import { getFallbackRiskReviewSettingsSummary, getRiskReviewSettingsSummary } from "./risk-review-settings";
 import { seedRawOffers, seedSources } from "./sample-data";
 import { getSupabaseServerClient } from "./supabase";
 import { apiCdkPublicVisible, getPublicRiskPrecheck, isPublicCatalogProduct } from "./trust-risk";
@@ -470,6 +471,7 @@ export function getEmptyAdminSummary(isAuthenticated = false): AdminSummary {
     sourceOfferStats: [],
     hiddenRawOffers: [],
     feedbackRawOffers: [],
+    riskReviewSettings: getFallbackRiskReviewSettingsSummary("尚未加载风险预审配置。"),
   };
 }
 
@@ -604,6 +606,7 @@ async function readAdminSummary(): Promise<AdminSummary> {
       sourceOfferStats: [],
       hiddenRawOffers: [],
       feedbackRawOffers: [],
+      riskReviewSettings: getFallbackRiskReviewSettingsSummary(),
     };
   }
 
@@ -623,6 +626,7 @@ async function readAdminSummary(): Promise<AdminSummary> {
     officialPrices,
     apiModels,
     apiTransit,
+    riskReviewSettings,
   ] = await Promise.all([
     supabase.from("sources").select("*").order("name"),
     supabase.from("canonical_products").select("*").eq("is_active", true),
@@ -667,6 +671,7 @@ async function readAdminSummary(): Promise<AdminSummary> {
       providerSubmissions: [],
     }, loadErrors),
     adminLoad("api-transit", "中转 API", getApiTransitAdminData({ isAuthenticated: true }), getEmptyApiTransitAdminData(true, "读取中转 API 后台数据失败。"), loadErrors),
+    adminLoad("risk-review-settings", "风险预审配置", getRiskReviewSettingsSummary(), getFallbackRiskReviewSettingsSummary(), loadErrors),
   ]);
 
   if (sourcesResult.error) recordAdminLoadError(loadErrors, "sources", "渠道源", sourcesResult.error);
@@ -722,6 +727,7 @@ async function readAdminSummary(): Promise<AdminSummary> {
       sourceOfferStats,
       hiddenRawOffers: hiddenOfferData.rows,
       feedbackRawOffers,
+      riskReviewSettings,
     };
   }
 
@@ -743,6 +749,7 @@ async function readAdminSummary(): Promise<AdminSummary> {
     sourceOfferStats,
     hiddenRawOffers: hiddenOfferData.rows,
     feedbackRawOffers,
+    riskReviewSettings,
   };
 }
 

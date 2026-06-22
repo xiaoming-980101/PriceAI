@@ -90,6 +90,7 @@ type ApiModelAdminPlan = ApiModelAdminData["plans"][number];
 type ApiModelAdminModel = ApiModelAdminData["models"][number];
 type ApiProviderCandidate = ApiModelAdminData["providerCandidates"][number];
 type ApiProviderSubmission = ApiModelAdminData["providerSubmissions"][number];
+type RiskReviewSettings = AdminSummary["riskReviewSettings"];
 type CollectorHealthData = AdminSummary["collectorHealth"];
 type CollectorHealthSourceRow = CollectorHealthData["sources"][number];
 type CollectorHealthNodeRow = CollectorHealthData["nodeSummaries"][number];
@@ -254,6 +255,9 @@ const feedbackStatusOptions: Array<{ value: OfferFeedbackStatus; label: string }
   { value: "ignored", label: "已忽略" },
 ];
 
+const DEFAULT_RISK_REVIEW_ADMIN_BASE_URL = "https://opencode.ai/zen/go/v1";
+const DEFAULT_RISK_REVIEW_ADMIN_MODEL = "mimo-v2.5";
+
 /* ─── Main Component ─── */
 
 export function AdminConsole({ data }: { data: AdminSummary }) {
@@ -284,6 +288,7 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
   const [apiPlanPatches, setApiPlanPatches] = useState<Record<string, Partial<ApiModelAdminPlan>>>({});
   const [apiOfferPatches, setApiOfferPatches] = useState<Record<string, Partial<ApiModelAdminOffer>>>({});
   const [apiProviderSubmissions, setApiProviderSubmissions] = useState<ApiProviderSubmission[]>(data.apiModels.providerSubmissions || []);
+  const [riskReviewSettings, setRiskReviewSettings] = useState<RiskReviewSettings>(data.riskReviewSettings);
   const [activeTab, setActiveTab] = useState<AdminTab>("review");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1525,6 +1530,25 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
     }
   }
 
+  async function saveRiskReviewSettings(formData: FormData) {
+    setLoadingAction("risk-review-settings");
+    const result = await requestWithMethod("/api/admin/risk-review-settings", "PATCH", password, {
+      provider: String(formData.get("provider") || "opencode"),
+      baseUrl: String(formData.get("baseUrl") || ""),
+      model: String(formData.get("model") || ""),
+      timeoutMs: Number(formData.get("timeoutMs") || 12000),
+      apiKey: String(formData.get("apiKey") || ""),
+    });
+    setLoadingAction(null);
+
+    if (result.ok && result.settings) {
+      setRiskReviewSettings(result.settings as RiskReviewSettings);
+      setGlobalMessage({ type: "success", text: "风险预审模型配置已保存。" });
+    } else {
+      setGlobalMessage({ type: "error", text: result.message || "保存风险预审模型配置失败。" });
+    }
+  }
+
   function toggleFeedbackSelect(id: string) {
     setSelectedFeedbackIds((prev) => {
       const next = new Set(prev);
@@ -2663,6 +2687,11 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
             {/* Feedback tab */}
             {activeTab === "feedback" && (
               <div role="tabpanel" id="tabpanel-feedback">
+                <RiskReviewSettingsPanel
+                  settings={riskReviewSettings}
+                  loading={loadingAction === "risk-review-settings"}
+                  onSave={saveRiskReviewSettings}
+                />
                 <div className="mb-4 space-y-3 rounded-lg border border-[#adb3b4]/20 bg-white p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div>
@@ -4394,6 +4423,124 @@ function AdminLoadErrors({ errors }: { errors: AdminSummary["loadErrors"] }) {
   );
 }
 
+function RiskReviewSettingsPanel({
+  settings,
+  loading,
+  onSave,
+}: {
+  settings: RiskReviewSettings;
+  loading: boolean;
+  onSave: (formData: FormData) => Promise<void>;
+}) {
+  const statusText = settings.hasApiKey
+    ? settings.apiKeyLast4
+      ? `已配置 Key，尾号 ${settings.apiKeyLast4}`
+      : "已配置 Key"
+    : "未配置 Key";
+  const statusClass = settings.hasApiKey
+    ? "bg-[#e8f3ec] text-[#2f7a4b]"
+    : "bg-[#fbe9e7] text-[#9b3328]";
+
+  return (
+    <section className="mb-4 rounded-lg border border-[#adb3b4]/20 bg-white p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Activity size={15} className="text-[#5a6061]" />
+            <h3 className="text-sm font-semibold text-[#202829]">风险预审模型配置</h3>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass}`}>{statusText}</span>
+            <span className="rounded-full bg-[#f2f4f4] px-2 py-0.5 text-xs font-semibold text-[#5a6061]">
+              来源：{riskReviewSettingSourceLabel(settings.source)}
+            </span>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-[#5a6061]">
+            用于后台“模型预审”。API Key 加密保存，留空不会覆盖已有 Key。
+          </p>
+          {settings.message ? <p className="mt-1 text-xs text-[#9b3328]">{settings.message}</p> : null}
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#8a9293]">
+          <span>模型：{settings.model || "-"}</span>
+          <span>超时：{settings.timeoutMs}ms</span>
+          {settings.updatedAt ? <span>更新：{formatRelativeTime(settings.updatedAt)}</span> : null}
+        </div>
+      </div>
+
+      <form
+        className="mt-3 grid gap-3 lg:grid-cols-[120px_minmax(220px,1.2fr)_minmax(160px,0.8fr)_120px_minmax(220px,1fr)_auto]"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const form = event.currentTarget;
+          await onSave(new FormData(form));
+          const apiKeyInput = form.elements.namedItem("apiKey");
+          if (apiKeyInput instanceof HTMLInputElement) apiKeyInput.value = "";
+        }}
+      >
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-[#5a6061]">Provider</span>
+          <input
+            name="provider"
+            defaultValue={settings.provider || "opencode"}
+            className={adminInputClassName}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-[#5a6061]">Base URL</span>
+          <input
+            name="baseUrl"
+            type="url"
+            required
+            defaultValue={settings.baseUrl || DEFAULT_RISK_REVIEW_ADMIN_BASE_URL}
+            placeholder={DEFAULT_RISK_REVIEW_ADMIN_BASE_URL}
+            className={adminInputClassName}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-[#5a6061]">Model</span>
+          <input
+            name="model"
+            required
+            defaultValue={settings.model || DEFAULT_RISK_REVIEW_ADMIN_MODEL}
+            placeholder={DEFAULT_RISK_REVIEW_ADMIN_MODEL}
+            className={adminInputClassName}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-[#5a6061]">Timeout</span>
+          <input
+            name="timeoutMs"
+            type="number"
+            min={3000}
+            max={60000}
+            step={1000}
+            defaultValue={settings.timeoutMs || 12000}
+            className={adminInputClassName}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-[#5a6061]">API Key</span>
+          <input
+            name="apiKey"
+            type="password"
+            autoComplete="off"
+            placeholder={settings.hasApiKey ? "留空保留当前 Key" : "填写 API Key"}
+            className={adminInputClassName}
+          />
+        </label>
+        <div className="flex items-end">
+          <button
+            type="submit"
+            disabled={loading}
+            className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-[#2d3435] px-4 text-xs font-medium text-white transition-colors hover:bg-[#202829] disabled:opacity-60 lg:w-auto"
+          >
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            保存
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 function FeedbackFact({
   label,
   value,
@@ -4418,6 +4565,15 @@ function FeedbackFact({
       <p className={`mt-1 truncate text-sm ${strong ? "font-semibold" : "font-medium"} ${toneClass}`}>{value}</p>
     </div>
   );
+}
+
+const adminInputClassName = "h-10 w-full rounded-lg border border-[#adb3b4]/40 bg-white px-3 text-sm outline-none transition-colors focus:border-[#2d3435]";
+
+function riskReviewSettingSourceLabel(value: RiskReviewSettings["source"]): string {
+  if (value === "database") return "后台配置";
+  if (value === "environment") return "环境变量";
+  if (value === "default") return "默认值";
+  return "未配置";
 }
 
 function FeedbackEvidenceLink({ url }: { url: string }) {
