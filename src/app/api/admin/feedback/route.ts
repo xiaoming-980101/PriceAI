@@ -1,15 +1,43 @@
-import { getAdminPasswordFromRequest, listOfferFeedback, updateOfferFeedbackStatus } from "@/lib/admin";
+import {
+  createFeedbackRecollectionJob,
+  getAdminPasswordFromRequest,
+  listOfferFeedback,
+  updateOfferFeedbackStatus,
+  updateOfferFeedbackVerification,
+} from "@/lib/admin";
 import { logApiError, safeApiErrorMessage } from "@/lib/api-errors";
 import { clearAdminDataCache, listRawOffersByIds } from "@/lib/data";
 import { requireAdminPassword } from "@/lib/env";
 import { z } from "zod";
 
 const statusSchema = z.enum(["pending", "resolved", "ignored"]);
+const verificationStatusSchema = z.enum([
+  "not_needed",
+  "pending",
+  "running",
+  "auto_fixed",
+  "recollection_created",
+  "manual_review",
+  "failed",
+]);
+const verificationResultSchema = z.enum([
+  "offer_changed",
+  "item_removed",
+  "out_of_stock",
+  "still_available",
+  "recollection_created",
+  "inconclusive",
+  "blocked",
+]);
 
 const patchSchema = z.object({
+  action: z.enum(["status", "verification", "recollect"]).optional(),
   id: z.string().min(1),
-  status: statusSchema,
+  status: statusSchema.optional(),
   reviewerNote: z.string().max(500).nullable().optional(),
+  verificationStatus: verificationStatusSchema.optional(),
+  verificationResult: verificationResultSchema.nullable().optional(),
+  verificationMessage: z.string().max(500).nullable().optional(),
 });
 
 export async function GET(request: Request) {
@@ -37,7 +65,37 @@ export async function PATCH(request: Request) {
   try {
     requireAdminPassword(getAdminPasswordFromRequest(request));
     const payload = patchSchema.parse(await request.json());
-    const feedback = await updateOfferFeedbackStatus(payload);
+    const action = payload.action || "status";
+    if (action === "recollect") {
+      const result = await createFeedbackRecollectionJob({ feedbackId: payload.id });
+      clearAdminDataCache();
+      return Response.json({ ok: true, feedback: result.feedback, jobId: result.jobId });
+    }
+
+    if (action === "verification") {
+      if (!payload.verificationStatus) {
+        return Response.json({ ok: false, message: "缺少核验状态。" }, { status: 400 });
+      }
+      const feedback = await updateOfferFeedbackVerification({
+        id: payload.id,
+        verificationStatus: payload.verificationStatus,
+        verificationResult: payload.verificationResult || null,
+        verificationMessage: payload.verificationMessage || null,
+        reviewerNote: payload.reviewerNote || null,
+      });
+      clearAdminDataCache();
+      return Response.json({ ok: true, feedback });
+    }
+
+    if (!payload.status) {
+      return Response.json({ ok: false, message: "缺少反馈处理状态。" }, { status: 400 });
+    }
+
+    const feedback = await updateOfferFeedbackStatus({
+      id: payload.id,
+      status: payload.status,
+      reviewerNote: payload.reviewerNote || null,
+    });
     clearAdminDataCache();
     return Response.json({ ok: true, feedback });
   } catch (error) {

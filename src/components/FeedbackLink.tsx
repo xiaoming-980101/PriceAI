@@ -6,15 +6,16 @@ import {
   Loader2,
   MessageCircle,
   Send,
+  UsersRound,
   X,
 } from "lucide-react";
 import Image from "next/image";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
+import { qqGroupNumber, qqGroupUrl, telegramUrl } from "@/lib/community";
 
 const githubUrl = "https://github.com/physics-dimension/PriceAI";
-const telegramUrl = "https://t.me/priceaicc";
 
 type FeedbackType = "feature" | "data" | "channel" | "bug" | "ux" | "other";
 type FeedbackTypeOption = { value: FeedbackType; label: string; id?: string };
@@ -133,6 +134,31 @@ export function GitHubLink({
   );
 }
 
+export function QQGroupLink({
+  compact = false,
+  labelFrom = "sm",
+}: {
+  compact?: boolean;
+  labelFrom?: HeaderActionLabelFrom;
+}) {
+  return (
+    <a
+      href={qqGroupUrl}
+      target="_blank"
+      rel="noreferrer"
+      className={`inline-flex shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-[#2d3435] shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:-translate-y-0.5 hover:bg-[#f5f7f7] hover:text-[#202829] ${
+        compact ? getCompactButtonClassName(labelFrom, "sm:px-3", "2xl:px-3") : "h-10 gap-2 px-3.5"
+      }`}
+      aria-label={`加入 PriceAI QQ 交流群，群号 ${qqGroupNumber}`}
+      title={`QQ 群：${qqGroupNumber}`}
+    >
+      <UsersRound size={16} />
+      <span className={getLabelClassName(compact, labelFrom)}>QQ 群</span>
+      <ExternalLink size={14} className={getExternalIconClassName(labelFrom)} />
+    </a>
+  );
+}
+
 export function TelegramLink({
   compact = false,
   labelFrom = "sm",
@@ -158,9 +184,52 @@ export function TelegramLink({
         height={20}
         className="h-5 w-5 shrink-0 object-contain"
       />
-      <span className={getLabelClassName(compact, labelFrom)}>交流群</span>
+      <span className={getLabelClassName(compact, labelFrom)}>Telegram</span>
       <ExternalLink size={14} className={labelFrom === "never" ? "hidden" : labelFrom === "2xl" ? "hidden 2xl:block" : "hidden md:block"} />
     </a>
+  );
+}
+
+export function CommunityPrompt({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-lg border border-[#dfe4e5] bg-[#f7fafa] px-3 py-2 text-sm leading-6 text-[#4f5b5d] ${className}`}>
+      <p>{children}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <a
+          href={qqGroupUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#2d3435] px-3 text-xs font-bold text-white transition hover:bg-[#202829]"
+          aria-label={`加入 PriceAI QQ 交流群，群号 ${qqGroupNumber}`}
+        >
+          <UsersRound size={13} />
+          QQ 群
+        </a>
+        <a
+          href={telegramUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white px-3 text-xs font-bold text-[#2d3435] ring-1 ring-[#adb3b4]/35 transition hover:bg-[#edf0f1]"
+          aria-label="加入 PriceAI Telegram 交流群"
+        >
+          <Image
+            src="/brand-icons/telegram.svg"
+            alt=""
+            aria-hidden="true"
+            width={14}
+            height={14}
+            className="h-3.5 w-3.5 shrink-0 object-contain"
+          />
+          Telegram
+        </a>
+      </div>
+    </div>
   );
 }
 
@@ -344,15 +413,9 @@ export function FeedbackDialog({
               </div>
             ) : null}
 
-            <a
-              href={telegramUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-[#2AABEE]/20 bg-[#eef8fe] px-3 py-2 text-sm text-[#23658a] transition hover:border-[#2AABEE]/35 hover:bg-[#e3f4fd]"
-            >
-              <span>想更快反馈价格、库存、分类问题？也可以加入 PriceAI 交流群。</span>
-              <ExternalLink size={14} className="shrink-0" />
-            </a>
+            <CommunityPrompt className="mt-4">
+              想更快反馈价格、库存、分类问题？也可以加入 PriceAI 交流群。
+            </CommunityPrompt>
           </div>
 
           <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#adb3b4]/20 px-5 py-4">

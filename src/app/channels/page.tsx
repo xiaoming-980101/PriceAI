@@ -9,7 +9,7 @@ export const revalidate = 1800;
 export const metadata: Metadata = {
   title: "卡网订阅比价",
   description:
-    "查看 ChatGPT、Claude、Gemini、Grok、邮箱、API/CDK 等卡网订阅渠道报价，比较有货最低价、来源、库存和更新时间。",
+    "查看 ChatGPT、Claude、Gemini、Grok、邮箱、接码等卡网订阅渠道报价，比较有货最低价、来源、库存和更新时间。",
   alternates: {
     canonical: "/channels",
   },
@@ -43,7 +43,7 @@ function buildChannelsJsonLd() {
       url: "https://priceai.cc/channels",
       inLanguage: "zh-CN",
       description:
-        "PriceAI 卡网订阅比价整理 AI 订阅、账号、卡密、CDK、邮箱和 API/CDK 等渠道报价，展示有货最低价、来源、库存和更新时间。",
+        "PriceAI 卡网订阅比价整理 AI 订阅、账号、卡密、邮箱和接码等渠道报价，展示有货最低价、来源、库存和更新时间。",
       mainEntity: {
         "@type": "Dataset",
         name: "PriceAI channel subscription offers",

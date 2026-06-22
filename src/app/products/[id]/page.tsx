@@ -7,7 +7,7 @@ import { BrandIcon } from "@/components/BrandIcon";
 import { JsonLd } from "@/components/JsonLd";
 import { ProductDetailHeader, ProductReturnLink } from "@/components/ProductDetailHeader";
 import { ProductOffersPanel } from "@/components/ProductOffersPanel";
-import { canonicalCatalog } from "@/lib/catalog";
+import { publicCatalogProducts } from "@/lib/catalog";
 import { getPublicProductSummary } from "@/lib/data";
 import {
   getOfficialPricePlanSummaryFromDataset,
@@ -26,7 +26,7 @@ export const revalidate = 300;
 export const dynamicParams = true;
 
 export function generateStaticParams() {
-  return canonicalCatalog.map((product) => ({ id: product.slug }));
+  return publicCatalogProducts().map((product) => ({ id: product.slug }));
 }
 
 export async function generateMetadata({

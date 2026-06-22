@@ -12,6 +12,11 @@ import { pruneOperationalLogs } from "./operational-logs";
 import { safeFetch } from "./safe-fetch";
 import { isFeedbackEvidenceReference } from "./feedback-evidence";
 import { getSupabaseServerClient } from "./supabase";
+import {
+  buildInitialFeedbackVerificationResult,
+  feedbackRequiresEvidence,
+  inferSuggestedActionForFeedback,
+} from "./trust-risk";
 import type {
   ChannelSubmission,
   CollectionMethod,
@@ -22,6 +27,8 @@ import type {
   OfferFeedbackSuggestedAction,
   OfferFeedbackStatus,
   OfferFeedbackUserExpectedAction,
+  OfferFeedbackVerificationResult,
+  OfferFeedbackVerificationStatus,
   OfferStatus,
   RawOffer,
   SiteFeedback,
@@ -1083,6 +1090,11 @@ function mapOfferFeedbackRow(row: Record<string, unknown>): OfferFeedback {
     evidenceText: row.evidence_text ? String(row.evidence_text) : null,
     evidenceUrls: parseFeedbackEvidenceUrls(row.evidence_urls),
     aiReviewResult: row.ai_review_result && typeof row.ai_review_result === "object" ? row.ai_review_result as Record<string, unknown> : null,
+    verificationStatus: normalizeOfferFeedbackVerificationStatus(row.verification_status),
+    verificationResult: normalizeOfferFeedbackVerificationResult(row.verification_result),
+    verifiedAt: row.verification_checked_at ? String(row.verification_checked_at) : null,
+    verificationMessage: row.verification_message ? String(row.verification_message) : verificationMessageFromAiReview(row.ai_review_result),
+    createdCollectionJobId: row.created_collection_job_id ? String(row.created_collection_job_id) : collectionJobIdFromAiReview(row.ai_review_result),
     notes: row.notes ? String(row.notes) : null,
     contact: row.contact ? String(row.contact) : null,
     status: String(row.status || "pending") as OfferFeedbackStatus,
@@ -1115,11 +1127,43 @@ function normalizeOfferFeedbackSuggestedAction(value: unknown, reason: OfferFeed
 }
 
 function inferOfferFeedbackSuggestedAction(reason: OfferFeedbackReason): OfferFeedbackSuggestedAction {
-  if (reason === "wrong_price" || reason === "stock_mismatch") return "recollect";
-  if (reason === "item_removed" || reason === "fraud") return "hide_offer";
-  if (reason === "bad_source") return "hide_source";
-  if (reason === "wrong_category") return "reclassify";
-  return "todo";
+  return inferSuggestedActionForFeedback(reason);
+}
+
+function normalizeOfferFeedbackVerificationStatus(value: unknown): OfferFeedbackVerificationStatus {
+  return value === "not_needed" ||
+    value === "pending" ||
+    value === "running" ||
+    value === "auto_fixed" ||
+    value === "recollection_created" ||
+    value === "manual_review" ||
+    value === "failed"
+    ? value
+    : "not_needed";
+}
+
+function normalizeOfferFeedbackVerificationResult(value: unknown): OfferFeedbackVerificationResult | null {
+  return value === "offer_changed" ||
+    value === "item_removed" ||
+    value === "out_of_stock" ||
+    value === "still_available" ||
+    value === "recollection_created" ||
+    value === "inconclusive" ||
+    value === "blocked"
+    ? value
+    : null;
+}
+
+function verificationMessageFromAiReview(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const message = (value as Record<string, unknown>).verificationMessage;
+  return typeof message === "string" && message.trim() ? message : null;
+}
+
+function collectionJobIdFromAiReview(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const jobId = (value as Record<string, unknown>).createdCollectionJobId;
+  return typeof jobId === "string" && jobId.trim() ? jobId : null;
 }
 
 function parseFeedbackEvidenceUrls(value: unknown): string[] {
@@ -2141,6 +2185,25 @@ export async function createOfferFeedback(input: {
 
   const id = stableId("offer-feedback", input.offerId || "", input.reason, ip || "", Date.now().toString());
   const userExpectedAction = normalizeOfferFeedbackUserExpectedAction(input.userExpectedAction);
+  const evidenceText = input.evidenceText?.trim() || null;
+  const evidenceUrls = sanitizeFeedbackEvidenceUrls(input.evidenceUrls || []);
+  const hasEvidence = Boolean(evidenceText || evidenceUrls.length);
+  if (feedbackRequiresEvidence(input.reason, userExpectedAction) && !hasEvidence) {
+    throw new Error("这类反馈需要提交图片、链接或较完整说明作为证据。");
+  }
+
+  const aiReviewResult = buildInitialFeedbackVerificationResult({
+    reason: input.reason,
+    notes: input.notes || null,
+    evidenceText,
+    offerStatus: input.offerStatus || null,
+  });
+  const verificationStatus = typeof aiReviewResult?.verificationStatus === "string"
+    ? aiReviewResult.verificationStatus
+    : "not_needed";
+  const verificationMessage = typeof aiReviewResult?.verificationMessage === "string"
+    ? aiReviewResult.verificationMessage
+    : null;
   const suggestedAction = input.suggestedAction
     ? normalizeOfferFeedbackSuggestedAction(input.suggestedAction, input.reason)
     : inferOfferFeedbackSuggestedAction(input.reason);
@@ -2163,8 +2226,11 @@ export async function createOfferFeedback(input: {
     reason: input.reason,
     user_expected_action: userExpectedAction,
     suggested_action: suggestedAction,
-    evidence_text: input.evidenceText?.trim() || null,
-    evidence_urls: sanitizeFeedbackEvidenceUrls(input.evidenceUrls || []),
+    evidence_text: evidenceText,
+    evidence_urls: evidenceUrls,
+    ai_review_result: aiReviewResult,
+    verification_status: verificationStatus,
+    verification_message: verificationMessage,
     notes: input.notes?.trim() || null,
     contact: input.contact?.trim() || null,
     status: "pending",
@@ -2212,6 +2278,107 @@ export async function updateOfferFeedbackStatus(input: {
   if (!data) throw new Error("反馈记录不存在。");
 
   return mapOfferFeedbackRow(data);
+}
+
+export async function updateOfferFeedbackVerification(input: {
+  id: string;
+  verificationStatus: OfferFeedbackVerificationStatus;
+  verificationResult?: OfferFeedbackVerificationResult | null;
+  verificationMessage?: string | null;
+  reviewerNote?: string | null;
+}): Promise<OfferFeedback> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase 尚未配置。");
+
+  const { data, error } = await supabase
+    .from("offer_feedback")
+    .update({
+      verification_status: input.verificationStatus,
+      verification_result: input.verificationResult || null,
+      verification_message: input.verificationMessage?.trim() || null,
+      verification_checked_at: new Date().toISOString(),
+      reviewer_note: input.reviewerNote?.trim() || null,
+    })
+    .eq("id", input.id)
+    .select("*")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("反馈记录不存在。");
+
+  return mapOfferFeedbackRow(data);
+}
+
+export async function createFeedbackRecollectionJob(input: {
+  feedbackId: string;
+  priority?: number;
+  maxAttempts?: number;
+}): Promise<{ feedback: OfferFeedback; jobId: string }> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase 尚未配置，无法创建采集任务。");
+
+  const { data: feedbackRow, error: feedbackError } = await supabase
+    .from("offer_feedback")
+    .select("*")
+    .eq("id", input.feedbackId)
+    .maybeSingle();
+  if (feedbackError) throw feedbackError;
+  if (!feedbackRow) throw new Error("反馈记录不存在。");
+
+  const feedback = mapOfferFeedbackRow(feedbackRow);
+  if (!feedback.sourceId) throw new Error("这条反馈没有关联渠道，无法创建来源重采任务。");
+
+  const existingJobId = feedback.createdCollectionJobId;
+  if (existingJobId) {
+    return { feedback, jobId: existingJobId };
+  }
+
+  const now = new Date().toISOString();
+  const jobId = stableId("feedback-recollection", feedback.id, feedback.sourceId, now);
+  const { error: jobError } = await supabase.from("collection_jobs").insert({
+    id: jobId,
+    job_type: "source",
+    source_id: feedback.sourceId,
+    source_name: feedback.sourceName || feedback.sourceId,
+    status: "pending",
+    priority: input.priority ?? 30,
+    attempts: 0,
+    max_attempts: input.maxAttempts ?? 1,
+    requested_by: "feedback",
+    result: {
+      feedbackId: feedback.id,
+      reason: feedback.reason,
+      offerId: feedback.offerId,
+      verificationIntent: "low_risk_feedback_recollection",
+    },
+    created_at: now,
+    updated_at: now,
+  });
+  if (jobError) throw jobError;
+
+  const { data: updatedRow, error: updateError } = await supabase
+    .from("offer_feedback")
+    .update({
+      verification_status: "recollection_created",
+      verification_result: "recollection_created",
+      verification_message: "已创建来源重采任务，等待现有采集队列处理；未在前台请求中同步抓取原站。",
+      verification_checked_at: now,
+      created_collection_job_id: jobId,
+      ai_review_result: {
+        ...(feedback.aiReviewResult || {}),
+        verificationStatus: "recollection_created",
+        verificationResult: "recollection_created",
+        verifiedAt: now,
+        verificationMessage: "已创建来源重采任务，等待现有采集队列处理；未在前台请求中同步抓取原站。",
+        createdCollectionJobId: jobId,
+      },
+    })
+    .eq("id", feedback.id)
+    .select("*")
+    .maybeSingle();
+  if (updateError) throw updateError;
+  if (!updatedRow) throw new Error("反馈记录不存在。");
+
+  return { feedback: mapOfferFeedbackRow(updatedRow), jobId };
 }
 
 export async function createSiteFeedback(input: {

@@ -301,7 +301,11 @@ export function ApiTransitAdminPanel({
       reviewStatus,
       adminNote: defaultSubmissionNote(reviewStatus),
     });
-    handleActionResult(result, submissionStatusSuccessText(reviewStatus), "更新提交线索失败。");
+    handleActionResult(
+      result,
+      submissionStatusSuccessText(reviewStatus, result),
+      "更新提交线索失败。",
+    );
   }
 
   function handleActionResult(result: ApiResponse, successText: string, fallbackText: string) {
@@ -585,7 +589,7 @@ function StationsPanel({
 
   return (
     <section className="overflow-hidden rounded-lg border border-[#adb3b4]/25 bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
-      <div className="grid grid-cols-[minmax(220px,1.5fr)_120px_120px_140px_150px_190px] gap-3 bg-[#f2f4f4] px-4 py-3 text-xs font-semibold text-[#5a6061] max-lg:hidden">
+      <div className="grid grid-cols-[minmax(220px,1.5fr)_120px_120px_140px_150px_250px] gap-3 bg-[#f2f4f4] px-4 py-3 text-xs font-semibold text-[#5a6061] max-lg:hidden">
         <span>站点</span>
         <span>发布</span>
         <span>报价</span>
@@ -599,7 +603,7 @@ function StationsPanel({
           const visibleLoading = loadingAction === `station-visible-${station.id}`;
           const pendingCount = pendingCountByStation.get(station.id) || station.pendingOfferCount;
           return (
-            <article key={station.id} className="grid gap-3 px-4 py-4 text-sm lg:grid-cols-[minmax(220px,1.5fr)_120px_120px_140px_150px_190px] lg:items-center">
+            <article key={station.id} className="grid gap-3 px-4 py-4 text-sm lg:grid-cols-[minmax(220px,1.5fr)_120px_120px_140px_150px_250px] lg:items-center">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="truncate text-sm font-semibold text-[#202829]">{station.name}</h2>
@@ -1052,70 +1056,93 @@ function SubmissionsPanel({
       </div>
       <div className="divide-y divide-[#edf0f1]">
         {submissions.map((submission) => (
-          <article key={submission.id} className="grid gap-3 px-4 py-4 text-sm lg:grid-cols-[minmax(220px,1.5fr)_120px_140px_150px_220px] lg:items-start">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-sm font-semibold text-[#202829]">{submission.submittedName || submission.submittedUrl}</h2>
-                <StatusBadge tone={submission.reviewStatus === "pending" ? "warn" : submission.reviewStatus === "approved" ? "success" : submission.reviewStatus === "collector_todo" ? "info" : "muted"}>
-                  {submissionReviewStatusLabel(submission.reviewStatus)}
-                </StatusBadge>
-              </div>
-              <a href={submission.submittedUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex max-w-full items-center gap-1 text-xs font-medium text-[#47657a] hover:text-[#202829]">
-                <span className="truncate">{submission.submittedUrl}</span>
-                <ExternalLink size={12} />
-              </a>
-              <SubmissionMetaSummary submission={submission} />
-              {submission.notes ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#5a6061]">{submission.notes}</p> : null}
-            </div>
-            <div>
-              <MobileLabel>类型</MobileLabel>
-              <span className="text-sm font-medium text-[#2d3435]">{submission.submissionType === "merchant" ? "站长提交" : "用户推荐"}</span>
-              {submission.contact ? <div className="mt-1 text-xs text-[#5a6061]">{submission.contact}</div> : null}
-            </div>
-            <div>
-              <MobileLabel>探测</MobileLabel>
-              <StatusBadge tone={submission.probeStatus === "public_pricing_found" ? "success" : submission.probeStatus === "failed" ? "danger" : "info"}>
-                {probeStatusLabel(submission.probeStatus)}
-              </StatusBadge>
-            </div>
-            <div>
-              <MobileLabel>时间</MobileLabel>
-              <span className="text-xs text-[#5a6061]">{formatRelativeTime(submission.createdAt)}</span>
-            </div>
-            <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
-              <button
-                type="button"
-                disabled={submission.reviewStatus === "collector_todo" || loadingAction === `submission-collector_todo-${submission.id}`}
-                onClick={() => onUpdate(submission, "collector_todo")}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#2d3435] transition-colors hover:bg-[#f2f4f4] disabled:opacity-50"
-              >
-                <ClipboardList size={13} />
-                待办
-              </button>
-              <button
-                type="button"
-                disabled={submission.reviewStatus === "approved" || loadingAction === `submission-approved-${submission.id}`}
-                onClick={() => onUpdate(submission, "approved")}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#2d3435] px-3 text-xs font-medium text-[#f8f8f8] transition-colors hover:bg-[#202829] disabled:opacity-50"
-              >
-                <CheckCircle2 size={13} />
-                通过
-              </button>
-              <button
-                type="button"
-                disabled={submission.reviewStatus === "rejected" || loadingAction === `submission-rejected-${submission.id}`}
-                onClick={() => onUpdate(submission, "rejected")}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#2d3435] transition-colors hover:bg-[#f2f4f4] disabled:opacity-50"
-              >
-                <XCircle size={13} />
-                拒绝
-              </button>
-            </div>
-          </article>
+          <SubmissionRow
+            key={submission.id}
+            submission={submission}
+            loadingAction={loadingAction}
+            onUpdate={onUpdate}
+          />
         ))}
         {!submissions.length ? <EmptyState text="没有匹配的提交线索。" /> : null}
       </div>
     </section>
+  );
+}
+
+function SubmissionRow({
+  submission,
+  loadingAction,
+  onUpdate,
+}: {
+  submission: ApiTransitAdminSubmission;
+  loadingAction: string | null;
+  onUpdate: (
+    submission: ApiTransitAdminSubmission,
+    reviewStatus: ApiTransitSubmissionReviewStatus,
+  ) => void;
+}) {
+  const needsStationDraft = submission.reviewStatus === "approved" && !submission.stationId;
+  return (
+    <article className="grid gap-3 px-4 py-4 text-sm lg:grid-cols-[minmax(220px,1.5fr)_120px_140px_150px_220px] lg:items-start">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="truncate text-sm font-semibold text-[#202829]">{submission.submittedName || submission.submittedUrl}</h2>
+          <StatusBadge tone={submission.reviewStatus === "pending" ? "warn" : submission.reviewStatus === "approved" ? "success" : submission.reviewStatus === "collector_todo" ? "info" : "muted"}>
+            {submissionReviewStatusLabel(submission.reviewStatus)}
+          </StatusBadge>
+        </div>
+        <a href={submission.submittedUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex max-w-full items-center gap-1 text-xs font-medium text-[#47657a] hover:text-[#202829]">
+          <span className="truncate">{submission.submittedUrl}</span>
+          <ExternalLink size={12} />
+        </a>
+        <SubmissionMetaSummary submission={submission} />
+        {submission.notes ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#5a6061]">{submission.notes}</p> : null}
+      </div>
+      <div>
+        <MobileLabel>类型</MobileLabel>
+        <span className="text-sm font-medium text-[#2d3435]">{submission.submissionType === "merchant" ? "站长提交" : "用户推荐"}</span>
+        {submission.contact ? <div className="mt-1 text-xs text-[#5a6061]">{submission.contact}</div> : null}
+      </div>
+      <div>
+        <MobileLabel>探测</MobileLabel>
+        <StatusBadge tone={submission.probeStatus === "public_pricing_found" ? "success" : submission.probeStatus === "failed" ? "danger" : "info"}>
+          {probeStatusLabel(submission.probeStatus)}
+        </StatusBadge>
+      </div>
+      <div>
+        <MobileLabel>时间</MobileLabel>
+        <span className="text-xs text-[#5a6061]">{formatRelativeTime(submission.createdAt)}</span>
+      </div>
+      <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+        <button
+          type="button"
+          disabled={submission.reviewStatus === "collector_todo" || loadingAction === `submission-collector_todo-${submission.id}`}
+          onClick={() => onUpdate(submission, "collector_todo")}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#2d3435] transition-colors hover:bg-[#f2f4f4] disabled:opacity-50"
+        >
+          <ClipboardList size={13} />
+          待办
+        </button>
+        <button
+          type="button"
+          disabled={(!needsStationDraft && submission.reviewStatus === "approved") || loadingAction === `submission-approved-${submission.id}`}
+          onClick={() => onUpdate(submission, "approved")}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#2d3435] px-3 text-xs font-medium text-[#f8f8f8] transition-colors hover:bg-[#202829] disabled:opacity-50"
+        >
+          <CheckCircle2 size={13} />
+          {needsStationDraft ? "入池" : "通过"}
+        </button>
+        <button
+          type="button"
+          disabled={submission.reviewStatus === "rejected" || loadingAction === `submission-rejected-${submission.id}`}
+          onClick={() => onUpdate(submission, "rejected")}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#adb3b4]/30 bg-white px-3 text-xs font-medium text-[#2d3435] transition-colors hover:bg-[#f2f4f4] disabled:opacity-50"
+        >
+          <XCircle size={13} />
+          拒绝
+        </button>
+      </div>
+    </article>
   );
 }
 
@@ -1685,6 +1712,7 @@ type ApiResponse = {
   updatedOfferCount?: number;
   offer?: unknown;
   station?: unknown;
+  stationCreated?: boolean;
 };
 
 async function requestJson(path: string, method: string, body: unknown): Promise<ApiResponse> {
@@ -1898,15 +1926,30 @@ function submissionReviewStatusLabel(value: ApiTransitSubmissionReviewStatus): s
 }
 
 function defaultSubmissionNote(value: ApiTransitSubmissionReviewStatus): string {
-  if (value === "approved") return "人工审核通过，等待站点数据入库或关联。";
+  if (value === "approved") return "人工审核通过，已生成或关联站点池草稿。";
   if (value === "collector_todo") return "已加入 API 中转采集器待办。";
   if (value === "rejected") return "人工审核拒绝。";
   return "";
 }
 
-function submissionStatusSuccessText(value: ApiTransitSubmissionReviewStatus): string {
-  if (value === "approved") return "提交线索已标记为通过。";
+function submissionStatusSuccessText(value: ApiTransitSubmissionReviewStatus, result?: ApiResponse): string {
+  if (value === "approved") {
+    const stationName = responseStationName(result);
+    if (stationName) {
+      return result?.stationCreated
+        ? `提交线索已通过，并已加入站点池：${stationName}。`
+        : `提交线索已通过，并已关联站点池：${stationName}。`;
+    }
+    return "提交线索已通过，并已准备进入站点池。";
+  }
   if (value === "collector_todo") return "提交线索已加入采集器待办。";
   if (value === "rejected") return "提交线索已拒绝。";
   return "提交线索已更新。";
+}
+
+function responseStationName(result?: ApiResponse): string | null {
+  const station = result?.station;
+  if (!station || typeof station !== "object") return null;
+  const name = "name" in station ? String(station.name || "").trim() : "";
+  return name || null;
 }

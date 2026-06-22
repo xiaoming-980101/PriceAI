@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { ApiModelIcon } from "@/components/ApiModelIcon";
 import { CategoryTabBar, CategoryTabStrip, type CategoryTabItem } from "@/components/CategoryTabBar";
+import { CommunityPrompt } from "@/components/FeedbackLink";
 import { SiteHeader } from "@/components/SiteHeader";
 import { listDetailHref, listDetailNavigationHref, shouldHandleListDetailClick } from "@/lib/list-return";
 import {
@@ -526,15 +527,9 @@ export function ApiModelsExplorer({ dataset }: { dataset: ApiModelDataset }) {
                   {submitMessage.text}
                 </p>
                 {submitMessage.type === "success" ? (
-                  <a
-                    href="https://t.me/priceaicc"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-between gap-3 rounded-lg border border-[#2AABEE]/20 bg-[#eef8fe] px-3 py-2 text-sm text-[#23658a] transition hover:border-[#2AABEE]/35 hover:bg-[#e3f4fd]"
-                  >
-                    <span>也欢迎加入 PriceAI 交流群，一起补充模型 API 渠道和免费额度信息。</span>
-                    <ExternalLink size={14} className="shrink-0" />
-                  </a>
+                  <CommunityPrompt>
+                    也欢迎加入 PriceAI 交流群，一起补充模型 API 渠道和免费额度信息。
+                  </CommunityPrompt>
                 ) : null}
               </div>
             ) : null}

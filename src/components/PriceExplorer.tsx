@@ -24,11 +24,13 @@ import { OfferActions, OfferFeedbackButton, OfferFeedbackDialog, OfferLink } fro
 import { SiteHeader } from "@/components/SiteHeader";
 import { listDetailNavigationHref, shouldHandleListDetailClick } from "@/lib/list-return";
 import {
+  allPlatformOptions,
   comparePlatformOrder,
   isAvailable,
   platformOptions,
   productTypeOptions,
 } from "@/lib/catalog";
+import { apiCdkPublicVisibleForClient } from "@/lib/trust-risk";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { readSessionCache, writeSessionCache } from "@/lib/client-cache";
 import { createTimeoutSignal, isGeneratedDatasetStale, newestGeneratedDataset } from "@/lib/client-refresh";
@@ -90,6 +92,7 @@ const stockOptions = ["all", "available", "out_of_stock"] as const;
 const sortOptions = ["available_price", "price", "updated", "channels"] as const;
 const viewOptions = ["cards", "table"] as const;
 const scopeOptions = ["products", "offers"] as const;
+const visiblePlatformOptions = apiCdkPublicVisibleForClient() ? allPlatformOptions : platformOptions;
 
 const EMPTY_EXPLORER_DATA: ExplorerData = {
   generatedAt: "",
@@ -156,7 +159,7 @@ export function PriceExplorer({
   const activeOfferQueryRef = useRef("");
   const isDesktopViewport = useMediaQuery("(min-width: 768px)");
   const platformTabs = useMemo<CategoryTabItem[]>(
-    () => ["全部", ...platformOptions].map((item) => ({
+    () => ["全部", ...visiblePlatformOptions].map((item) => ({
       id: item,
       label: item,
       icon: platformIcon(item),
@@ -752,7 +755,7 @@ export function PriceExplorer({
                 label="平台"
                 value={platform}
                 onChange={changePlatform}
-                options={["全部", ...platformOptions]}
+                options={["全部", ...visiblePlatformOptions]}
               />
             </div>
             <div className="sm:col-span-2 lg:col-span-1">
@@ -1855,7 +1858,7 @@ function buildExplorerSearchParams({
 function parseExplorerInitialState(params: URLSearchParams): ExplorerInitialState {
   return {
     query: params.get("q") || "",
-    platform: pickParam(params.get("platform") || "", ["全部", ...platformOptions], "全部"),
+    platform: pickParam(params.get("platform") || "", ["全部", ...visiblePlatformOptions], "全部"),
     productType: pickParam(params.get("type") || "", ["全部", ...productTypeOptions], "全部"),
     stock: pickParam(params.get("stock") || "", stockOptions, "all"),
     sort: pickParam(params.get("sort") || "", sortOptions, "available_price"),

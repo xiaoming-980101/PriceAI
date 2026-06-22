@@ -119,7 +119,7 @@ export const guideEntries: GuideEntry[] = [
   },
   {
     title: "ChatGPT 获取方式",
-    description: "理解官方订阅、地区价、代充、成品号、Team、Plus CDK 和 API/CDK。",
+    description: "理解官方订阅、地区价、代充、成品号、Team 和 Plus CDK。",
     href: "/guides/chatgpt-subscription-options",
     categoryId: "channels",
     tags: ["ChatGPT", "Plus", "Pro", "Team", "CDK"],
@@ -206,7 +206,7 @@ export const guideReadingPaths: GuideReadingPath[] = [
       {
         href: "/guides/chatgpt-subscription-options",
         label: "再分清 ChatGPT 商品",
-        description: "区分 Plus、Pro、Team、成品号、代充、CDK 和 API/CDK。",
+        description: "区分 Plus、Pro、Team、成品号、代充和卡密。",
       },
       {
         href: "/guides/api-transit",

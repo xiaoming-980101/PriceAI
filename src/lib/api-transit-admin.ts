@@ -26,6 +26,7 @@ import type {
 } from "@/lib/api-transit-admin-types";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getSupabaseServerClient } from "@/lib/supabase";
+import { slugify, stableId } from "@/lib/utils";
 
 const ADMIN_STATION_LIMIT = 80;
 const ADMIN_OFFER_LIMIT = 600;
@@ -47,6 +48,12 @@ const ADMIN_RUN_SELECT = [
 ].join(",");
 
 type DbRow = Record<string, unknown>;
+
+type ApiTransitSubmissionUpdateResult = {
+  submission: ApiTransitAdminSubmission;
+  station: ApiTransitAdminStation | null;
+  stationCreated: boolean;
+};
 
 export async function getApiTransitAdminData(input: {
   isAuthenticated: boolean;
@@ -311,13 +318,24 @@ export async function updateApiTransitSubmission(input: {
   reviewStatus: ApiTransitSubmissionReviewStatus;
   stationId?: string | null;
   adminNote?: string | null;
-}): Promise<ApiTransitAdminSubmission> {
+}): Promise<ApiTransitSubmissionUpdateResult> {
   const supabase = getSupabaseOrThrow();
+
+  let station: ApiTransitAdminStation | null = null;
+  let stationCreated = false;
+  let stationId = input.stationId;
+  if (input.reviewStatus === "approved") {
+    const promotion = await promoteTransitSubmissionToStation(input.id, input.stationId);
+    station = promotion.station;
+    stationCreated = promotion.created;
+    stationId = promotion.station.id;
+  }
+
   const row: DbRow = {
     review_status: input.reviewStatus,
     admin_note: cleanNullable(input.adminNote),
   };
-  if (input.stationId !== undefined) row.station_id = cleanNullable(input.stationId);
+  if (stationId !== undefined) row.station_id = cleanNullable(stationId);
 
   const { data, error } = await supabase
     .from("api_transit_submissions")
@@ -328,7 +346,246 @@ export async function updateApiTransitSubmission(input: {
 
   if (error) throw error;
   if (!data) throw new Error("提交记录不存在。");
-  return mapSubmission(data as DbRow);
+  const submission = mapSubmission(data as DbRow);
+  if (!station && submission.stationId) station = await getAdminTransitStationById(submission.stationId);
+  return { submission, station, stationCreated };
+}
+
+async function promoteTransitSubmissionToStation(
+  submissionId: string,
+  requestedStationId?: string | null,
+): Promise<{ station: ApiTransitAdminStation; created: boolean }> {
+  const supabase = getSupabaseOrThrow();
+  const { data, error } = await supabase
+    .from("api_transit_submissions")
+    .select("*")
+    .eq("id", submissionId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("提交记录不存在。");
+
+  const submission = mapSubmission(data as DbRow);
+  const existing = await findStationForSubmission(submission, requestedStationId);
+  if (existing) return { station: existing, created: false };
+
+  const now = new Date().toISOString();
+  const websiteUrl = normalizeUrlForStation(submission.submittedUrl);
+  const pricingUrl = normalizeOptionalUrl(submission.pricingUrl);
+  const apiBaseUrl = normalizeOptionalUrl(submission.apiBaseUrl);
+  const monitorUrl = normalizeOptionalUrl(metaText(submission.submittedMeta, "monitorUrl") || firstUrlFromText(metaText(submission.submittedMeta, "monitor_text")));
+  const stationId = buildStationId(submission);
+  const stationName = cleanNullable(submission.submittedName) || stationNameFromUrl(websiteUrl) || stationId;
+  const sourceType = submission.submissionType === "merchant" ? "merchant_submitted" : "user_submitted";
+  const collectionStatus: ApiTransitCollectionStatus =
+    submission.probeStatus === "public_pricing_found" ? "manual_review" : "pending";
+
+  const stationRow: DbRow = {
+    id: stationId,
+    slug: stationId,
+    name: stationName,
+    website_url: websiteUrl,
+    api_base_url: apiBaseUrl,
+    pricing_url: pricingUrl,
+    monitor_url: monitorUrl,
+    status: "unknown",
+    source_type: sourceType,
+    commercial_relation: "unknown",
+    summary: buildStationDraftSummary(submission),
+    channel_types: submittedMetaList(submission.submittedMeta, "channel_types_normalized", "channel_types_raw"),
+    account_pools: submittedAccountPools(submission),
+    payment_methods: [],
+    support_channels: supportChannelsFromContact(submission.contact),
+    risk_labels: [],
+    usage_advice: "pending",
+    data_status: "pending_review",
+    collector_kind: "submission_review",
+    pricing_endpoint_url: pricingUrl,
+    collection_status: collectionStatus,
+    last_updated_at: now,
+    published: false,
+    admin_note: buildStationDraftAdminNote(submission),
+  };
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("api_transit_stations")
+    .insert(stationRow)
+    .select("*")
+    .maybeSingle();
+
+  if (insertError) throw insertError;
+  if (!inserted) throw new Error("站点草稿创建失败。");
+
+  await linkSubmissionCredentialsToStation(submission.id, stationId);
+  clearTransitStationsCache();
+  return { station: mapStation(inserted as DbRow), created: true };
+}
+
+async function findStationForSubmission(
+  submission: ApiTransitAdminSubmission,
+  requestedStationId?: string | null,
+): Promise<ApiTransitAdminStation | null> {
+  const explicitId = cleanNullable(requestedStationId) || submission.stationId;
+  if (explicitId) {
+    const explicitStation = await getAdminTransitStationById(explicitId);
+    if (explicitStation) {
+      await linkSubmissionCredentialsToStation(submission.id, explicitStation.id);
+      return explicitStation;
+    }
+  }
+
+  const candidateId = buildStationId(submission);
+  const submittedHost = hostnameForCompare(submission.submittedUrl);
+  const supabase = getSupabaseOrThrow();
+  const { data, error } = await supabase
+    .from("api_transit_stations")
+    .select("*")
+    .limit(500);
+
+  if (error) throw error;
+
+  const matchingRow = dbRows(data).find((row) => {
+    const id = stringValue(row.id);
+    const slug = stringValue(row.slug);
+    if (id === candidateId || slug === candidateId) return true;
+    const stationHost = hostnameForCompare(stringValue(row.website_url));
+    return Boolean(submittedHost && stationHost && submittedHost === stationHost);
+  });
+
+  if (!matchingRow) return null;
+  const stationId = stringValue(matchingRow.id);
+  await linkSubmissionCredentialsToStation(submission.id, stationId);
+  return getAdminTransitStationById(stationId);
+}
+
+async function getAdminTransitStationById(stationId: string): Promise<ApiTransitAdminStation | null> {
+  const supabase = getSupabaseOrThrow();
+  const { data, error } = await supabase
+    .from("api_transit_stations")
+    .select("*")
+    .eq("id", stationId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const [stats, latestRuns] = await Promise.all([
+    getOfferStatsByStationIds([stationId]),
+    getLatestRunsByStationIds([stationId]),
+  ]);
+  return mapStation(data as DbRow, stats.get(stationId), latestRuns.get(stationId));
+}
+
+async function linkSubmissionCredentialsToStation(submissionId: string, stationId: string): Promise<void> {
+  const supabase = getSupabaseOrThrow();
+  const { error } = await supabase
+    .from("api_transit_credentials")
+    .update({ station_id: stationId })
+    .eq("submission_id", submissionId);
+  if (error) throw error;
+}
+
+function buildStationId(submission: ApiTransitAdminSubmission): string {
+  const hostSlug = slugify(hostnameForCompare(submission.submittedUrl) || "");
+  const nameSlug = slugify(submission.submittedName || "");
+  return hostSlug || nameSlug || stableId("api-transit-station", submission.submittedUrl);
+}
+
+function buildStationDraftSummary(submission: ApiTransitAdminSubmission): string {
+  const actor = submission.submissionType === "merchant" ? "站长" : "用户";
+  const accessMode = accessModeLabel(metaText(submission.submittedMeta, "accessMode"));
+  const details = [
+    `${actor}提交的 API 中转站线索，已通过初筛并进入站点池。`,
+    accessMode ? `接入方式：${accessMode}。` : "",
+    "待运营补全价格、号池、风险、售后和可用性数据后再发布。",
+  ].filter(Boolean);
+  return details.join("");
+}
+
+function buildStationDraftAdminNote(submission: ApiTransitAdminSubmission): string {
+  const pieces = [
+    `由提交线索 ${submission.id} 自动生成站点草稿。`,
+    submission.probeStatus === "public_pricing_found" ? "已发现公开价格/监测入口。" : "",
+    submission.notes ? `提交备注：${submission.notes}` : "",
+    submission.adminNote ? `原后台备注：${submission.adminNote}` : "",
+  ].filter(Boolean);
+  return pieces.join("\n");
+}
+
+function stationNameFromUrl(value: string): string | null {
+  const host = hostnameForCompare(value);
+  if (!host) return null;
+  return host.split(".").filter(Boolean)[0] || host;
+}
+
+function hostnameForCompare(value: string | null | undefined): string | null {
+  try {
+    const host = new URL(String(value || "").trim()).hostname.toLowerCase();
+    return host.replace(/^www\./, "") || null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeUrlForStation(value: string): string {
+  try {
+    const url = new URL(value.trim());
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return value.trim();
+  }
+}
+
+function normalizeOptionalUrl(value: string | null | undefined): string | null {
+  const text = cleanNullable(value);
+  if (!text) return null;
+  try {
+    return normalizeUrlForStation(text);
+  } catch {
+    return null;
+  }
+}
+
+function firstUrlFromText(value: string | null): string | null {
+  return value?.match(/https?:\/\/[^\s，,；;]+/)?.[0] || null;
+}
+
+function submittedMetaList(meta: Record<string, unknown>, ...keys: string[]): string[] {
+  for (const key of keys) {
+    const values = stringArray(meta[key]);
+    if (values.length) return normalizeChannelTypes(values);
+  }
+  return [];
+}
+
+function submittedAccountPools(submission: ApiTransitAdminSubmission): string[] {
+  const raw = [
+    metaText(submission.submittedMeta, "credentialAccountPool"),
+    metaText(submission.submittedMeta, "accountPool"),
+    ...submission.submittedModels,
+  ].filter((value): value is string => Boolean(value));
+  return normalizeAccountPools(raw);
+}
+
+function supportChannelsFromContact(contact: string | null): string[] {
+  const text = String(contact || "").toLowerCase();
+  return uniqueText([
+    text.includes("t.me") || text.includes("telegram") || text.includes("tg") ? "Telegram" : "",
+    text.includes("qq") ? "QQ" : "",
+    text.includes("@") ? "Email" : "",
+  ]);
+}
+
+function metaText(meta: Record<string, unknown>, key: string): string | null {
+  return nullableString(meta[key]);
+}
+
+function accessModeLabel(value: string | null): string | null {
+  if (value === "public_only") return "公开资料";
+  if (value === "test_key") return "测试 Key";
+  if (value === "test_account") return "测试账号";
+  return null;
 }
 
 async function listAdminTransitStations(): Promise<ApiTransitAdminStation[]> {

@@ -80,6 +80,16 @@ export type RawOffer = {
   freshnessStatus?: FreshnessStatus | null;
   lastFailedAt?: string | null;
   failureReason?: string | null;
+  riskFeedback?: PublicRiskFeedback | null;
+};
+
+export type PublicRiskFeedback = {
+  count: number;
+  offerCount?: number;
+  sourceCount?: number;
+  scope: "offer" | "source" | "mixed";
+  latestAt: string | null;
+  reasons?: Array<Extract<OfferFeedbackReason, "aftersales_shipping" | "fraud" | "bad_source">>;
 };
 
 export type CanonicalProduct = {
@@ -626,6 +636,7 @@ export const offerFeedbackReasonValues = [
   "item_removed",
   "stock_mismatch",
   "wrong_category",
+  "aftersales_shipping",
   "fraud",
   "bad_source",
   "other",
@@ -643,6 +654,22 @@ export type OfferFeedbackSuggestedAction =
   | "hide_source"
   | "todo"
   | "ignore";
+export type OfferFeedbackVerificationStatus =
+  | "not_needed"
+  | "pending"
+  | "running"
+  | "auto_fixed"
+  | "recollection_created"
+  | "manual_review"
+  | "failed";
+export type OfferFeedbackVerificationResult =
+  | "offer_changed"
+  | "item_removed"
+  | "out_of_stock"
+  | "still_available"
+  | "recollection_created"
+  | "inconclusive"
+  | "blocked";
 export type SiteFeedbackType =
   | "feature"
   | "data"
@@ -689,6 +716,11 @@ export type OfferFeedback = {
   evidenceText: string | null;
   evidenceUrls: string[];
   aiReviewResult: Record<string, unknown> | null;
+  verificationStatus: OfferFeedbackVerificationStatus;
+  verificationResult: OfferFeedbackVerificationResult | null;
+  verifiedAt: string | null;
+  verificationMessage: string | null;
+  createdCollectionJobId: string | null;
   notes: string | null;
   contact: string | null;
   status: OfferFeedbackStatus;

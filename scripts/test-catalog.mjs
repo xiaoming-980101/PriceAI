@@ -103,6 +103,8 @@ const cases = [
   ["【长效接码链接】GPT Codex 接码（7.5号到期）", "openai-phone-verification"],
   ["OpenAI Codex接码，如需接码，找客服", "openai-phone-verification"],
   ["OpenAI Codex 手机接码（可绑定 3 个 Codex 账户）", "openai-phone-verification"],
+  ["codex接🦆 美区成功率99.99", "openai-phone-verification"],
+  ["渠道1 可以优先尝试这个 codex接🦆 美区成功率99.99", "openai-phone-verification"],
   ["Claude SMS 接码-泰国 接码自助卡密", "phone-verification"],
   ["Claude KYC认证", "identity-verification"],
   ["Claude KYC 认证服务【秒封不收费】", "identity-verification"],
@@ -139,6 +141,7 @@ const cases = [
   ["Gemini 3.1pro 12个月pixel成品号带长效接码链接（包反重力）", "gemini-pro-year"],
   ["Gemini Pro一年会员自动开通CDK 包绑卡订阅 1次", "gemini-pro-recharge"],
   ["1年GeminiPro自助充值CDK", "gemini-pro-recharge"],
+  ["pixel cdkey（1次）不包绑卡，只提取链接", "gemini-pro-recharge"],
   ["提取12个月优惠链接 一次 gemin pro（懂的买 无教程）小白勿拍", "gemini-pro-recharge"],
   ["Gemini登陆教程（仅文字教程，不含账号）", "other-product"],
   ["内部教程_Gemini3.1Pro如何开启家庭组？（仅图文教程，不含其他使用指导）", "other-product"],
@@ -392,7 +395,9 @@ async function loadCatalogModule() {
       isolatedModules: true,
       esModuleInterop: true,
     },
-  }).outputText.replace(/(["'])\.\/offer-filter-tags\1/g, "$1./offer-filter-tags.mjs$1");
+  }).outputText
+    .replace(/(["'])\.\/offer-filter-tags\1/g, "$1./offer-filter-tags.mjs$1")
+    .replace(/(["'])\.\/trust-risk\1/g, "$1./trust-risk.mjs$1");
 
   const offerFilterTagsPath = path.join(repoRoot, "src", "lib", "offer-filter-tags.ts");
   const offerFilterTagsSource = await readFile(offerFilterTagsPath, "utf8");
@@ -406,10 +411,24 @@ async function loadCatalogModule() {
     },
   }).outputText;
 
+  const trustRiskPath = path.join(repoRoot, "src", "lib", "trust-risk.ts");
+  const trustRiskSource = await readFile(trustRiskPath, "utf8");
+  const trustRiskOutput = ts.transpileModule(trustRiskSource, {
+    fileName: trustRiskPath,
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022,
+      isolatedModules: true,
+      esModuleInterop: true,
+    },
+  }).outputText;
+
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "priceai-catalog-test-"));
   const tempFile = path.join(tempDir, "catalog.mjs");
   const offerFilterTagsFile = path.join(tempDir, "offer-filter-tags.mjs");
+  const trustRiskFile = path.join(tempDir, "trust-risk.mjs");
   await writeFile(offerFilterTagsFile, offerFilterTagsOutput, "utf8");
+  await writeFile(trustRiskFile, trustRiskOutput, "utf8");
   await writeFile(tempFile, output, "utf8");
 
   try {

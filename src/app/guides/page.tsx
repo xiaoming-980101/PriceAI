@@ -83,7 +83,7 @@ const furtherReading = [
   },
   {
     title: "ChatGPT 获取方式",
-    text: "区分 Plus、Pro、Team、成品号、代充、CDK 和 API/CDK。",
+    text: "区分 Plus、Pro、Team、成品号、代充和卡密。",
     href: "/guides/chatgpt-subscription-options",
   },
 ];

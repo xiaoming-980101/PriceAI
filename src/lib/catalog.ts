@@ -1,19 +1,22 @@
 import type { CanonicalProduct, ProductGroup, RawOffer } from "./types";
 import { offerMatchesFilterTags } from "./offer-filter-tags";
+import { API_CDK_PLATFORM, isPublicCatalogProduct } from "./trust-risk";
 
-export const platformOptions = [
+export const allPlatformOptions = [
   "ChatGPT",
   "Claude",
   "Gemini",
   "Grok",
-  "API/CDK",
+  API_CDK_PLATFORM,
   "邮箱",
   "接码",
   "其他",
 ] as const;
 
+export const platformOptions = allPlatformOptions.filter((platform) => platform !== API_CDK_PLATFORM);
+
 const platformSortRank = new Map<string, number>(
-  platformOptions.map((platform, index) => [platform, index]),
+  allPlatformOptions.map((platform, index) => [platform, index]),
 );
 
 export function comparePlatformOrder(a: string, b: string): number {
@@ -524,8 +527,16 @@ function classifyOfferByTitle(
   const value = normalizeTitle(title);
   const contextValue = normalizeTitle([normalizeTags(context.tags), context.categorySlug].filter(Boolean).join(" "));
 
+  if (isCodexPhoneVerification(value)) {
+    return getCanonicalProduct("openai-phone-verification");
+  }
+
   if (isVerificationService(value)) {
     return getCanonicalProduct(classifyVerificationService(value));
+  }
+
+  if (isGooglePlayOrPixelRechargeProduct(value)) {
+    return getCanonicalProduct("gemini-pro-recharge");
   }
 
   if (isVirtualCardProduct(value)) {
@@ -783,6 +794,13 @@ export function buildProductGroups(
 
     return (a.lowestPrice ?? Number.MAX_SAFE_INTEGER) - (b.lowestPrice ?? Number.MAX_SAFE_INTEGER);
   });
+}
+
+export function publicCatalogProducts(
+  products: CanonicalProduct[] = canonicalCatalog,
+  options: { showApiCdk?: boolean } = {},
+): CanonicalProduct[] {
+  return products.filter((product) => isPublicCatalogProduct(product, options));
 }
 
 export function compareOffers(a: RawOffer, b: RawOffer): number {
@@ -1320,6 +1338,8 @@ function isNegatedPlus(value: string): boolean {
 }
 
 function isApiProduct(value: string): boolean {
+  if (isCodexPhoneVerification(value)) return false;
+  if (isGooglePlayOrPixelRechargeProduct(value)) return false;
   if (isChatGptTransitOrApiCreditProduct(value)) return true;
   if (isModelApiCreditProduct(value)) return true;
   if (isClaudeCodeCreditProduct(value)) return true;
@@ -1340,6 +1360,19 @@ function isApiProduct(value: string): boolean {
   if (matches(value, ["额度"]) && matches(value, ["claude", "gemini", "gpt", "codex", "openai", "ai 平台"])) return true;
 
   return false;
+}
+
+function isCodexPhoneVerification(value: string): boolean {
+  if (!matches(value, ["codex"])) return false;
+  if (isAiSubscriptionOrAccountTitle(value)) return false;
+  if (hasAccountBundleSignal(value)) return false;
+  return matches(value, ["接码", "接🦆", "接鸭", "验证码", "短信", "手机号", "手机", "号码", "2fa", "二验", "验证"]);
+}
+
+function isGooglePlayOrPixelRechargeProduct(value: string): boolean {
+  const hasGoogleOrPixel = matches(value, ["pixel", "google", "谷歌", "play", "google play"]);
+  if (!hasGoogleOrPixel) return false;
+  return matches(value, ["cdk", "cdkey", "兑换", "充值", "礼品卡", "提取链接", "优惠链接", "绑卡"]);
 }
 
 function isChatGptTransitOrApiCreditProduct(value: string): boolean {

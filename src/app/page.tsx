@@ -137,7 +137,7 @@ const guideLinks = [
   },
   {
     label: "ChatGPT 有哪些获取方式？",
-    description: "区分 Plus、Pro、Team、成品号、代充、CDK 和 API/CDK。",
+    description: "区分 Plus、Pro、Team、成品号、代充和卡密。",
     href: "/guides/chatgpt-subscription-options",
   },
 ];

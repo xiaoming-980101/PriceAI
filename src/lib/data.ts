@@ -3,7 +3,7 @@ import "server-only";
 import { ADMIN_MANUAL_HIDE_REASON_PREFIX, listOfferFeedback, listSiteFeedback, listSubmissions } from "./admin";
 import { notifyOperationalIssue } from "./alerts";
 import { getApiTransitAdminData, getEmptyApiTransitAdminData } from "./api-transit-admin";
-import { buildProductGroups, canonicalCatalog, comparePlatformOrder, isSharedAccessOffer, resolveOfferProduct } from "./catalog";
+import { buildProductGroups, canonicalCatalog, comparePlatformOrder, isSharedAccessOffer, publicCatalogProducts, resolveOfferProduct } from "./catalog";
 import { isSupabaseConfigured } from "./env";
 import { getApiModelAdminData } from "./api-models-db";
 import { normalizeCollectorKind } from "./collector-registry";
@@ -19,6 +19,7 @@ import {
 } from "./offer-filter-tags";
 import { seedRawOffers, seedSources } from "./sample-data";
 import { getSupabaseServerClient } from "./supabase";
+import { HIGH_RISK_FEEDBACK_REASONS, apiCdkPublicVisible, isPublicCatalogProduct } from "./trust-risk";
 import type {
   AdminSummary,
   CanonicalProduct,
@@ -34,7 +35,9 @@ import type {
   DashboardData,
   ExplorerData,
   ExplorerProductSummary,
+  OfferFeedbackReason,
   PublicOfferSummary,
+  PublicRiskFeedback,
   ProductGroup,
   RawOffer,
   Source,
@@ -91,6 +94,19 @@ type PublicOfferData = {
   generatedAt: string;
   offers: RawOffer[];
   products: CanonicalProduct[];
+};
+
+type PublicRiskFeedbackSummary = {
+  byOfferId: Map<string, PublicRiskFeedbackAggregate>;
+  bySourceId: Map<string, PublicRiskFeedbackAggregate>;
+};
+
+type PublicRiskFeedbackReason = NonNullable<PublicRiskFeedback["reasons"]>[number];
+
+type PublicRiskFeedbackAggregate = {
+  count: number;
+  latestAt: string | null;
+  reasons: Set<PublicRiskFeedbackReason>;
 };
 
 const DATA_UNAVAILABLE_MESSAGE = "真实报价数据暂时不可用，请稍后刷新。";
@@ -175,11 +191,12 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   dashboardDataPromise = readDashboardData()
     .then((value) => {
+      const publicValue = filterPublicDashboardData(value);
       dashboardDataCache = {
         expiresAt: Date.now() + DASHBOARD_DATA_CACHE_TTL_MS,
-        value,
+        value: publicValue,
       };
-      return value;
+      return publicValue;
     })
     .finally(() => {
       dashboardDataPromise = null;
@@ -281,26 +298,33 @@ async function loadPublicOfferData(): Promise<PublicOfferData> {
   const supabase = getSupabaseServerClient();
 
   if (!supabase) {
+    const products = publicCatalogProducts(canonicalCatalog);
     return {
       configured: false,
       degraded: false,
       generatedAt: new Date().toISOString(),
-      offers: seedRawOffers.filter((offer) => !offer.hidden),
-      products: canonicalCatalog,
+      offers: seedRawOffers.filter((offer) => !offer.hidden && isPublicOfferForProducts(offer, products)),
+      products,
     };
   }
 
   try {
-    const [offerRows, products] = await Promise.all([
+    const [offerRows, products, riskFeedback] = await Promise.all([
       listVisibleRawOfferRows(),
       listActiveCanonicalProducts(),
+      listPublicRiskFeedbackSummary(),
     ]);
 
+    const publicProducts = publicCatalogProducts(products.length ? products : canonicalCatalog);
+    const offers = attachPublicRiskFeedback(
+      offerRows.map(mapRawOffer).filter((offer) => isPublicOfferForProducts(offer, publicProducts)),
+      riskFeedback,
+    );
     return {
       configured: true,
       generatedAt: new Date().toISOString(),
-      offers: offerRows.map(mapRawOffer),
-      products: products.length ? products : canonicalCatalog,
+      offers,
+      products: publicProducts,
     };
   } catch (error) {
     console.error("Supabase public offer read failed:", error);
@@ -365,6 +389,8 @@ async function buildExplorerData(): Promise<ExplorerData> {
 }
 
 async function getExplorerDataFromDatabase(): Promise<ExplorerData | null> {
+  if (!apiCdkPublicVisible()) return null;
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
@@ -717,6 +743,19 @@ function toAdminDashboardData(dashboard: DashboardData, rawOfferTotal: number): 
     ...dashboard,
     products: dashboard.products.map(stripProductOffersForAdmin),
     rawOffers: dashboard.rawOffers.slice(0, Math.min(rawOfferTotal, ADMIN_OFFER_SAMPLE_LIMIT)),
+  };
+}
+
+function filterPublicDashboardData(dashboard: DashboardData): DashboardData {
+  const products = dashboard.products.filter((product) => isPublicCatalogProduct(product));
+  const productIds = new Set(products.map((product) => product.id));
+  return {
+    ...dashboard,
+    products,
+    rawOffers: dashboard.rawOffers.filter((offer) => {
+      const productId = offer.canonicalProductId || resolveOfferProduct(offer, products).id;
+      return productIds.has(productId);
+    }),
   };
 }
 
@@ -1406,10 +1445,13 @@ export async function getPublicProductSummary(id: string) {
   if (summary) return summary;
 
   const catalogProduct = canonicalCatalog.find((item) => item.id === id || item.slug === id);
+  if (catalogProduct && !isPublicCatalogProduct(catalogProduct)) return null;
   return catalogProduct ? toExplorerProductSummary(makeEmptyProductGroup(catalogProduct)) : null;
 }
 
 async function getPublicProductSummaryFromDatabase(id: string): Promise<ExplorerProductSummary | null> {
+  if (!apiCdkPublicVisible()) return null;
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
@@ -1483,7 +1525,7 @@ async function loadPublicProductOffers(
     products.find((item) => item.id === id || item.slug === id) ||
     canonicalCatalog.find((item) => item.id === id || item.slug === id);
 
-  if (!product) {
+  if (!product || !isPublicCatalogProduct(product)) {
     return {
       offers: [],
       total: 0,
@@ -1525,6 +1567,8 @@ async function getPublicProductOffersFromDatabase(
     excludeQuery: string;
   },
 ) {
+  if (!apiCdkPublicVisible()) return null;
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
@@ -1574,6 +1618,8 @@ async function getPublicProductOffersFromDatabase(
 }
 
 async function getPublicProductOfferFilterFacetsFromDatabase(id: string): Promise<OfferFilterTagFacet[] | null> {
+  if (!apiCdkPublicVisible()) return null;
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
@@ -1740,6 +1786,8 @@ export async function listPublicOffers(filters: OfferListFilters = {}) {
 }
 
 async function listPublicOffersFromDatabase(filters: OfferListFilters = {}) {
+  if (!apiCdkPublicVisible()) return null;
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
@@ -1780,6 +1828,100 @@ async function listPublicOffersFromDatabase(filters: OfferListFilters = {}) {
   };
 }
 
+function isPublicOfferForProducts(offer: RawOffer, products: CanonicalProduct[]): boolean {
+  const product = resolveOfferProduct(offer, products);
+  return isPublicCatalogProduct(product);
+}
+
+async function listPublicRiskFeedbackSummary(): Promise<PublicRiskFeedbackSummary> {
+  const empty = {
+    byOfferId: new Map<string, PublicRiskFeedbackAggregate>(),
+    bySourceId: new Map<string, PublicRiskFeedbackAggregate>(),
+  };
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return empty;
+
+  const { data, error } = await supabase
+    .from("offer_feedback")
+    .select("offer_id,source_id,reason,user_expected_action,created_at")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1000)
+    .abortSignal(publicSupabaseReadSignal());
+
+  if (error) {
+    console.warn("Public risk feedback read failed:", error.message);
+    return empty;
+  }
+
+  const summary = empty;
+  for (const row of (data || []) as Array<Record<string, unknown>>) {
+    const offerId = typeof row.offer_id === "string" ? row.offer_id : null;
+    const sourceId = typeof row.source_id === "string" ? row.source_id : null;
+    const reason = typeof row.reason === "string" ? row.reason : "";
+    const expectedAction = typeof row.user_expected_action === "string" ? row.user_expected_action : "";
+    const createdAt = typeof row.created_at === "string" ? row.created_at : null;
+    if (!isPublicRiskFeedbackReason(reason)) continue;
+
+    const explicitSourceLevel = reason === "bad_source" || expectedAction === "hide_source";
+    const sourceLevel = explicitSourceLevel || (!offerId && Boolean(sourceId));
+    if (offerId && (!explicitSourceLevel || !sourceId)) addPublicRiskFeedbackAggregate(summary.byOfferId, offerId, reason, createdAt);
+    if (sourceId && sourceLevel) addPublicRiskFeedbackAggregate(summary.bySourceId, sourceId, reason, createdAt);
+  }
+
+  return summary;
+}
+
+function attachPublicRiskFeedback(offers: RawOffer[], summary: PublicRiskFeedbackSummary): RawOffer[] {
+  if (!summary.byOfferId.size && !summary.bySourceId.size) return offers;
+
+  return offers.map((offer) => {
+    const offerFeedback = summary.byOfferId.get(offer.id) || null;
+    const sourceFeedback = offer.sourceId ? summary.bySourceId.get(offer.sourceId) || null : null;
+    if (!offerFeedback && !sourceFeedback) return offer;
+
+    return {
+      ...offer,
+      riskFeedback: {
+        count: (offerFeedback?.count || 0) + (sourceFeedback?.count || 0),
+        offerCount: offerFeedback?.count || 0,
+        sourceCount: sourceFeedback?.count || 0,
+        scope: offerFeedback && sourceFeedback ? "mixed" : offerFeedback ? "offer" : "source",
+        latestAt: latestIso([offerFeedback?.latestAt, sourceFeedback?.latestAt]),
+        reasons: Array.from(new Set([
+          ...(offerFeedback ? Array.from(offerFeedback.reasons) : []),
+          ...(sourceFeedback ? Array.from(sourceFeedback.reasons) : []),
+        ])),
+      },
+    };
+  });
+}
+
+function isPublicRiskFeedbackReason(value: string): value is PublicRiskFeedbackReason {
+  return HIGH_RISK_FEEDBACK_REASONS.has(value as OfferFeedbackReason);
+}
+
+function addPublicRiskFeedbackAggregate(
+  map: Map<string, PublicRiskFeedbackAggregate>,
+  key: string,
+  reason: PublicRiskFeedbackReason,
+  createdAt: string | null,
+) {
+  const current = map.get(key);
+  if (!current) {
+    map.set(key, {
+      count: 1,
+      latestAt: createdAt,
+      reasons: new Set([reason]),
+    });
+    return;
+  }
+
+  current.count += 1;
+  current.latestAt = latestIso([current.latestAt, createdAt]);
+  current.reasons.add(reason);
+}
+
 function compactPublicOfferRow(row: { offer: RawOffer; product: ExplorerProductSummary }) {
   return {
     offer: compactPublicOffer(row.offer),
@@ -1808,6 +1950,7 @@ function compactPublicOffer(offer: RawOffer): RawOffer {
     expiresAt: offer.expiresAt,
     effectiveStatus: offer.effectiveStatus,
     freshnessStatus: offer.freshnessStatus,
+    riskFeedback: offer.riskFeedback,
   };
 }
 

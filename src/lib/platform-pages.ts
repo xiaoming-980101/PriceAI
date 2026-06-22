@@ -57,12 +57,11 @@ export const platformPageConfigs = {
       "chatgpt-team-business",
       "chatgpt-pro-5x",
       "chatgpt-pro-20x",
-      "openai-api-cdk",
     ],
     badge: "ChatGPT 平台价格页",
     title: "ChatGPT 比价与订阅渠道价格",
     intro:
-      "这里聚合 ChatGPT 普号、Plus、Pro、Team / Business、Plus CDK、账号购买和相关 API/CDK 报价。你可以先看当前有货最低价和更新时间，再进入工具页查看全部原始渠道。",
+      "这里聚合 ChatGPT 普号、Plus、Pro、Team / Business、Plus CDK、账号购买等订阅相关报价。你可以先看当前有货最低价和更新时间，再进入工具页查看全部原始渠道。",
     primaryHref: "/?platform=ChatGPT&stock=available",
     primaryLabel: "查看 ChatGPT 有货报价",
     secondaryHref: "/?platform=ChatGPT&scope=offers&stock=available",
@@ -72,7 +71,7 @@ export const platformPageConfigs = {
     optionsEyebrow: "Options",
     optionsTitle: "先弄清自己要买哪一种。",
     optionsIntro:
-      "同样写着 ChatGPT，可能是普通账号、Plus 月卡、Pro 高倍率套餐、Team / Business 团队权益，或者 API/CDK 额度。先确认需求，再比价格。",
+      "同样写着 ChatGPT，可能是普通账号、Plus 月卡、Pro 高倍率套餐、Team / Business 团队权益、卡密或成品号。先确认需求，再比价格。",
     optionCards: [
       {
         title: "普号",
@@ -130,7 +129,7 @@ export const platformPageConfigs = {
       ],
       [
         "为什么有些 ChatGPT 商品价格差很多？",
-        "常见原因包括官方订阅、地区价、代订、成品号、团队权益、短期号、API/CDK 额度等路径不同。PriceAI 只做信息整理，不判断某个渠道一定安全。",
+        "常见原因包括官方订阅、地区价、代订、成品号、团队权益、短期号、卡密等路径不同。PriceAI 只做信息整理，不判断某个渠道一定安全。",
       ],
       [
         "外层最低价为什么只看有货报价？",
@@ -151,13 +150,13 @@ export const platformPageConfigs = {
     metadata: {
       title: "ChatGPT 比价与订阅渠道价格",
       description:
-        "查看 ChatGPT Plus、Pro、Team 邀请、普号、Plus CDK、账号购买和 API/CDK 的有货最低价、渠道数量、更新时间和获取方式说明。",
+        "查看 ChatGPT Plus、Pro、Team 邀请、普号、Plus CDK 和账号购买的有货最低价、渠道数量、更新时间和获取方式说明。",
       alternates: {
         canonical: "/platforms/chatgpt",
       },
       openGraph: {
         title: "ChatGPT 比价与订阅渠道价格 | PriceAI",
-        description: "购买 ChatGPT 订阅前，先比较 Plus、Pro、Team 邀请、普号、Plus CDK 和 API/CDK 的价格、来源和更新时间。",
+        description: "购买 ChatGPT 订阅前，先比较 Plus、Pro、Team 邀请、普号、Plus CDK 和账号购买的价格、来源和更新时间。",
         url: "https://priceai.cc/platforms/chatgpt",
       },
     },
@@ -383,8 +382,8 @@ export const platformPageConfigs = {
       "这里把订阅渠道里的 API / CDK / 额度商品和 PriceAI 模型 API 雷达串起来。适合想把模型接入 Codex、Cursor、OpenCode、自建应用或自动化脚本的用户。",
     primaryHref: "/api-models",
     primaryLabel: "查看模型 API 雷达",
-    secondaryHref: "/?platform=API%2FCDK&scope=offers&stock=available",
-    secondaryLabel: "查看 API/CDK 报价",
+    secondaryHref: "/api-transit",
+    secondaryLabel: "查看中转 API",
     tableTitle: "当前收录的 API / CDK 标准商品",
     tableDescription: "这里的有货最低价来自渠道报价；更完整的官方 API、免费 API 和 Token Plan 信息请进入模型 API 雷达。",
     optionsEyebrow: "Token access",

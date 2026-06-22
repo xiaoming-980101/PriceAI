@@ -237,8 +237,8 @@ const statusOptions: Array<[OfferStatus, string]> = [
 
 const OFFER_EMERGENCY_PAGE_SIZE = 50;
 
-type FeedbackWorkFilter = "all" | "precheck" | "transient" | "category" | "high_risk" | "site";
-type OfferFeedbackBucket = "transient" | "category" | "high_risk" | "other";
+type FeedbackWorkFilter = "all" | "precheck" | "transient" | "category" | "aftersales" | "high_risk" | "site";
+type OfferFeedbackBucket = "transient" | "category" | "high_risk" | "aftersales" | "other";
 type OfferFeedbackVerdictTone = "success" | "info" | "warn" | "danger";
 type OfferFeedbackVerdict = {
   label: string;
@@ -1455,6 +1455,49 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
       showRowFeedback(feedback.id, "success", status === "ignored" ? "反馈已忽略。" : "反馈已标记处理。");
     } else {
       showRowFeedback(feedback.id, "error", result.message || "处理反馈失败。");
+    }
+  }
+
+  async function updateFeedbackVerification(
+    feedback: OfferFeedback,
+    verificationStatus: OfferFeedback["verificationStatus"],
+    verificationResult: OfferFeedback["verificationResult"],
+    verificationMessage: string,
+  ) {
+    setLoadingAction(`feedback-verification-${feedback.id}`);
+    const result = await requestWithMethod("/api/admin/feedback", "PATCH", password, {
+      action: "verification",
+      id: feedback.id,
+      verificationStatus,
+      verificationResult,
+      verificationMessage,
+      reviewerNote: verificationMessage,
+    });
+    setLoadingAction(null);
+
+    if (result.ok && result.feedback) {
+      const nextFeedback = result.feedback as OfferFeedback;
+      setOfferFeedback((prev) => prev.map((item) => (item.id === feedback.id ? nextFeedback : item)));
+      showRowFeedback(feedback.id, "success", "核验状态已更新。");
+    } else {
+      showRowFeedback(feedback.id, "error", result.message || "更新核验状态失败。");
+    }
+  }
+
+  async function createFeedbackRecollection(feedback: OfferFeedback) {
+    setLoadingAction(`feedback-recollect-${feedback.id}`);
+    const result = await requestWithMethod("/api/admin/feedback", "PATCH", password, {
+      action: "recollect",
+      id: feedback.id,
+    });
+    setLoadingAction(null);
+
+    if (result.ok && result.feedback) {
+      const nextFeedback = result.feedback as OfferFeedback;
+      setOfferFeedback((prev) => prev.map((item) => (item.id === feedback.id ? nextFeedback : item)));
+      showRowFeedback(feedback.id, "success", result.jobId ? `已创建重采任务：${result.jobId}` : "已创建重采任务。");
+    } else {
+      showRowFeedback(feedback.id, "error", result.message || "创建重采任务失败。");
     }
   }
 
@@ -2753,6 +2796,8 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
                       onToggleSelect={toggleFeedbackSelect}
                       onHideOffer={hideOfferFromFeedback}
                       onHideSource={hideSourceFromFeedback}
+                      onRecollect={createFeedbackRecollection}
+                      onUpdateVerification={updateFeedbackVerification}
                       onResolve={(item) => updateFeedbackStatus(item, "resolved", "已人工确认处理")}
                       onIgnore={(item) => updateFeedbackStatus(item, "ignored", "已忽略")}
                     />
@@ -3803,6 +3848,8 @@ function OfferFeedbackList({
   onToggleSelect,
   onHideOffer,
   onHideSource,
+  onRecollect,
+  onUpdateVerification,
   onResolve,
   onIgnore,
 }: {
@@ -3816,6 +3863,13 @@ function OfferFeedbackList({
   onToggleSelect: (id: string) => void;
   onHideOffer: (feedback: OfferFeedback) => void;
   onHideSource: (feedback: OfferFeedback) => void;
+  onRecollect: (feedback: OfferFeedback) => void;
+  onUpdateVerification: (
+    feedback: OfferFeedback,
+    verificationStatus: OfferFeedback["verificationStatus"],
+    verificationResult: OfferFeedback["verificationResult"],
+    verificationMessage: string,
+  ) => void;
   onResolve: (feedback: OfferFeedback) => void;
   onIgnore: (feedback: OfferFeedback) => void;
 }) {
@@ -3836,6 +3890,8 @@ function OfferFeedbackList({
       {feedback.map((item) => {
         const hideOfferLoading = loadingAction === `feedback-hide-offer-${item.id}`;
         const hideSourceLoading = loadingAction === `feedback-hide-source-${item.id}`;
+        const recollectLoading = loadingAction === `feedback-recollect-${item.id}`;
+        const verificationLoading = loadingAction === `feedback-verification-${item.id}`;
         const resolveLoading = loadingAction === `feedback-resolved-${item.id}`;
         const ignoreLoading = loadingAction === `feedback-ignored-${item.id}`;
         const rowState = rowFeedback?.id === item.id ? rowFeedback : null;
@@ -3915,6 +3971,11 @@ function OfferFeedbackList({
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${offerFeedbackVerdictClass(verdict.tone)}`}>
                     核验：{verdict.label}
                   </span>
+                  {item.verificationStatus !== "not_needed" ? (
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${feedbackVerificationClass(item.verificationStatus)}`}>
+                      自动核验：{feedbackVerificationStatusLabel(item.verificationStatus)}
+                    </span>
+                  ) : null}
                   <span className="text-xs text-[#adb3b4]">{formatRelativeTime(item.createdAt)}</span>
                 </div>
                 <p className="mt-2 rounded-lg bg-[#f2f4f4] px-3 py-2 text-xs leading-5 text-[#5a6061]">
@@ -3936,8 +3997,26 @@ function OfferFeedbackList({
                     <FeedbackFact label="价格" value={currentPrice} strong />
                     <FeedbackFact label="状态" value={currentStatus} tone={currentStatus === "缺货" ? "danger" : currentStatus === "有货" ? "success" : "muted"} />
                     <FeedbackFact label="更新" value={updatedAt ? formatRelativeTime(updatedAt) : "未记录"} />
+                    {item.verificationStatus !== "not_needed" ? (
+                      <FeedbackFact
+                        label="核验"
+                        value={feedbackVerificationStatusLabel(item.verificationStatus)}
+                        tone={item.verificationStatus === "failed" ? "danger" : item.verificationStatus === "recollection_created" || item.verificationStatus === "auto_fixed" ? "success" : "muted"}
+                      />
+                    ) : null}
+                    {item.verificationResult ? (
+                      <FeedbackFact label="结果" value={feedbackVerificationResultLabel(item.verificationResult)} />
+                    ) : null}
+                    {item.createdCollectionJobId ? (
+                      <FeedbackFact label="重采任务" value={item.createdCollectionJobId} />
+                    ) : null}
                   </div>
                 </div>
+                {item.verificationMessage ? (
+                  <p className="mt-2 rounded-lg bg-[#f7f9f9] px-3 py-2 text-xs leading-5 text-[#5a6061]">
+                    {item.verificationMessage}
+                  </p>
+                ) : null}
 
                 <div className="mt-3 rounded-lg border border-[#adb3b4]/15 px-3 py-2.5">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#5a6061]">
@@ -4027,6 +4106,28 @@ function OfferFeedbackList({
                     {hideSourceLoading ? <Loader2 size={14} className="animate-spin" /> : null}
                     下架渠道
                   </button>
+                  {item.verificationStatus !== "not_needed" ? (
+                    <button
+                      type="button"
+                      disabled={!item.sourceId || Boolean(item.createdCollectionJobId) || recollectLoading}
+                      onClick={() => onRecollect(item)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#47657a]/20 bg-white px-3 text-xs font-medium text-[#47657a] transition-colors hover:bg-[#eef3f8] disabled:opacity-60"
+                    >
+                      {recollectLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+                      创建重采
+                    </button>
+                  ) : null}
+                  {item.verificationStatus !== "not_needed" ? (
+                    <button
+                      type="button"
+                      disabled={verificationLoading}
+                      onClick={() => onUpdateVerification(item, "manual_review", "inconclusive", "已转人工确认，暂不自动变更前台报价。")}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#7a541b]/20 bg-white px-3 text-xs font-medium text-[#7a541b] transition-colors hover:bg-[#fff7e8] disabled:opacity-60"
+                    >
+                      {verificationLoading ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />}
+                      转人工
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={resolveLoading}
@@ -6963,11 +7064,13 @@ const feedbackWorkFilters: Array<{ value: FeedbackWorkFilter; label: string }> =
   { value: "precheck", label: "待预处理" },
   { value: "transient", label: "临时数据" },
   { value: "category", label: "分类问题" },
+  { value: "aftersales", label: "售后/发货" },
   { value: "high_risk", label: "高风险" },
   { value: "site", label: "站点意见" },
 ];
 
 function getOfferFeedbackBucket(feedback: OfferFeedback): OfferFeedbackBucket {
+  if (feedback.reason === "aftersales_shipping") return "aftersales";
   if (feedback.reason === "wrong_category") return "category";
   if (feedback.reason === "fraud" || feedback.reason === "bad_source") return "high_risk";
   if (feedback.reason === "wrong_price" || feedback.reason === "stock_mismatch" || feedback.reason === "item_removed") {
@@ -6989,6 +7092,7 @@ function filterOfferFeedbackByWorkFilter(
     const bucket = getOfferFeedbackBucket(item);
     if (filter === "transient") return bucket === "transient";
     if (filter === "category") return bucket === "category";
+    if (filter === "aftersales") return bucket === "aftersales";
     if (filter === "high_risk") return bucket === "high_risk";
     return true;
   });
@@ -7004,6 +7108,7 @@ function getFeedbackWorkFilterCounts(
     precheck: offerFeedback.filter((item) => getOfferFeedbackVerdict(item, item.offerId ? offerById.get(item.offerId) : null).batchSafe).length,
     transient: offerFeedback.filter((item) => getOfferFeedbackBucket(item) === "transient").length,
     category: offerFeedback.filter((item) => getOfferFeedbackBucket(item) === "category").length,
+    aftersales: offerFeedback.filter((item) => getOfferFeedbackBucket(item) === "aftersales").length,
     high_risk: offerFeedback.filter((item) => getOfferFeedbackBucket(item) === "high_risk").length,
     site: siteFeedback.length,
   };
@@ -7016,6 +7121,15 @@ function getOfferFeedbackVerdict(feedback: OfferFeedback, currentOffer: RawOffer
       label: "分类待修",
       description: "这类反馈优先进入分类规则或模型辅助归类流程；如果用户明确希望下架，也可以手动或批量下架报价/渠道。",
       tone: "info",
+      batchSafe: false,
+    };
+  }
+
+  if (bucket === "aftersales") {
+    return {
+      label: "售后待核验",
+      description: "涉及发货、质保、退款或订单售后争议，需要结合用户证据和原店铺售后规则人工判断，不自动批量下架。",
+      tone: "danger",
       batchSafe: false,
     };
   }
@@ -7124,6 +7238,7 @@ function feedbackReasonLabel(value: OfferFeedback["reason"]): string {
     wrong_price: "价格不准",
     item_removed: "商品已下架",
     stock_mismatch: "库存不准",
+    aftersales_shipping: "售后/发货",
     fraud: "疑似虚假",
     wrong_category: "分类错误",
     bad_source: "渠道问题",
@@ -7133,9 +7248,42 @@ function feedbackReasonLabel(value: OfferFeedback["reason"]): string {
 }
 
 function feedbackReasonClass(value: OfferFeedback["reason"]): string {
-  if (value === "fraud" || value === "bad_source") return "bg-[#fbe9e7] text-[#9b3328]";
+  if (value === "fraud" || value === "bad_source" || value === "aftersales_shipping") return "bg-[#fbe9e7] text-[#9b3328]";
   if (value === "wrong_price" || value === "stock_mismatch" || value === "item_removed") return "bg-[#fff7e8] text-[#7a541b]";
   if (value === "wrong_category") return "bg-[#eef3f8] text-[#47657a]";
+  return "bg-[#f2f4f4] text-[#5a6061]";
+}
+
+function feedbackVerificationStatusLabel(value: OfferFeedback["verificationStatus"]): string {
+  const labels: Record<OfferFeedback["verificationStatus"], string> = {
+    not_needed: "无需核验",
+    pending: "待核验",
+    running: "核验中",
+    auto_fixed: "已自动修正",
+    recollection_created: "已创建重采",
+    manual_review: "转人工",
+    failed: "核验失败",
+  };
+  return labels[value] || "无需核验";
+}
+
+function feedbackVerificationResultLabel(value: NonNullable<OfferFeedback["verificationResult"]>): string {
+  const labels: Record<NonNullable<OfferFeedback["verificationResult"]>, string> = {
+    offer_changed: "报价已变化",
+    item_removed: "商品已下架",
+    out_of_stock: "已缺货",
+    still_available: "仍可购买",
+    recollection_created: "已创建重采",
+    inconclusive: "无法确认",
+    blocked: "受阻",
+  };
+  return labels[value] || "无法确认";
+}
+
+function feedbackVerificationClass(value: OfferFeedback["verificationStatus"]): string {
+  if (value === "failed") return "bg-[#fbe9e7] text-[#9b3328]";
+  if (value === "recollection_created" || value === "auto_fixed") return "bg-[#e8f3ec] text-[#2f7a4b]";
+  if (value === "manual_review" || value === "pending" || value === "running") return "bg-[#fff7e8] text-[#7a541b]";
   return "bg-[#f2f4f4] text-[#5a6061]";
 }
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, ExternalLink, FileText, MessageCircle, ShieldAlert } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
-import { FeedbackLink, GitHubLink, TelegramLink } from "@/components/FeedbackLink";
+import { FeedbackLink, GitHubLink, QQGroupLink, TelegramLink } from "@/components/FeedbackLink";
 import { JsonLd } from "@/components/JsonLd";
 
 export const metadata: Metadata = {
@@ -98,6 +98,7 @@ export default function ApiTransitSubmitPage() {
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <FeedbackLink />
+            <QQGroupLink />
             <TelegramLink />
             <GitHubLink />
           </div>

@@ -17,9 +17,9 @@ export async function PATCH(request: Request) {
   try {
     requireAdminPassword(getAdminPasswordFromRequest(request));
     const payload = patchSchema.parse(await request.json());
-    const submission = await updateApiTransitSubmission(payload);
+    const result = await updateApiTransitSubmission(payload);
     clearApiTransitAdminCaches();
-    return Response.json({ ok: true, submission });
+    return Response.json({ ok: true, ...result });
   } catch (error) {
     logApiError("admin api transit submission update", error);
     return Response.json(

@@ -1,14 +1,14 @@
 "use client";
 
-import { CheckCircle2, ExternalLink, Loader2, Plus, X } from "lucide-react";
+import { CheckCircle2, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { CommunityPrompt } from "@/components/FeedbackLink";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { emitSubmissionFloaterState } from "@/lib/site-notice-events";
 
 type Status = "idle" | "submitting" | "success" | "error";
 
 const MAX_BATCH_SIZE = 10;
-const TELEGRAM_COMMUNITY_URL = "https://t.me/priceaicc";
 const fieldControlClassName =
   "w-full rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-raised)] px-3 text-sm text-[var(--color-text-body)] outline-none transition placeholder:text-[var(--color-text-placeholder)] focus:border-[var(--color-brand)] focus:ring-2 focus:ring-[#45bf78]/15";
 
@@ -158,15 +158,9 @@ export function SubmissionFloater() {
                   <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
                   <span>{message}</span>
                 </div>
-                <a
-                  href={TELEGRAM_COMMUNITY_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between gap-3 rounded-xl border border-[#2AABEE]/20 bg-[#eef8fe] px-4 py-3 text-sm text-[#23658a] transition hover:border-[#2AABEE]/35 hover:bg-[#e3f4fd]"
-                >
-                  <span>也欢迎加入 PriceAI 交流群，一起补充低价渠道、反馈价格变化。</span>
-                  <ExternalLink size={14} className="shrink-0" />
-                </a>
+                <CommunityPrompt>
+                  也欢迎加入 PriceAI 交流群，一起补充低价渠道、反馈价格变化。
+                </CommunityPrompt>
               </div>
             ) : null}
 

@@ -3,12 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ExternalLink, Info, Menu, MessageCircle, X } from "lucide-react";
+import { ExternalLink, Info, Menu, MessageCircle, UsersRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AppLogo } from "@/components/AppLogo";
-import { FeedbackDialog, FeedbackLink, GitHubLink, TelegramLink } from "@/components/FeedbackLink";
+import { FeedbackDialog, FeedbackLink, GitHubLink, QQGroupLink, TelegramLink } from "@/components/FeedbackLink";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { qqGroupNumber, qqGroupUrl, telegramUrl } from "@/lib/community";
 
 const navItems = [
   { key: "channels", href: "/channels", label: "卡网订阅", mobileLabel: "卡网", match: (pathname: string) => pathname.startsWith("/channels") || pathname.startsWith("/products") },
@@ -20,7 +21,6 @@ const navItems = [
 type SiteHeaderSection = (typeof navItems)[number]["key"] | "home" | "guides";
 const homeHref = "/?home=1";
 const githubUrl = "https://github.com/physics-dimension/PriceAI";
-const telegramUrl = "https://t.me/priceaicc";
 
 export function SiteHeader({
   maxWidthClassName = "max-w-[1500px]",
@@ -88,6 +88,7 @@ export function SiteHeader({
         <div className={`relative z-10 hidden min-w-0 items-center justify-end justify-self-end min-[720px]:flex ${actionGroupGapClassName}`}>
           <ThemeToggle compact labelFrom={compactActionLabelFrom} />
           <FeedbackLink compact labelFrom={compactActionLabelFrom} />
+          <QQGroupLink compact labelFrom={compactActionLabelFrom} />
           <TelegramLink compact labelFrom={compactActionLabelFrom} />
           <GitHubLink compact labelFrom={compactActionLabelFrom} />
         </div>
@@ -208,6 +209,20 @@ function MobileModuleDrawer({
                 意见反馈
               </span>
             </button>
+            <a
+              href={qqGroupUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex h-11 items-center justify-between rounded-lg px-3 text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
+              onClick={onClose}
+              title={`QQ 群：${qqGroupNumber}`}
+            >
+              <span className="inline-flex items-center gap-3">
+                <UsersRound size={17} />
+                QQ 交流群
+              </span>
+              <ExternalLink size={14} className="text-[var(--color-text-soft)]" />
+            </a>
             <a
               href={telegramUrl}
               target="_blank"

@@ -1,7 +1,8 @@
 "use client";
 
-import { ExternalLink, Flag, ImageUp, Loader2, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, Flag, ImageUp, Loader2, Search, ShieldAlert, Trash2, X } from "lucide-react";
 import { type ChangeEvent, type ClipboardEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { CommunityPrompt } from "@/components/FeedbackLink";
 import { isAvailable, isSharedAccessOffer } from "@/lib/catalog";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { readSessionCache, writeSessionCache } from "@/lib/client-cache";
@@ -13,6 +14,15 @@ import {
   type OfferFilterTagFacet,
   type OfferFilterTagId,
 } from "@/lib/offer-filter-tags";
+import {
+  AFTERSALES_FEEDBACK_REASON,
+  OFFER_EXIT_NOTICE_MUTED_DATE_KEY,
+  OFFER_HIGH_RISK_PRICE_THRESHOLD,
+  feedbackRequiresEvidence,
+  getOfferRiskHints,
+  isHighRiskOutboundOffer,
+  isShopApiOffer,
+} from "@/lib/trust-risk";
 import type { RawOffer } from "@/lib/types";
 import { formatCurrency, formatDateMinute, formatRelativeTime } from "@/lib/utils";
 
@@ -30,7 +40,6 @@ type ProductOffersResponse = {
 const OFFER_PAGE_SIZE = 80;
 const PRODUCT_OFFERS_CACHE_TTL_MS = 2 * 60 * 1000;
 const PRODUCT_OFFERS_MEMORY_CACHE_LIMIT = 40;
-const TELEGRAM_COMMUNITY_URL = "https://t.me/priceaicc";
 const FEEDBACK_EVIDENCE_MAX_IMAGES = 5;
 const productOffersMemoryCache = new Map<string, ProductOffersResponse>();
 
@@ -83,6 +92,7 @@ export function ProductOffersPanel({
   const [paging, setPaging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedbackOffer, setFeedbackOffer] = useState<RawOffer | null>(null);
+  const [outboundOffer, setOutboundOffer] = useState<RawOffer | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
@@ -332,11 +342,16 @@ export function ProductOffersPanel({
         isDesktop === false ? (
           <section className="mt-5 grid gap-3 md:hidden">
             {offers.map((offer, index) => (
-              <OfferListItem key={offerRowKey(offer, index)} offer={offer} onFeedback={setFeedbackOffer} />
+              <OfferListItem
+                key={offerRowKey(offer, index)}
+                offer={offer}
+                onFeedback={setFeedbackOffer}
+                onRequestPurchase={setOutboundOffer}
+              />
             ))}
           </section>
         ) : (
-          <OfferTable offers={offers} onFeedback={setFeedbackOffer} />
+          <OfferTable offers={offers} onFeedback={setFeedbackOffer} onRequestPurchase={setOutboundOffer} />
         )
       ) : (
         <EmptyOfferFilterState onClear={clearOfferFilters} />
@@ -361,6 +376,9 @@ export function ProductOffersPanel({
           offer={feedbackOffer}
           onClose={() => setFeedbackOffer(null)}
         />
+      ) : null}
+      {outboundOffer ? (
+        <OfferExitNoticeDialog offer={outboundOffer} onClose={() => setOutboundOffer(null)} />
       ) : null}
     </>
   );
@@ -413,7 +431,7 @@ function productOffersCacheKey(
   query = "",
   excludeQuery = "",
 ): string {
-  return `priceai:product-offers:v7:${productId}:${offset}:${OFFER_PAGE_SIZE}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}`;
+  return `priceai:product-offers:v8:${productId}:${offset}:${OFFER_PAGE_SIZE}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}`;
 }
 
 function rememberProductOffers(cacheKey: string, value: ProductOffersResponse) {
@@ -615,7 +633,7 @@ function OfferTableSkeleton({ count }: { count: number }) {
 
       <section className="mt-6 hidden overflow-hidden rounded-lg bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15 md:block">
         {rows.map((_, index) => (
-          <div key={index} className="grid grid-cols-[110px_220px_1fr_120px_130px_110px] gap-5 border-b border-[#edf0f1] px-5 py-5 last:border-b-0">
+          <div key={index} className="grid grid-cols-[90px_205px_1fr_115px_120px_110px_130px_64px] gap-4 border-b border-[#edf0f1] px-5 py-5 last:border-b-0">
             <Skeleton className="h-8 w-16 rounded-full" />
             <div>
               <Skeleton className="h-5 w-32 rounded-full" />
@@ -624,7 +642,9 @@ function OfferTableSkeleton({ count }: { count: number }) {
             <Skeleton className="h-5 w-full rounded-full" />
             <Skeleton className="h-7 w-20 rounded-full" />
             <Skeleton className="h-5 w-24 rounded-full" />
+            <Skeleton className="h-8 w-20 rounded-full" />
             <Skeleton className="h-9 w-24 rounded-full" />
+            <Skeleton className="h-9 w-9 rounded-full" />
           </div>
         ))}
       </section>
@@ -652,17 +672,26 @@ function EmptyOfferFilterState({ onClear }: { onClear: () => void }) {
   );
 }
 
-function OfferTable({ offers, onFeedback }: { offers: RawOffer[]; onFeedback: (offer: RawOffer) => void }) {
+function OfferTable({
+  offers,
+  onFeedback,
+  onRequestPurchase,
+}: {
+  offers: RawOffer[];
+  onFeedback: (offer: RawOffer) => void;
+  onRequestPurchase: (offer: RawOffer) => void;
+}) {
   return (
     <section className="mt-6 hidden overflow-hidden rounded-lg bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15 md:block">
       <div className="overflow-x-auto">
-        <table className="min-w-[1040px] w-full table-fixed border-collapse text-left text-sm">
+        <table className="min-w-[1160px] w-full table-fixed border-collapse text-left text-sm">
           <colgroup>
             <col className="w-[90px]" />
             <col className="w-[205px]" />
             <col />
             <col className="w-[115px]" />
             <col className="w-[120px]" />
+            <col className="w-[118px]" />
             <col className="w-[130px]" />
             <col className="w-[64px]" />
           </colgroup>
@@ -673,6 +702,7 @@ function OfferTable({ offers, onFeedback }: { offers: RawOffer[]; onFeedback: (o
               <TableHead>原始商品名</TableHead>
               <TableHead>价格</TableHead>
               <TableHead>更新时间</TableHead>
+              <TableHead className="text-center">风险</TableHead>
               <TableHead className="text-center">操作</TableHead>
               <TableHead className="text-center">反馈</TableHead>
             </tr>
@@ -683,7 +713,10 @@ function OfferTable({ offers, onFeedback }: { offers: RawOffer[]; onFeedback: (o
               const sharedAccess = isSharedAccessOffer(offer);
 
               return (
-                <tr key={offerRowKey(offer, index)} className={`group/row transition hover:bg-[#f7f9f9] ${available ? "" : "bg-[#fbf7f6]"}`}>
+                <tr
+                  key={offerRowKey(offer, index)}
+                  className={`group/row transition hover:bg-[#f7f9f9] ${available ? "" : "bg-[#fbf7f6]"}`}
+                >
                   <td className="px-5 py-4">
                     <OfferStatusBadge available={available} />
                   </td>
@@ -707,7 +740,10 @@ function OfferTable({ offers, onFeedback }: { offers: RawOffer[]; onFeedback: (o
                     <OfferRelativeTime value={offerTimestamp(offer)} />
                   </td>
                   <td className="px-3 py-3 text-center">
-                    <OfferLink offer={offer} available={available} compact />
+                    <OfferRiskCell offer={offer} />
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    <OfferLink offer={offer} available={available} compact onRequestPurchase={onRequestPurchase} />
                   </td>
                   <td className="px-3 py-3 text-center">
                     <OfferFeedbackButton offer={offer} onFeedback={onFeedback} compact />
@@ -722,12 +758,24 @@ function OfferTable({ offers, onFeedback }: { offers: RawOffer[]; onFeedback: (o
   );
 }
 
-function OfferListItem({ offer, onFeedback }: { offer: RawOffer; onFeedback: (offer: RawOffer) => void }) {
+function OfferListItem({
+  offer,
+  onFeedback,
+  onRequestPurchase,
+}: {
+  offer: RawOffer;
+  onFeedback: (offer: RawOffer) => void;
+  onRequestPurchase: (offer: RawOffer) => void;
+}) {
   const available = isOfferAvailable(offer);
   const sharedAccess = isSharedAccessOffer(offer);
 
   return (
-    <article className={`min-w-0 rounded-lg p-4 shadow-[0_16px_45px_rgba(45,52,53,0.04)] ring-1 ${available ? "bg-white ring-[#adb3b4]/15" : "bg-[#fbf7f6] ring-[#ead8d5]"}`}>
+    <article
+      className={`min-w-0 rounded-lg p-4 shadow-[0_16px_45px_rgba(45,52,53,0.04)] ring-1 ${
+        available ? "bg-white ring-[#adb3b4]/15" : "bg-[#fbf7f6] ring-[#ead8d5]"
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-semibold text-[#202829]">{sourceLabel(offer)}</p>
@@ -744,7 +792,10 @@ function OfferListItem({ offer, onFeedback }: { offer: RawOffer; onFeedback: (of
             <OfferRelativeTime value={offerTimestamp(offer)} />
           </p>
         </div>
-        <OfferActions offer={offer} available={available} onFeedback={onFeedback} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <OfferRiskButton offer={offer} compact />
+          <OfferActions offer={offer} available={available} onFeedback={onFeedback} onRequestPurchase={onRequestPurchase} />
+        </div>
       </div>
     </article>
   );
@@ -781,6 +832,287 @@ function OfferSharedAccessBadge() {
     <span className="mb-1 mr-1.5 inline-flex shrink-0 items-center rounded-full bg-[#fff7df] px-2 py-0.5 text-[0.68rem] font-semibold leading-5 text-[#8a5a10] ring-1 ring-[#efd38a]">
       拼车/团购
     </span>
+  );
+}
+
+function OfferRiskCell({ offer }: { offer: RawOffer }) {
+  if (!offer.riskFeedback?.count) {
+    return <span aria-hidden="true" className="block h-8" />;
+  }
+
+  return <OfferRiskButton offer={offer} />;
+}
+
+function OfferRiskButton({ offer, compact = false }: { offer: RawOffer; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const risk = offer.riskFeedback;
+  if (!risk?.count) return null;
+
+  const sourceOnly = risk.scope === "source";
+  const label = compact ? "风险" : sourceOnly ? "商家风险" : risk.scope === "mixed" ? "多项风险" : "商品风险";
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="查看风险详情"
+        aria-label={`查看${label}详情`}
+        className={`inline-flex shrink-0 items-center justify-center gap-1 rounded-full px-2.5 text-xs font-semibold ring-1 transition ${
+          compact ? "h-9" : "h-8"
+        } ${
+          sourceOnly
+            ? "bg-[#fff7df] text-[#8a5a10] ring-[#efd38a] hover:bg-[#fff1c7]"
+            : "bg-[#fff0ed] text-[#9b3328] ring-[#efc4bc] hover:bg-[#fde5e0]"
+        }`}
+      >
+        <AlertTriangle size={compact ? 14 : 13} />
+        <span>{label}</span>
+      </button>
+      {open ? <OfferRiskDetailDialog offer={offer} onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
+function OfferRiskDetailDialog({ offer, onClose }: { offer: RawOffer; onClose: () => void }) {
+  const risk = offer.riskFeedback;
+  const titleId = "offer-risk-dialog-title";
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  if (!risk?.count) return null;
+
+  const offerCount = risk.offerCount ?? (risk.scope === "offer" ? risk.count : 0);
+  const sourceCount = risk.sourceCount ?? (risk.scope === "source" ? risk.count : 0);
+  const reasonLabels = (risk.reasons?.length ? risk.reasons : ["fraud" as const]).map(riskFeedbackReasonLabel);
+  const sourceOnly = risk.scope === "source";
+  const title = sourceOnly ? "商家风险提示" : risk.scope === "mixed" ? "商品与商家风险提示" : "商品风险提示";
+  const scopeSummary = [
+    offerCount ? `商品 ${offerCount} 条` : null,
+    sourceCount ? `商家 ${sourceCount} 条` : null,
+  ].filter(Boolean).join(" / ") || `${risk.count} 条反馈`;
+  const description = sourceOnly
+    ? "已有用户反馈该商家或渠道存在可信度风险。购买前请先查看店铺信息、历史评价和售后路径，再判断是否值得购买。"
+    : risk.scope === "mixed"
+      ? "已有用户反馈这条报价及其商家存在高风险问题。付款前请先联系商家确认商品细节、发货方式和售后边界。"
+      : "已有用户反馈这条报价存在高风险问题。付款前请先联系商家确认商品细节、发货方式和售后边界，不建议直接付款。";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[#202829]/35 px-4 py-4 sm:items-center"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="w-full max-w-[460px] rounded-lg bg-white p-5 text-left shadow-[0_24px_80px_rgba(32,40,41,0.22)]"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full ${
+              sourceOnly ? "bg-[#fff7df] text-[#8a5a10]" : "bg-[#fff0ed] text-[#9b3328]"
+            }`}>
+              <AlertTriangle size={20} />
+            </div>
+            <h3 id={titleId} className="text-lg font-semibold text-[#202829]">
+              {title}
+            </h3>
+            <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#5a6061]">{offer.sourceTitle}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭风险提示"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#adb3b4]/25 text-[#5a6061] transition hover:bg-[#f2f4f4]"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <p className="mt-4 rounded-lg bg-[#f7f9f9] px-3 py-2 text-sm leading-6 text-[#3d4749]">
+          {description}
+        </p>
+
+        <div className="mt-4 grid gap-2 text-sm">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-[#edf0f1] px-3 py-2">
+            <span className="text-[#6c7677]">风险类型</span>
+            <span className="text-right font-semibold text-[#202829]">{Array.from(new Set(reasonLabels)).join("、")}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-[#edf0f1] px-3 py-2">
+            <span className="text-[#6c7677]">反馈范围</span>
+            <span className="text-right font-semibold text-[#202829]">
+              {scopeSummary}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-[#edf0f1] px-3 py-2">
+            <span className="text-[#6c7677]">最近反馈</span>
+            <span className="text-right font-semibold text-[#202829]">
+              <OfferRelativeTime value={risk.latestAt} />
+            </span>
+          </div>
+        </div>
+
+        <p className="mt-4 text-xs leading-5 text-[#7a8587]">
+          这里展示的是后台待处理的高风险用户反馈，不等同于平台裁定。PriceAI 不售卖、不担保商品，购买前仍需你和原店铺确认。
+        </p>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-lg bg-[#2d3435] px-4 text-sm font-semibold text-white transition hover:bg-[#202829]"
+        >
+          知道了
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function riskFeedbackReasonLabel(reason: "aftersales_shipping" | "bad_source" | "fraud"): string {
+  if (reason === "aftersales_shipping") return "售后/发货问题";
+  if (reason === "bad_source") return "渠道不可信";
+  return "疑似虚假/欺诈";
+}
+
+function OfferExitNoticeDialog({ offer, onClose }: { offer: RawOffer; onClose: () => void }) {
+  const [muteToday, setMuteToday] = useState(false);
+  const titleId = "offer-exit-notice-title";
+  const shopApi = isShopApiOffer(offer);
+  const highRisk = isHighRiskOutboundOffer(offer);
+  const highPrice = typeof offer.price === "number" && offer.price >= OFFER_HIGH_RISK_PRICE_THRESHOLD;
+  const risks = getOfferRiskHints(offer);
+  const primaryCopy = shopApi
+    ? "我已确认细节，前往链动小铺"
+    : "我会先联系商家，继续前往";
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  function continueToOffer() {
+    if (muteToday) muteOfferExitNoticeToday();
+    window.open(offer.url, "_blank", "noopener,noreferrer");
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#202829]/40 px-4 py-4 sm:items-center">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="w-full max-w-[520px] rounded-lg bg-white p-5 shadow-[0_24px_80px_rgba(32,40,41,0.24)]"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full ${
+              highRisk ? "bg-[#fff0ed] text-[#9b3328]" : "bg-[#eef3f8] text-[#47657a]"
+            }`}>
+              {highRisk ? <ShieldAlert size={20} /> : <AlertTriangle size={20} />}
+            </div>
+            <h3 id={titleId} className="font-serif text-xl font-semibold text-[#202829]">
+              购买前先确认一下
+            </h3>
+            <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#5a6061]">
+              {offer.sourceTitle}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭购买提醒"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#adb3b4]/25 text-[#5a6061] transition hover:bg-[#f2f4f4]"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3 text-sm leading-6 text-[#3d4749]">
+          <p>
+            PriceAI 只聚合公开报价，不售卖、不担保商品。分类和价格来自标题、标签和采集结果，最终商品细节、交付内容、售后规则仍以原店铺为准。
+          </p>
+          {shopApi ? (
+            <p className="rounded-lg bg-[#eef8f1] px-3 py-2 text-[#2f7a4b]">
+              该渠道识别为链动小铺来源。购买前仍建议确认套餐、有效期、质保和自动发货规则；如订单售后有问题，可优先在链动小铺订单或投诉售后入口处理。
+            </p>
+          ) : (
+            <p className="rounded-lg bg-[#fff7e8] px-3 py-2 text-[#7a541b]">
+              该渠道不属于链动小铺采集来源。请先联系商家，确认店铺可信度、发货方式、售后路径和退款边界，再决定是否购买，不建议直接付款。
+            </p>
+          )}
+          {highPrice ? (
+            <p className="rounded-lg bg-[#fbe9e7] px-3 py-2 text-[#9b3328]">
+              这是一条高额报价（¥{OFFER_HIGH_RISK_PRICE_THRESHOLD} 起触发提醒）。付款前请确认商品细节、账号归属、有效期、质保和售后条件。
+            </p>
+          ) : null}
+          {risks.length ? (
+            <div className="rounded-lg bg-[#f7f9f9] px-3 py-2">
+              <p className="text-xs font-semibold text-[#2d3435]">当前提示</p>
+              <ul className="mt-1 space-y-1 text-xs leading-5 text-[#5a6061]">
+                {risks.map((risk) => (
+                  <li key={risk.id}>• {risk.detail}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+
+        <label className="mt-4 flex items-center gap-2 rounded-lg border border-[#adb3b4]/20 bg-[#f7f9f9] px-3 py-2 text-sm text-[#5a6061]">
+          <input
+            type="checkbox"
+            checked={muteToday}
+            onChange={(event) => setMuteToday(event.target.checked)}
+            className="h-4 w-4 rounded border-[#adb3b4]"
+          />
+          今天不再提示（普通和高风险提醒都关闭，明天恢复）
+        </label>
+
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-[#adb3b4]/30 px-4 text-sm font-semibold text-[#5a6061] transition hover:bg-[#f2f4f4]"
+          >
+            再看看
+          </button>
+          <button
+            type="button"
+            onClick={continueToOffer}
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[#2d3435] px-4 text-sm font-semibold text-white transition hover:bg-[#202829]"
+          >
+            {primaryCopy}
+            <ExternalLink size={15} />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -835,35 +1167,78 @@ function getServerHydrationSnapshot(): boolean {
   return false;
 }
 
+function isOfferExitNoticeMutedToday(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(OFFER_EXIT_NOTICE_MUTED_DATE_KEY) === localDateKey();
+  } catch {
+    return false;
+  }
+}
+
+function muteOfferExitNoticeToday(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(OFFER_EXIT_NOTICE_MUTED_DATE_KEY, localDateKey());
+  } catch {
+    // localStorage may be unavailable in private or restricted contexts.
+  }
+}
+
+function localDateKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function OfferLink({
   offer,
   available,
   compact = false,
+  onRequestPurchase,
 }: {
   offer: RawOffer;
   available: boolean;
   compact?: boolean;
+  onRequestPurchase?: (offer: RawOffer) => void;
 }) {
+  const [localOutboundOffer, setLocalOutboundOffer] = useState<RawOffer | null>(null);
+
   return (
-    <a
-      href={offer.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={() => trackAnalyticsEvent("purchase_link_click", {
-        source_id: offer.sourceId || "unknown",
-        available,
-      })}
-      className={`inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full text-sm font-semibold leading-none transition hover:opacity-90 ${
-        compact ? "h-9 min-w-[108px] px-3" : "h-10 min-w-[112px] px-4"
-      } ${
-        available
-          ? "bg-[#2d3435] text-[#f8f8f8]"
-          : "bg-[#ead8d5] text-[#8f2f24]"
-      }`}
-    >
-      {available ? "前往购买" : "查看"}
-      <ExternalLink size={compact ? 14 : 16} />
-    </a>
+    <>
+      <a
+        href={offer.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => {
+          trackAnalyticsEvent("purchase_link_click", {
+            source_id: offer.sourceId || "unknown",
+            available,
+          });
+          if (isOfferExitNoticeMutedToday()) return;
+          event.preventDefault();
+          if (onRequestPurchase) {
+            onRequestPurchase(offer);
+            return;
+          }
+          setLocalOutboundOffer(offer);
+        }}
+        className={`inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full text-sm font-semibold leading-none transition hover:opacity-90 ${
+          compact ? "h-9 min-w-[108px] px-3" : "h-10 min-w-[112px] px-4"
+        } ${
+          available
+            ? "bg-[#2d3435] text-[#f8f8f8]"
+            : "bg-[#ead8d5] text-[#8f2f24]"
+        }`}
+      >
+        {available ? "前往购买" : "查看"}
+        <ExternalLink size={compact ? 14 : 16} />
+      </a>
+      {localOutboundOffer ? (
+        <OfferExitNoticeDialog offer={localOutboundOffer} onClose={() => setLocalOutboundOffer(null)} />
+      ) : null}
+    </>
   );
 }
 
@@ -872,15 +1247,17 @@ export function OfferActions({
   available,
   onFeedback,
   compact = false,
+  onRequestPurchase,
 }: {
   offer: RawOffer;
   available: boolean;
   onFeedback: (offer: RawOffer) => void;
   compact?: boolean;
+  onRequestPurchase?: (offer: RawOffer) => void;
 }) {
   return (
     <div className="flex flex-nowrap items-center justify-end gap-2">
-      <OfferLink offer={offer} available={available} compact={compact} />
+      <OfferLink offer={offer} available={available} compact={compact} onRequestPurchase={onRequestPurchase} />
       <OfferFeedbackButton offer={offer} onFeedback={onFeedback} compact={compact} />
     </div>
   );
@@ -938,8 +1315,7 @@ export function OfferFeedbackDialog({
   const hasEvidence =
     uploadedEvidence.length > 0 ||
     extractEvidenceUrls(evidenceText).length > 0 ||
-    evidenceText.trim().length >= 8 ||
-    notes.trim().length >= 12;
+    evidenceText.trim().length >= 8;
   const requiresEvidence = needsHighRiskEvidence(reason, userExpectedAction);
 
   useEffect(() => {
@@ -1206,19 +1582,11 @@ export function OfferFeedbackDialog({
               className="h-10 w-full rounded-lg border border-[#adb3b4]/40 bg-white px-3 text-sm outline-none transition focus:border-[#2d3435]"
             />
           </label>
-          <a
-            href={TELEGRAM_COMMUNITY_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-between gap-3 rounded-lg border border-[#2AABEE]/20 bg-[#eef8fe] px-3 py-2 text-sm leading-6 text-[#23658a] transition hover:border-[#2AABEE]/35 hover:bg-[#e3f4fd]"
-          >
-            <span>
-              {message?.type === "success"
-                ? "需要补充截图或查看处理进展？可以加入 PriceAI 交流群继续说明。"
-                : "如果问题比较紧急，或需要补充截图/聊天记录，也可以加入 PriceAI 交流群同步反馈。"}
-            </span>
-            <ExternalLink size={14} className="shrink-0" />
-          </a>
+          <CommunityPrompt>
+            {message?.type === "success"
+              ? "需要补充截图或查看处理进展？可以加入 PriceAI 交流群继续说明。"
+              : "如果问题比较紧急，或需要补充截图/聊天记录，也可以加入 PriceAI 交流群同步反馈。"}
+          </CommunityPrompt>
           {message ? (
             <div className={`rounded-lg px-3 py-2 text-sm ${
               message.type === "success" ? "bg-[#e8f3ec] text-[#2f7a4b]" : "bg-[#fbe9e7] text-[#9b3328]"
@@ -1244,6 +1612,7 @@ const feedbackReasonOptions = [
   { value: "item_removed", label: "商品已下架" },
   { value: "stock_mismatch", label: "库存状态不准" },
   { value: "wrong_category", label: "分类错误" },
+  { value: AFTERSALES_FEEDBACK_REASON, label: "售后/发货问题" },
   { value: "fraud", label: "疑似虚假/欺诈" },
   { value: "bad_source", label: "渠道不可信" },
   { value: "other", label: "其他问题" },
@@ -1262,7 +1631,7 @@ function extractEvidenceUrls(value: string): string[] {
 }
 
 function needsHighRiskEvidence(reason: string, userExpectedAction: string): boolean {
-  return reason === "fraud" || reason === "bad_source" || userExpectedAction === "hide_offer" || userExpectedAction === "hide_source";
+  return feedbackRequiresEvidence(reason, userExpectedAction);
 }
 
 function formatFileSize(size: number): string {
