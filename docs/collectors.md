@@ -84,7 +84,10 @@ npm run collect:browser -- --url https://aisou.pro/ --password your-admin-passwo
 采集器应尽量输出：
 
 - `sourceTitle`：原始商品标题
-- `price`：解析后的数字价格
+- `price`：用户实际需要支付的数字价格。能从结算接口拿到手续费时，应写入含手续费的实付价；拿不到时回退为标价。
+- `listedPrice`：可选，原站商品标价，用于后台追踪实付价与标价差异。
+- `feeAmount`：可选，原站结算接口返回的手续费。
+- `priceBasis`：可选，`settled` 表示 `price` 来自结算实付价，`listed_fallback` 表示暂时回退为标价。
 - `status`：`available` 或 `out_of_stock`
 - `url`：原站购买链接
 - `stockCount`：可选库存数量
@@ -118,7 +121,7 @@ npm run collect:performance -- --hours 24 --limit 1500
 
 ## 采集器质量要求
 
-- 价格必须在商品作用域内解析，避免把库存、销量、规格编号当作价格。
+- 价格必须在商品作用域内解析，避免把库存、销量、规格编号当作价格。最终写入的 `price` 优先表示实付价；如果原站存在手续费，应在采集阶段就合并到 `price`。
 - 支持 `¥1,280.00`、`￥1,280`、`103.40` 等常见格式。
 - 采集成功但旧商品消失时，可以将旧报价标记为缺货或过期。
 - 单次采集失败不等于缺货，应记录失败原因并重试。

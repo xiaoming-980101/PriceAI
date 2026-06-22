@@ -52,6 +52,9 @@ create table if not exists raw_offers (
   source_store_name text,
   source_title text not null,
   price numeric,
+  listed_price numeric,
+  fee_amount numeric,
+  price_basis text,
   currency text not null default 'CNY',
   status text not null default 'unknown',
   source_status text not null default 'unknown',
@@ -77,6 +80,9 @@ create table if not exists raw_offers (
 );
 
 alter table raw_offers add column if not exists source_status text not null default 'unknown';
+alter table raw_offers add column if not exists listed_price numeric;
+alter table raw_offers add column if not exists fee_amount numeric;
+alter table raw_offers add column if not exists price_basis text;
 alter table raw_offers add column if not exists effective_status text not null default 'low_confidence';
 alter table raw_offers add column if not exists freshness_status text not null default 'fresh';
 alter table raw_offers add column if not exists verified_at timestamptz;

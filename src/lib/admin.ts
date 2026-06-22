@@ -348,6 +348,9 @@ export async function upsertRawOffer(input: OfferInput & { sourceId?: string | n
     sourceStoreName: input.sourceStoreName || input.sourceName,
     sourceTitle: input.sourceTitle,
     price: input.price ?? null,
+    listedPrice: input.listedPrice ?? null,
+    feeAmount: input.feeAmount ?? null,
+    priceBasis: input.priceBasis ?? null,
     currency: input.currency || "CNY",
     status,
     url: input.url,
@@ -419,6 +422,9 @@ export async function upsertRawOffers(
       sourceStoreName: normalizedOffer.sourceStoreName,
       sourceTitle: offer.sourceTitle,
       price: offer.price ?? null,
+      listedPrice: offer.listedPrice ?? null,
+      feeAmount: offer.feeAmount ?? null,
+      priceBasis: offer.priceBasis ?? null,
       currency: offer.currency || "CNY",
       status,
       url: offer.url,
@@ -491,7 +497,7 @@ async function getExistingOfferRowsById(ids: string[]): Promise<Map<string, Reco
   for (const idChunk of chunks(Array.from(new Set(ids)), 100)) {
     const { data, error } = await supabase
       .from("raw_offers")
-      .select("id,source_id,source_name,source_store_name,source_title,price,currency,status,url,tags,stock_count,hidden,canonical_product_id,category_slug,last_seen_at,verified_at,updated_at,last_failed_at,failure_reason")
+      .select("id,source_id,source_name,source_store_name,source_title,price,listed_price,fee_amount,price_basis,currency,status,url,tags,stock_count,hidden,canonical_product_id,category_slug,last_seen_at,verified_at,updated_at,last_failed_at,failure_reason")
       .in("id", idChunk);
 
     if (error) throw error;
@@ -510,6 +516,9 @@ function isRawOfferRowUnchanged(next: Record<string, unknown>, existing?: Record
     "source_store_name",
     "source_title",
     "price",
+    "listed_price",
+    "fee_amount",
+    "price_basis",
     "currency",
     "status",
     "url",
@@ -961,6 +970,9 @@ export function toRawOfferRow(offer: RawOffer) {
     source_store_name: offer.sourceStoreName,
     source_title: offer.sourceTitle,
     price: offer.price,
+    listed_price: offer.listedPrice,
+    fee_amount: offer.feeAmount,
+    price_basis: offer.priceBasis,
     currency: offer.currency,
     status: offer.status,
     url: normalizeOfferUrlForStorage(offer.url),

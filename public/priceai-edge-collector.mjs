@@ -273,6 +273,7 @@ async function collectShopApi(target) {
 
     const storeName = cleanText(shopInfo.data.nickname || target.sourceStoreName || target.sourceName);
     const sourceUrl = shopInfo.data.link || `${target.baseUrl}/shop/${token}`;
+    const defaultChannelId = await getShopApiDefaultChannelId(target.baseUrl, token, sourceUrl);
     const categoriesPayload = await postJson(
       `${target.baseUrl}/shopApi/Shop/categoryList`,
       { token, goods_type: "card", category_key: "" },
@@ -309,12 +310,19 @@ async function collectShopApi(target) {
 
         for (const item of items) {
           const title = cleanText(item.name);
-          const price = numberOrNull(item.price ?? item.real_price);
-          if (!title || price === null || isNonComparableTitle(title)) continue;
+          const listedPrice = numberOrNull(item.price ?? item.real_price);
+          if (!title || listedPrice === null || isNonComparableTitle(title)) continue;
 
           const stockCount = numberOrNull(item.extend?.stock_count);
           const status = Number(item.status ?? 1) !== 1 ? "out_of_stock" : statusFromStock(stockCount);
           const categoryName = cleanText(item.category?.name || "");
+          const effectivePrice = await resolveShopApiEffectivePrice({
+            base: target.baseUrl,
+            goodsKey: item.goods_key,
+            listedPrice,
+            channelId: defaultChannelId,
+            referer: item.link || sourceUrl,
+          });
           offers.push(
             makeOffer(
               {
@@ -324,7 +332,10 @@ async function collectShopApi(target) {
               },
               {
                 title,
-                price,
+                price: effectivePrice.price,
+                listedPrice: effectivePrice.listedPrice,
+                feeAmount: effectivePrice.feeAmount,
+                priceBasis: effectivePrice.priceBasis,
                 status,
                 stockCount,
                 url: item.link || `${target.baseUrl}/item/${item.goods_key}`,
@@ -592,6 +603,63 @@ function normalizeTask(task) {
   };
 }
 
+async function getShopApiDefaultChannelId(base, token, referer) {
+  await delay(config.pageDelayMs);
+  const payload = await postJson(
+    `${base}/shopApi/Shop/getUserChannel`,
+    { token },
+    referer,
+  ).catch(() => null);
+
+  const channels = Array.isArray(payload?.data) ? payload.data : [];
+  const defaultChannel =
+    channels.find((channel) => Number(channel.status ?? 1) === 1 && Number(channel.custom_status ?? 1) === 1) ||
+    channels[0];
+  const channelId = numberOrNull(defaultChannel?.id);
+  return channelId === null ? 0 : channelId;
+}
+
+async function resolveShopApiEffectivePrice({ base, goodsKey, listedPrice, channelId, referer }) {
+  if (!goodsKey) {
+    return {
+      price: listedPrice,
+      listedPrice,
+      feeAmount: null,
+      priceBasis: "listed_fallback",
+    };
+  }
+
+  await delay(config.pageDelayMs);
+  const payload = await postJson(
+    `${base}/shopApi/Shop/getGoodsPrice`,
+    {
+      goods_key: goodsKey,
+      quantity: 1,
+      coupon_code: "",
+      channel_id: channelId ?? 0,
+    },
+    referer,
+  ).catch(() => null);
+
+  const totalAmount = numberOrNull(payload?.data?.total_amount);
+  if (payload?.code === 1 && totalAmount !== null) {
+    const originalAmount = numberOrNull(payload.data.original_amount) ?? listedPrice;
+    return {
+      price: totalAmount,
+      listedPrice: originalAmount,
+      feeAmount: numberOrNull(payload.data.fee),
+      priceBasis: "settled",
+    };
+  }
+
+  return {
+    price: listedPrice,
+    listedPrice,
+    feeAmount: null,
+    priceBasis: "listed_fallback",
+  };
+}
+
 function makeOffer(target, input) {
   return {
     sourceId: target.sourceId,
@@ -600,6 +668,9 @@ function makeOffer(target, input) {
     sourceStoreName: target.sourceStoreName || target.sourceName,
     sourceTitle: input.title,
     price: input.price,
+    listedPrice: input.listedPrice ?? null,
+    feeAmount: input.feeAmount ?? null,
+    priceBasis: input.priceBasis ?? null,
     currency: "CNY",
     status: input.status || "unknown",
     url: absolutize(input.url || target.sourceUrl, target.baseUrl),

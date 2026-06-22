@@ -58,7 +58,7 @@ const ADMIN_DATA_CACHE_TTL_MS = 120_000;
 const ADMIN_OFFER_SAMPLE_LIMIT = 80;
 const EXPLORER_OFFER_SEARCH_TEXT_MAX_LENGTH = 480;
 const STALE_PUBLIC_DATA_MESSAGE = "报价服务响应变慢，已先显示最近缓存结果。";
-const RAW_OFFER_PUBLIC_SELECT = [
+const RAW_OFFER_PUBLIC_SELECT_FIELDS = [
   "id",
   "source_id",
   "source_name",
@@ -84,6 +84,13 @@ const RAW_OFFER_PUBLIC_SELECT = [
   "freshness_status",
   "last_failed_at",
   "failure_reason",
+];
+const RAW_OFFER_PUBLIC_SELECT = RAW_OFFER_PUBLIC_SELECT_FIELDS.join(",");
+const RAW_OFFER_ADMIN_SELECT = [
+  ...RAW_OFFER_PUBLIC_SELECT_FIELDS,
+  "listed_price",
+  "fee_amount",
+  "price_basis",
 ].join(",");
 
 type PublicOfferData = {
@@ -528,7 +535,7 @@ export async function listAdminOfferMaintenancePage(options: {
 
   let query = supabase
     .from("raw_offers")
-    .select(RAW_OFFER_PUBLIC_SELECT, { count: "exact" });
+    .select(RAW_OFFER_ADMIN_SELECT, { count: "exact" });
 
   if (options.scope === "hidden") {
     query = query
@@ -1361,7 +1368,7 @@ async function listAdminVisibleRawOffers(): Promise<{ rows: RawOffer[]; total: n
   const [rowsResult, countResult] = await Promise.all([
     supabase
       .from("raw_offers")
-      .select(RAW_OFFER_PUBLIC_SELECT)
+      .select(RAW_OFFER_ADMIN_SELECT)
       .eq("hidden", false)
       .order("captured_at", { ascending: false })
       .limit(ADMIN_OFFER_SAMPLE_LIMIT),
@@ -1390,7 +1397,7 @@ export async function listRawOffersByIds(ids: string[]): Promise<RawOffer[]> {
     const chunk = uniqueIds.slice(index, index + 100);
     const { data, error } = await supabase
       .from("raw_offers")
-      .select(RAW_OFFER_PUBLIC_SELECT)
+      .select(RAW_OFFER_ADMIN_SELECT)
       .in("id", chunk);
     if (error) throw error;
     rows.push(...((data || []) as unknown as Record<string, unknown>[]));
@@ -1406,7 +1413,7 @@ async function listAdminHiddenRawOffers(): Promise<{ rows: RawOffer[]; total: nu
   const [rowsResult, countResult] = await Promise.all([
     supabase
       .from("raw_offers")
-      .select(RAW_OFFER_PUBLIC_SELECT)
+      .select(RAW_OFFER_ADMIN_SELECT)
       .eq("hidden", true)
       .ilike("failure_reason", `${ADMIN_MANUAL_HIDE_REASON_PREFIX}%`)
       .order("updated_at", { ascending: false })
@@ -2358,6 +2365,9 @@ export function mapRawOffer(row: Record<string, unknown>): RawOffer {
     collectorKind: normalizeSourceCollectorKind(row.collector_kind),
     sourceTitle,
     price: row.price === null || row.price === undefined ? null : Number(row.price),
+    listedPrice: row.listed_price === null || row.listed_price === undefined ? null : Number(row.listed_price),
+    feeAmount: row.fee_amount === null || row.fee_amount === undefined ? null : Number(row.fee_amount),
+    priceBasis: row.price_basis ? String(row.price_basis) as RawOffer["priceBasis"] : null,
     currency: String(row.currency || "CNY"),
     status: String(row.status || "unknown") as RawOffer["status"],
     url: String(row.url || ""),

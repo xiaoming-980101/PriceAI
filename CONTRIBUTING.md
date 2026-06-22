@@ -39,6 +39,7 @@ PriceAI 的软件代码使用 [GNU Affero General Public License v3.0](./LICENSE
 新增或修复采集器时，请遵守：
 
 - 输出 `sourceTitle`、`price`、`status`、`url`，能拿到库存时输出 `stockCount`。
+- `price` 应优先表示用户实付价；如果结算接口会额外收手续费，采集器应把手续费合入 `price`，并可附带 `listedPrice`、`feeAmount`、`priceBasis` 方便后台追踪。
 - 价格解析要限制在商品卡片或商品记录作用域内。
 - 支持千分位价格，例如 `¥1,280.00`。
 - 不把销量、库存、规格编号、套餐倍数当成价格。
