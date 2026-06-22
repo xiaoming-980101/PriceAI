@@ -128,15 +128,21 @@ export function isPublicCatalogProduct(
   return !isApiCdkProductLike(product);
 }
 
-export function isShopApiOffer(offer: Pick<RawOffer, "sourceId" | "sourceName" | "sourceStoreName" | "tags">): boolean {
+export function isShopApiOffer(
+  offer: Pick<RawOffer, "sourceId" | "sourceName" | "sourceStoreName" | "collectorKind" | "sourceTitle" | "url" | "tags">,
+): boolean {
+  if (offer.collectorKind === "shopApi") return true;
+
   const haystack = [
     offer.sourceId || "",
     offer.sourceName || "",
     offer.sourceStoreName || "",
+    offer.sourceTitle || "",
+    offer.url || "",
     ...(Array.isArray(offer.tags) ? offer.tags : []),
   ].join(" ").toLowerCase();
 
-  return /shopapi|shop api|shop-api|liandong|链动|鏈動|ldxp/.test(haystack);
+  return /shopapi|shop api|shop-api|liandong|链动|鏈動|ldxp|pay\.ldxp\.cn|pay\.qxvx\.cn|catfk\.com/.test(haystack);
 }
 
 export type OfferRiskHint = {

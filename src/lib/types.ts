@@ -58,6 +58,7 @@ export type RawOffer = {
   sourceId?: string | null;
   sourceName: string;
   sourceStoreName?: string | null;
+  collectorKind?: CollectorKind | null;
   sourceTitle: string;
   price: number | null;
   currency: string;
@@ -128,6 +129,7 @@ export type PublicOfferSummary = Pick<
   | "sourceId"
   | "sourceName"
   | "sourceStoreName"
+  | "collectorKind"
   | "sourceTitle"
   | "price"
   | "currency"

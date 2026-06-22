@@ -224,7 +224,7 @@ async function readDashboardData(): Promise<DashboardData> {
     }
 
     const sources = (sourcesResult.data || []).map(mapSource);
-    const offers = offerRows.map(mapRawOffer);
+    const offers = attachKnownSourceCollectorKinds(offerRows.map(mapRawOffer), sourceCollectorKindMap(sources));
     const products = (productsResult.data || []).map(mapCanonicalProduct);
 
     return buildDashboard(offers, sources, products.length ? products : canonicalCatalog, true);
@@ -316,8 +316,9 @@ async function loadPublicOfferData(): Promise<PublicOfferData> {
     ]);
 
     const publicProducts = publicCatalogProducts(products.length ? products : canonicalCatalog);
+    const mappedOffers = await attachSourceCollectorKinds(offerRows.map(mapRawOffer));
     const offers = attachPublicRiskFeedback(
-      offerRows.map(mapRawOffer).filter((offer) => isPublicOfferForProducts(offer, publicProducts)),
+      mappedOffers.filter((offer) => isPublicOfferForProducts(offer, publicProducts)),
       riskFeedback,
     );
     return {
@@ -1602,7 +1603,7 @@ async function getPublicProductOffersFromDatabase(
 
   const filterFacets = await filterFacetsPromise ?? [];
   const rows = ((data || []) as unknown as Record<string, unknown>[]);
-  const offers = rows.map(mapRawOffer);
+  const offers = await attachSourceCollectorKinds(rows.map(mapRawOffer));
   const total = rows.length ? Number(rows[0].total_count || rows.length) : 0;
 
   return {
@@ -1814,10 +1815,11 @@ async function listPublicOffersFromDatabase(filters: OfferListFilters = {}) {
 
   const rows = ((data || []) as unknown as PublicOfferPageRow[]);
   const total = rows.length ? Number(rows[0].total_count || rows.length) : 0;
+  const offers = await attachSourceCollectorKinds(rows.map((row) => mapRawOffer(row)));
 
   return {
-    rows: rows.map((row) => ({
-      offer: compactPublicOffer(mapRawOffer(row)),
+    rows: rows.map((row, index) => ({
+      offer: compactPublicOffer(offers[index] || mapRawOffer(row)),
       product: compactPublicProduct(mapPublicOfferProductRow(row)),
     })),
     total,
@@ -1905,6 +1907,58 @@ function attachPublicRiskFeedback(offers: RawOffer[], summary: PublicRiskFeedbac
   });
 }
 
+async function attachSourceCollectorKinds(offers: RawOffer[]): Promise<RawOffer[]> {
+  if (!offers.length || offers.every((offer) => offer.collectorKind)) return offers;
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return offers;
+
+  const sourceIds = Array.from(new Set(
+    offers
+      .filter((offer) => !offer.collectorKind && offer.sourceId)
+      .map((offer) => String(offer.sourceId)),
+  ));
+  if (!sourceIds.length) return offers;
+
+  const { data, error } = await supabase
+    .from("sources")
+    .select("id,collector_kind")
+    .in("id", sourceIds)
+    .abortSignal(publicSupabaseReadSignal());
+
+  if (error) {
+    console.warn("Source collector kind lookup failed:", error.message);
+    return offers;
+  }
+
+  return attachKnownSourceCollectorKinds(
+    offers,
+    new Map(
+      ((data || []) as Array<Record<string, unknown>>).map((row) => [
+        String(row.id),
+        normalizeSourceCollectorKind(row.collector_kind),
+      ]),
+    ),
+  );
+}
+
+function attachKnownSourceCollectorKinds(
+  offers: RawOffer[],
+  collectorKindsBySourceId: Map<string, Source["collectorKind"]>,
+): RawOffer[] {
+  if (!collectorKindsBySourceId.size) return offers;
+
+  return offers.map((offer) => {
+    if (offer.collectorKind || !offer.sourceId) return offer;
+    const collectorKind = collectorKindsBySourceId.get(offer.sourceId);
+    return collectorKind ? { ...offer, collectorKind } : offer;
+  });
+}
+
+function sourceCollectorKindMap(sources: Array<Pick<Source, "id" | "collectorKind">>): Map<string, Source["collectorKind"]> {
+  return new Map(sources.map((source) => [source.id, source.collectorKind || null]));
+}
+
 function addPublicRiskFeedbackAggregate(
   map: Map<string, PublicRiskFeedbackAggregate>,
   key: string,
@@ -1942,6 +1996,7 @@ function compactPublicOffer(offer: RawOffer): RawOffer {
     sourceId: offer.sourceId,
     sourceName: offer.sourceName,
     sourceStoreName: offer.sourceStoreName,
+    collectorKind: offer.collectorKind,
     sourceTitle: offer.sourceTitle,
     price: offer.price,
     currency: offer.currency,
@@ -2126,6 +2181,7 @@ function compactExplorerOffer(offer: RawOffer | null): PublicOfferSummary | null
     sourceId: offer.sourceId,
     sourceName: offer.sourceName,
     sourceStoreName: offer.sourceStoreName,
+    collectorKind: offer.collectorKind,
     sourceTitle: offer.sourceTitle,
     price: offer.price,
     currency: offer.currency,
@@ -2140,6 +2196,7 @@ function mapPublicOfferSummary(row: Record<string, unknown>): PublicOfferSummary
     sourceId: row.source_id ? String(row.source_id) : null,
     sourceName: String(row.source_name || ""),
     sourceStoreName: row.source_store_name ? String(row.source_store_name) : null,
+    collectorKind: normalizeSourceCollectorKind(row.collector_kind),
     sourceTitle: String(row.source_title || ""),
     price: row.price === null || row.price === undefined ? null : Number(row.price),
     currency: String(row.currency || "CNY"),
@@ -2298,6 +2355,7 @@ export function mapRawOffer(row: Record<string, unknown>): RawOffer {
     sourceId: row.source_id ? String(row.source_id) : null,
     sourceName: String(row.source_name || ""),
     sourceStoreName: row.source_store_name ? String(row.source_store_name) : null,
+    collectorKind: normalizeSourceCollectorKind(row.collector_kind),
     sourceTitle,
     price: row.price === null || row.price === undefined ? null : Number(row.price),
     currency: String(row.currency || "CNY"),
