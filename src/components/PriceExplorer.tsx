@@ -585,10 +585,11 @@ export function PriceExplorer({
                 <button
                   type="button"
                   onClick={openSubmission}
-                  className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#2d3435] px-3.5 text-sm font-semibold text-[#f8f8f8] shadow-[0_12px_30px_rgba(45,52,53,0.14)] md:hidden"
+                  className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#2d3435] px-4 text-sm font-semibold text-[#f8f8f8] shadow-[0_12px_30px_rgba(45,52,53,0.14)] md:hidden"
+                  aria-label="提交新的卡网订阅渠道"
                 >
                   <Plus size={15} />
-                  提交
+                  提交渠道
                 </button>
               </div>
               <p className="mt-3 hidden max-w-[78ch] text-sm leading-7 text-[#5a6061] md:block">
@@ -728,6 +729,7 @@ export function PriceExplorer({
             <button
               type="button"
               onClick={openSubmission}
+              aria-label="提交新的卡网订阅渠道"
               className="hidden h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#2d3435] px-5 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526] md:inline-flex"
             >
               <Plus size={16} />

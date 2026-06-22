@@ -46,7 +46,7 @@ export function SiteHeader({
   return (
     <header>
       <div className={`relative mx-auto grid ${maxWidthClassName} grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 sm:gap-4 sm:px-8 min-[720px]:grid-cols-[auto_minmax(0,1fr)_auto]`}>
-        <div className="relative z-10 flex min-w-0 items-center gap-2 justify-self-start">
+        <div className="relative z-10 flex min-w-0 items-center gap-2 justify-self-start min-[720px]:col-start-1">
           <button
             type="button"
             onClick={() => setMobileDrawerOpen(true)}
@@ -61,7 +61,7 @@ export function SiteHeader({
           </Link>
         </div>
 
-        <nav className={`${desktopCenterNavClassName} max-w-full justify-self-center overflow-x-auto`}>
+        <nav className={`${desktopCenterNavClassName} max-w-full justify-self-center overflow-x-auto min-[720px]:col-start-2 xl:absolute xl:left-1/2 xl:top-1/2 xl:col-start-1 xl:col-end-4 xl:-translate-x-1/2 xl:-translate-y-1/2`}>
           {navItems.map((item) => {
             const active = activeSection ? item.key === activeSection : item.match(pathname);
 
@@ -86,7 +86,7 @@ export function SiteHeader({
           <ThemeToggle compact labelFrom="never" />
         </div>
 
-        <div className={`relative z-10 hidden min-w-0 items-center justify-end justify-self-end min-[720px]:flex ${actionGroupGapClassName}`}>
+        <div className={`relative z-10 hidden min-w-0 items-center justify-end justify-self-end min-[720px]:col-start-3 min-[720px]:flex ${actionGroupGapClassName}`}>
           <ThemeToggle compact labelFrom={compactActionLabelFrom} />
           <FeedbackLink compact labelFrom={compactActionLabelFrom} />
           <QQGroupLink compact labelFrom={compactActionLabelFrom} />
