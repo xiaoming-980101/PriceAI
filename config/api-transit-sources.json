@@ -8,6 +8,9 @@
     "pricingEndpointUrl": "https://sub.callai.one/partner-api/v1/status",
     "collectorKind": "sub2api_partner_status",
     "partnerTokenEnv": "CALLAI_PARTNER_PRICEAI_TOKEN",
+    "groupAliases": {
+      "claude-kiro": "kiro"
+    },
     "channelTypes": ["undisclosed"],
     "accountPools": ["kiro", "max", "pro"],
     "summary": "站长提供 partner API，公开返回 Claude / GPT 分组倍率和最近一次可用性监测；PriceAI 会保留原始快照并继续用长期样本验证稳定性。"

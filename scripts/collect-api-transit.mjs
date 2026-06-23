@@ -302,6 +302,12 @@ function isCallaiPartnerStatusSource(source) {
   return CALLAI_PARTNER_STATUS_COLLECTORS.has(source.collectorKind);
 }
 
+function normalizeSourceGroupName(source, groupName) {
+  const name = stringOrNull(groupName) || "default";
+  const aliases = source.groupAliases && typeof source.groupAliases === "object" ? source.groupAliases : {};
+  return stringOrNull(aliases[name]) || name;
+}
+
 function normalizePricingItems(payload) {
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.models)) return payload.models;
@@ -386,7 +392,8 @@ function buildCallaiPartnerOfferRow({
   const splitMultipliers = getPartnerSplitMultipliers(basePrice, official, groupMultiplier);
   if (!splitMultipliers || splitMultipliers.model === null || splitMultipliers.model <= 0) return null;
 
-  const groupKey = stringOrNull(group?.name) || stringOrNull(entry?.key) || "default";
+  const rawGroupName = stringOrNull(group?.name) || stringOrNull(entry?.name) || stringOrNull(entry?.key) || "default";
+  const groupKey = normalizeSourceGroupName(source, rawGroupName);
   const checkedAt = stringOrNull(monitoring?.checked_at) || collectedAt;
   const availability = callaiAvailabilityFromMonitoring(monitoring, payload?.meta, collectedAt);
 
@@ -396,7 +403,7 @@ function buildCallaiPartnerOfferRow({
     family,
     standard_model: standard,
     raw_model_name: String(model?.model || model?.base_model || model?.label || standard),
-    group_name: stringOrNull(group?.name) || stringOrNull(entry?.name) || groupKey,
+    group_name: groupKey,
     recharge_ratio: source.rechargeRatio || rechargeRatioFromBilling(payload?.billing) || DEFAULT_RECHARGE_RATIO,
     model_multiplier: round(splitMultipliers.model, 6),
     input_price: splitMultipliers.input === null ? null : round(splitMultipliers.input, 6),
@@ -426,6 +433,7 @@ function buildCallaiPartnerOfferRow({
       },
       entry,
       group,
+      raw_group_name: rawGroupName,
       model,
       monitoring,
       billing: payload?.billing || null,
