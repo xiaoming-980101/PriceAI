@@ -424,7 +424,7 @@ export function FeedbackDialog({
             selectedOption?.label ? `反馈类型：${selectedOption.label}` : null,
             message.trim(),
           ].filter(Boolean).join("\n\n"),
-          contact,
+          contact: contact.trim() || null,
           pageUrl: pageUrl || window.location.href,
           website,
         }),
@@ -521,7 +521,7 @@ export function FeedbackDialog({
                 value={contact}
                 onChange={(event) => setContact(event.target.value)}
                 maxLength={200}
-                placeholder="邮箱、GitHub、Telegram 等"
+                placeholder="QQ / 微信 / Telegram，任选一种，便于及时联系"
                 className="mt-2 h-10 w-full rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-sm text-[#2d3435] outline-none transition focus:border-[#45bf78]/60 focus:ring-2 focus:ring-[#45bf78]/15"
               />
             </label>

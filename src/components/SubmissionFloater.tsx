@@ -201,7 +201,7 @@ export function SubmissionFloater() {
                     name="contact"
                     type="text"
                     maxLength={200}
-                    placeholder="邮箱 / TG / 其它"
+                    placeholder="QQ / 微信 / Telegram，任选一种，便于及时联系"
                     className={`${fieldControlClassName} h-10`}
                   />
                 </Field>

@@ -230,7 +230,7 @@ function SubmitFields() {
       <OptionGroup label="支持模型" name="models" options={modelOptions} />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="售后或联系入口">
-          <input className={fieldClassName} name="contact" placeholder="Telegram / QQ / 工单地址" />
+          <input className={fieldClassName} name="contact" placeholder="QQ / 微信 / Telegram / 工单地址" />
         </Field>
         <Field label="你从哪里看到的">
           <input className={fieldClassName} name="sourceHint" placeholder="朋友推荐 / 群聊 / 商家官网" />
@@ -310,7 +310,7 @@ function MerchantFields() {
       />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="联系渠道">
-          <input className={fieldClassName} name="contact" placeholder="Telegram / 邮箱 / 企业微信" />
+          <input className={fieldClassName} name="contact" placeholder="QQ / 微信 / Telegram，任选一种，便于及时联系" />
         </Field>
         <Field label="大概供给规模">
           <input className={fieldClassName} name="supplyScale" placeholder="例如日请求量、账号池数量、模型覆盖" />

@@ -14,6 +14,7 @@ import { isFeedbackEvidenceReference } from "./feedback-evidence";
 import { getSupabaseServerClient } from "./supabase";
 import {
   buildInitialFeedbackVerificationResult,
+  feedbackRequiresContact,
   feedbackRequiresEvidence,
   inferSuggestedActionForFeedback,
 } from "./trust-risk";
@@ -2240,6 +2241,9 @@ export async function createOfferFeedback(input: {
   const hasEvidence = Boolean(evidenceText || evidenceUrls.length);
   if (feedbackRequiresEvidence(input.reason, userExpectedAction) && !hasEvidence) {
     throw new Error("这类反馈需要提交图片、链接或较完整说明作为证据。");
+  }
+  if (feedbackRequiresContact(input.reason) && !input.contact?.trim()) {
+    throw new Error("这类反馈需要留下 QQ、微信或 Telegram，方便后台核验和追问证据。");
   }
 
   const aiReviewResult = buildInitialFeedbackVerificationResult({

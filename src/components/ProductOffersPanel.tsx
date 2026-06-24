@@ -18,6 +18,7 @@ import {
   AFTERSALES_FEEDBACK_REASON,
   OFFER_EXIT_NOTICE_MUTED_DATE_KEY,
   OFFER_HIGH_RISK_PRICE_THRESHOLD,
+  feedbackRequiresContact,
   feedbackRequiresEvidence,
   getOfferRiskHints,
   isHighRiskOutboundOffer,
@@ -1335,6 +1336,7 @@ export function OfferFeedbackDialog({
     extractEvidenceUrls(evidenceText).length > 0 ||
     evidenceText.trim().length >= 8;
   const requiresEvidence = needsHighRiskEvidence(reason, userExpectedAction);
+  const requiresContact = feedbackRequiresContact(reason);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -1424,6 +1426,11 @@ export function OfferFeedbackDialog({
       setLoading(false);
       return;
     }
+    if (requiresContact && !contact.trim()) {
+      setMessage({ type: "error", text: "这类反馈需要留下 QQ、微信或 Telegram，方便后台核验和追问证据。" });
+      setLoading(false);
+      return;
+    }
 
     try {
       const evidenceUrls = [
@@ -1453,7 +1460,7 @@ export function OfferFeedbackDialog({
           evidenceText: evidenceText || null,
           evidenceUrls,
           notes: notes || null,
-          contact: contact || null,
+          contact: contact.trim() || null,
           website: "",
         }),
       });
@@ -1591,12 +1598,15 @@ export function OfferFeedbackDialog({
             <input tabIndex={-1} autoComplete="off" name="website" />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[#5a6061]">联系方式（可选）</span>
+            <span className="mb-1 block text-xs font-medium text-[#5a6061]">
+              联系方式{requiresContact ? "（必填）" : "（可选）"}
+            </span>
             <input
               value={contact}
               onChange={(event) => setContact(event.target.value)}
               maxLength={200}
-              placeholder="方便需要时追问，可留空"
+              required={requiresContact}
+              placeholder="QQ / 微信 / Telegram，任选一种，便于及时联系"
               className="h-10 w-full rounded-lg border border-[#adb3b4]/40 bg-white px-3 text-sm outline-none transition focus:border-[#2d3435]"
             />
           </label>

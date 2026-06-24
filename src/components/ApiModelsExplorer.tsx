@@ -479,7 +479,7 @@ export function ApiModelsExplorer({ dataset }: { dataset: ApiModelDataset }) {
                 <input
                   value={submitContact}
                   onChange={(event) => setSubmitContact(event.target.value)}
-                  placeholder="邮箱 / GitHub / Telegram"
+                  placeholder="QQ / 微信 / Telegram，任选一种，便于及时联系"
                   className="h-11 w-full rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-sm outline-none transition placeholder:text-[#9aa2a3] focus:border-[#2d3435]"
                 />
               </label>

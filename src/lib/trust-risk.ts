@@ -64,6 +64,10 @@ export function feedbackRequiresEvidence(
     FEEDBACK_EVIDENCE_REQUIRED_ACTIONS.has(userExpectedAction as OfferFeedbackUserExpectedAction);
 }
 
+export function feedbackRequiresContact(reason: OfferFeedbackReason | string): boolean {
+  return HIGH_RISK_FEEDBACK_REASONS.has(reason as OfferFeedbackReason);
+}
+
 export function inferSuggestedActionForFeedback(reason: OfferFeedbackReason): OfferFeedbackSuggestedAction {
   if (reason === "wrong_price" || reason === "stock_mismatch") return "recollect";
   if (reason === "item_removed") return "hide_offer";

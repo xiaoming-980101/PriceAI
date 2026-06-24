@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { createOfferFeedback, runOfferFeedbackRiskPrecheck } from "@/lib/admin";
 import { clearPublicDataCache } from "@/lib/data";
 import { isFeedbackEvidenceReference } from "@/lib/feedback-evidence";
+import { feedbackRequiresContact } from "@/lib/trust-risk";
 import { offerFeedbackReasonValues } from "@/lib/types";
 
 const reasonSchema = z.enum(offerFeedbackReasonValues);
@@ -62,6 +63,7 @@ function getErrorStatus(error: unknown, message: string): number {
   if (message.includes("刚刚被反馈过")) return 409;
   if (message.includes("反馈过于频繁")) return 429;
   if (message.includes("需要提交")) return 400;
+  if (message.includes("需要留下")) return 400;
   return 500;
 }
 
@@ -71,6 +73,13 @@ export async function POST(request: Request) {
 
     if (payload.website) {
       return Response.json({ ok: true });
+    }
+
+    if (feedbackRequiresContact(payload.reason) && !payload.contact?.trim()) {
+      return Response.json(
+        { ok: false, message: "这类反馈需要留下 QQ、微信或 Telegram，方便后台核验和追问证据。" },
+        { status: 400 },
+      );
     }
 
     const result = await createOfferFeedback({
