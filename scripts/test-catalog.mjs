@@ -16,6 +16,7 @@ const cases = [
   ["ChatGPT Plus 直充 卡密自助", "chatgpt-plus"],
   ["ChatGPT Plus 成品号 独享账号", "chatgpt-plus"],
   ["UPI渠道-PLUS成品号30天（iCloud高权重母号邮箱）", "chatgpt-plus"],
+  ["UPI渠道-PLUS独享成品号30天（iCloud高权重母号邮箱）", "chatgpt-plus"],
   ["【推荐】GPT Plus充值CDK - pix 自动充值渠道非成品需自备账号，自己账号有team不能冲", "chatgpt-plus"],
   ["ChatGPT Plus成品会员账号｜提供邮箱账密，带RT 可直接导入中转站｜自动发货", "chatgpt-plus"],
   ["PLUS-成品-已接码rt-微软邮箱-支持登录网页端，支持直接登录codex-质保首登", "chatgpt-plus"],

@@ -1506,6 +1506,8 @@ function isPureEmail(value: string): boolean {
     matches(value, [
       "plus 成品",
       "plus成品",
+      "plus 独享成品",
+      "plus独享成品",
       "plus 会员",
       "plus会员",
       "plus 账号",
@@ -2118,7 +2120,8 @@ function isChatGptTeamDominant(value: string): boolean {
 }
 
 function isChatGptPlusAccountWithParentEmail(value: string): boolean {
-  if (!matches(value, ["plus", "成品号"])) return false;
+  if (!matches(value, ["plus"])) return false;
+  if (!matches(value, ["成品号", "独享成品号", "独享成品"])) return false;
   if (!matches(value, ["母号邮箱", "母号 邮箱"])) return false;
 
   return matches(value, ["icloud", "gmail", "邮箱", "google", "outlook", "hotmail"]);
