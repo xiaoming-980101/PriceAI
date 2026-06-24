@@ -171,6 +171,7 @@ export default function Home() {
     <div className="min-h-screen bg-[var(--color-page)] text-[var(--color-text-body)]">
       <HomeUrlCleaner />
       <JsonLd data={buildHomeJsonLd()} />
+      <SponsoredPlacementPreview kind="topBanner" />
       <div className="sticky top-0 z-40 bg-[var(--color-page-translucent)] shadow-[var(--shadow-control)] backdrop-blur-xl">
         <SiteHeader activeSection="home" />
       </div>
@@ -204,8 +205,6 @@ export default function Home() {
                 </Link>
               </div>
             </div>
-
-            <SponsoredPlacementPreview kind="topBanner" className="mx-auto mt-8 max-w-6xl" />
 
             <div id="paths" className="mx-auto mt-10 max-w-6xl scroll-mt-28">
               <div className="mx-auto max-w-4xl text-center">
