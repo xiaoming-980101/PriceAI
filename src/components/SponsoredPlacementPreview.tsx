@@ -32,6 +32,14 @@ type PlacementCopy = {
   tone: "green" | "blue" | "amber";
 };
 
+type FooterSponsorCard = {
+  title: string;
+  body: string;
+  visualTitle: string;
+  visualMeta: string;
+  tone: "green" | "blue" | "amber";
+};
+
 const showSponsorPreview = process.env.NEXT_PUBLIC_PRICEAI_SHOW_SPONSOR_PREVIEW === "1";
 const dismissStoragePrefix = "priceai.sponsor.preview.dismissed";
 const dismissEventName = "priceai:sponsor-dismissed";
@@ -123,6 +131,30 @@ const placementCopy: Record<SponsoredPlacementKind, PlacementCopy> = {
     tone: "green",
   },
 };
+
+const footerSponsorCards: FooterSponsorCard[] = [
+  {
+    title: "云服务器 / 网络线路",
+    body: "适合 VPS、轻量云、CDN、网络线路和基础设施服务。",
+    visualTitle: "Cloud Stack",
+    visualMeta: "VPS · CDN · Network",
+    tone: "green",
+  },
+  {
+    title: "购买前检测工具",
+    body: "适合 IP 纯净度、支付环境、账号安全和风控检测工具。",
+    visualTitle: "Risk Check",
+    visualMeta: "IP · Pay · Safety",
+    tone: "blue",
+  },
+  {
+    title: "开发者工具赞助",
+    body: "适合监控、域名、日志、部署、API 周边和效率工具。",
+    visualTitle: "Dev Toolkit",
+    visualMeta: "Monitor · Domain · API",
+    tone: "amber",
+  },
+];
 
 export function SponsoredPlacementPreview({ kind, className = "" }: SponsoredPlacementPreviewProps) {
   const copy = placementCopy[kind];
@@ -322,7 +354,7 @@ function FooterSponsorSection({
   return (
     <section
       aria-label={`${copy.eyebrow}广告位`}
-      className={`relative overflow-hidden border-t border-[#dfe4e5] px-0 pt-6 text-left text-[#202829] ${className}`}
+      className={`relative border-t border-[#dfe4e5] px-0 pt-6 text-left text-[#202829] ${className}`}
     >
       <button
         type="button"
@@ -333,45 +365,89 @@ function FooterSponsorSection({
         <X className="h-3.5 w-3.5" />
       </button>
 
-      <div className="grid gap-4 pr-9 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-start">
-        <div>
-          <div className="flex flex-wrap items-center gap-2 md:flex-col md:items-start">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff7e8] px-2.5 py-1 text-[11px] font-extrabold text-[#7a541b]">
-              <Megaphone className="h-3.5 w-3.5" />
-              {copy.label}
-            </span>
-            <span className="inline-flex rounded-full bg-[#eef3f8] px-2.5 py-1 text-[11px] font-bold text-[#47657a]">
-              {copy.slot}
-            </span>
+      <div className="pr-9">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff7e8] px-2.5 py-1 text-[11px] font-extrabold text-[#7a541b]">
+                <Megaphone className="h-3.5 w-3.5" />
+                {copy.label}
+              </span>
+              <span className="inline-flex rounded-full bg-[#eef3f8] px-2.5 py-1 text-[11px] font-bold text-[#47657a]">
+                {copy.slot}
+              </span>
+              {copy.visualMeta.map((item) => (
+                <span key={item} className="rounded-full bg-[#f2f4f4] px-2.5 py-1 text-[11px] font-bold text-[#5a6061]">
+                  {item}
+                </span>
+              ))}
+            </div>
+            <h2 className="mt-3 text-base font-extrabold text-[#202829]">赞助展示</h2>
+            <p className="mt-1 max-w-[72ch] text-xs leading-5 text-[#5a6061]">
+              {copy.body}
+            </p>
           </div>
-          <h2 className="mt-3 text-sm font-extrabold text-[#202829]">赞助展示</h2>
-          <p className="mt-1 text-xs leading-5 text-[#5a6061]">页面最底部的低打扰合作入口</p>
+          <Link
+            href="/commercial#slots"
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#2d3435] px-3 text-xs font-bold text-[#f8f8f8] transition hover:bg-[#1f2526]"
+          >
+            {copy.cta}
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
 
-        <div className="min-w-0">
-          <p className="text-sm leading-6 text-[#5a6061]">
-            <span className="font-extrabold text-[#202829]">{copy.title}</span>
-            <span className="mx-2 text-[#adb3b4]">/</span>
-            {copy.body}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {copy.visualMeta.map((item) => (
-              <span key={item} className="rounded-full bg-[#f2f4f4] px-2.5 py-1 text-[11px] font-bold text-[#5a6061]">
-                {item}
-              </span>
-            ))}
-          </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {footerSponsorCards.map((card) => (
+            <Link
+              key={card.title}
+              href="/commercial#slots"
+              className="group overflow-hidden rounded-lg bg-white text-[#202829] ring-1 ring-[#dfe4e5] transition hover:-translate-y-0.5 hover:ring-[#adb3b4]"
+              aria-label={`${card.title}广告位，查看投放要求`}
+            >
+              <div className={`relative aspect-[16/7] overflow-hidden ${footerSponsorVisualClass(card.tone)}`}>
+                <div className="absolute left-3 top-3 flex items-center gap-2">
+                  <span className="rounded-full bg-white/90 px-2 py-1 text-[11px] font-extrabold text-[#202829] ring-1 ring-white/70">
+                    图片位
+                  </span>
+                  <span className="rounded-full bg-white/70 px-2 py-1 text-[11px] font-bold text-[#5a6061] ring-1 ring-white/60">
+                    {copy.fit}
+                  </span>
+                </div>
+                <div className="absolute inset-x-4 bottom-4">
+                  <p className="text-[11px] font-extrabold text-[#5a6061]">赞助图片位</p>
+                  <p className="mt-1 truncate text-2xl font-black leading-none text-[#202829]">{card.visualTitle}</p>
+                  <p className="mt-2 truncate text-xs font-bold text-[#3e484a]">{card.visualMeta}</p>
+                </div>
+              </div>
+              <div className="flex min-h-[112px] flex-col justify-between gap-3 p-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff7e8] px-2.5 py-1 text-[11px] font-extrabold text-[#7a541b]">
+                      <Megaphone className="h-3.5 w-3.5" />
+                      {copy.label}
+                    </span>
+                    <span className="text-[11px] font-bold text-[#7d8586]">页面最底部</span>
+                  </div>
+                  <h3 className="mt-3 text-sm font-extrabold text-[#202829]">{card.title}</h3>
+                  <p className="mt-1 text-xs leading-5 text-[#5a6061]">{card.body}</p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#2d3435]">
+                  查看投放要求
+                  <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                </span>
+              </div>
+            </Link>
+          ))}
         </div>
-        <Link
-          href="/commercial#slots"
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#2d3435] px-3 text-xs font-bold text-[#f8f8f8] transition hover:bg-[#1f2526]"
-        >
-          {copy.cta}
-          <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
       </div>
     </section>
   );
+}
+
+function footerSponsorVisualClass(tone: FooterSponsorCard["tone"]) {
+  if (tone === "blue") return "bg-[#e8f1fa]";
+  if (tone === "amber") return "bg-[#fff2dc]";
+  return "bg-[#e8f3ec]";
 }
 
 function visualToneClass(tone: PlacementCopy["tone"]) {
