@@ -36,30 +36,32 @@ export async function GET() {
     );
   }
 
-  const checks: HealthCheck[] = [];
+  let checks: HealthCheck[] = [];
 
   try {
-    checks.push(await runHeadCheck("sources_connectivity", () =>
-      supabase
-        .from("sources")
-        .select("id")
-        .limit(1)
-        .abortSignal(AbortSignal.timeout(HEALTH_SUPABASE_TIMEOUT_MS)),
-    ));
-    checks.push(await runHeadCheck("sources_schema", () =>
-      supabase
-        .from("sources")
-        .select("id,shop_created_at")
-        .limit(1)
-        .abortSignal(AbortSignal.timeout(HEALTH_SUPABASE_TIMEOUT_MS)),
-    ));
-    checks.push(await runHeadCheck("public_api_snapshots", () =>
-      supabase
-        .from("public_api_snapshots")
-        .select("kind,cache_key,generated_at")
-        .limit(1)
-        .abortSignal(AbortSignal.timeout(HEALTH_SUPABASE_TIMEOUT_MS)),
-    ));
+    checks = await Promise.all([
+      runHeadCheck("sources_connectivity", () =>
+        supabase
+          .from("sources")
+          .select("id")
+          .limit(1)
+          .abortSignal(AbortSignal.timeout(HEALTH_SUPABASE_TIMEOUT_MS)),
+      ),
+      runHeadCheck("sources_schema", () =>
+        supabase
+          .from("sources")
+          .select("id,shop_created_at")
+          .limit(1)
+          .abortSignal(AbortSignal.timeout(HEALTH_SUPABASE_TIMEOUT_MS)),
+      ),
+      runHeadCheck("public_api_snapshots", () =>
+        supabase
+          .from("public_api_snapshots")
+          .select("kind,cache_key,generated_at")
+          .limit(1)
+          .abortSignal(AbortSignal.timeout(HEALTH_SUPABASE_TIMEOUT_MS)),
+      ),
+    ]);
 
     const failed = checks.find((check) => !check.ok);
     if (failed) throw new Error(failed.message || `${failed.name} 健康检查失败。`);
