@@ -788,7 +788,7 @@ export function PriceExplorer({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索 ChatGPT、Gemini、邮箱"
+                placeholder={searchPlaceholder}
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#9aa2a3]"
               />
             </label>
