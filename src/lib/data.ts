@@ -70,7 +70,7 @@ const EXPLORER_OFFER_SEARCH_TEXT_MAX_LENGTH = 480;
 const STALE_PUBLIC_DATA_MESSAGE = "报价服务响应变慢，已先显示最近缓存结果。";
 const PUBLIC_EXPLORER_SNAPSHOT_KEY = "default";
 const PUBLIC_OFFERS_SNAPSHOT_KEY = "default:limit:80";
-const PUBLIC_MERCHANTS_SNAPSHOT_KEY = "default:v4";
+const PUBLIC_MERCHANTS_SNAPSHOT_KEY = "default:v6:compact";
 const PUBLIC_OFFERS_SNAPSHOT_LIMIT = 80;
 const PUBLIC_OFFERS_SNAPSHOT_OFFSET = 0;
 const PUBLIC_PRODUCT_OFFERS_SNAPSHOT_LIMIT = 80;
@@ -222,6 +222,9 @@ export type PublicApiSnapshotRefreshDecision =
 export type PublicMerchantsResult = {
   rows: PublicMerchantSummary[];
   total: number;
+  limited?: boolean;
+  limit?: number;
+  offset?: number;
   generatedAt: string;
   degraded?: boolean;
   message?: string | null;
@@ -268,6 +271,20 @@ type OfferListFilters = {
   limit?: number;
   offset?: number;
   skipSnapshot?: boolean;
+};
+
+type MerchantListFilters = {
+  platform?: string | null;
+  productType?: string | null;
+  stock?: string | null;
+  query?: string | null;
+  minPrice?: number | null;
+  maxPrice?: number | null;
+  sort?: string | null;
+  collector?: string | null;
+  signal?: string | null;
+  limit?: number;
+  offset?: number;
 };
 
 export type AdminOfferMaintenanceScope = "visible" | "hidden";
@@ -2588,7 +2605,12 @@ export async function listPublicOffers(filters: OfferListFilters = {}) {
   return nextValue;
 }
 
-export async function listPublicMerchants(): Promise<PublicMerchantsResult> {
+export async function listPublicMerchants(filters: MerchantListFilters = {}): Promise<PublicMerchantsResult> {
+  const catalog = await loadPublicMerchantCatalog();
+  return paginatePublicMerchants(catalog, filters);
+}
+
+async function loadPublicMerchantCatalog(): Promise<PublicMerchantsResult> {
   const now = Date.now();
   if (publicMerchantsCache && publicMerchantsCache.expiresAt > now) {
     return publicMerchantsCache.value;
@@ -2623,15 +2645,16 @@ async function buildPublicMerchants(options: { skipSnapshot?: boolean } = {}): P
 
   const rpcData = await listPublicMerchantsFromDatabase();
   if (rpcData) {
+    const compactRpcData = compactPublicMerchantsResult(rpcData);
     if (!options.skipSnapshot && !rpcData.degraded) {
       await writePublicApiSnapshot({
         kind: "merchants",
         key: PUBLIC_MERCHANTS_SNAPSHOT_KEY,
-        payload: rpcData,
-        generatedAt: rpcData.generatedAt,
+        payload: compactRpcData,
+        generatedAt: compactRpcData.generatedAt,
       });
     }
-    return rpcData;
+    return compactRpcData;
   }
 
   const publicData = await readPublicOfferData();
@@ -2643,13 +2666,13 @@ async function buildPublicMerchants(options: { skipSnapshot?: boolean } = {}): P
     sources,
     generatedAt: publicData.generatedAt,
   });
-  const value = {
+  const value = compactPublicMerchantsResult({
     rows,
     total: rows.length,
     generatedAt: publicData.generatedAt,
     degraded: publicData.degraded,
     message: publicData.message,
-  };
+  });
 
   if (!options.skipSnapshot && !value.degraded) {
     await writePublicApiSnapshot({
@@ -2661,6 +2684,157 @@ async function buildPublicMerchants(options: { skipSnapshot?: boolean } = {}): P
   }
 
   return value;
+}
+
+function paginatePublicMerchants(value: PublicMerchantsResult, filters: MerchantListFilters): PublicMerchantsResult {
+  const limit = normalizePublicOfferLimit(filters.limit);
+  const offset = normalizePublicOfferOffset(filters.offset);
+  const rows = filterAndSortPublicMerchants(value.rows, filters);
+
+  return {
+    ...value,
+    rows: rows.slice(offset, offset + limit),
+    total: rows.length,
+    limited: rows.length > offset + limit,
+    limit,
+    offset,
+  };
+}
+
+function filterAndSortPublicMerchants(
+  merchants: PublicMerchantSummary[],
+  filters: MerchantListFilters,
+): PublicMerchantSummary[] {
+  const merchantQuery = parsePublicMerchantQuery(filters.query || "");
+  const min = filters.minPrice ?? null;
+  const max = filters.maxPrice ?? null;
+
+  return merchants
+    .filter((merchant) => {
+      const representativePrice = merchant.representativePrice ?? null;
+      const haystack = [
+        merchant.name,
+        merchant.sourceName,
+        merchant.host || "",
+        merchant.entryUrl,
+        merchant.shopUrl || "",
+        merchant.collectorLabel,
+        merchant.representativeProduct || "",
+        merchant.representativeOfferTitle || "",
+        ...merchant.platforms,
+        ...merchant.productTypes,
+      ].join(" ").toLowerCase();
+
+      if (!publicMerchantMatchesQuery(merchant, merchantQuery, haystack)) return false;
+      if (filters.platform && filters.platform !== "全部" && !merchant.platforms.includes(filters.platform)) return false;
+      if (filters.productType && filters.productType !== "全部" && !merchant.productTypes.includes(filters.productType)) return false;
+      if (filters.stock === "available" && merchant.inStockCount === 0) return false;
+      if (filters.stock === "out_of_stock" && merchant.outOfStockCount === 0) return false;
+      if (filters.collector && filters.collector !== "all" && merchant.collectorGroup !== filters.collector) return false;
+      if (filters.signal === "lowest" && merchant.lowestHitCount === 0) return false;
+      if (filters.signal === "warranty" && merchant.warrantyLowestHitCount === 0) return false;
+      if (filters.signal === "platform_aftersales" && !merchant.hasPlatformAftersalesMechanism) return false;
+      if (filters.signal === "risk_clear" && merchant.riskFeedbackCount > 0) return false;
+      if ((min !== null || max !== null) && representativePrice === null) return false;
+      if (min !== null && representativePrice !== null && representativePrice < min) return false;
+      if (max !== null && representativePrice !== null && representativePrice > max) return false;
+
+      return true;
+    })
+    .sort((a, b) => comparePublicMerchantsBySort(a, b, filters.sort || "available_price"));
+}
+
+type PublicMerchantSearchQuery = {
+  normalized: string;
+  isUrl: boolean;
+  terms: string[];
+};
+
+function parsePublicMerchantQuery(query: string): PublicMerchantSearchQuery {
+  const normalized = normalizePublicOfferQuery(query).toLowerCase();
+  if (!normalized) return { normalized, isUrl: false, terms: [] };
+
+  if (!looksLikePublicMerchantUrlQuery(normalized)) {
+    const terms = new Set([normalized]);
+    for (const part of normalized.split(/[\s/]+/)) {
+      if (part) terms.add(part);
+    }
+    return { normalized, isUrl: false, terms: Array.from(terms).filter(Boolean) };
+  }
+
+  try {
+    const url = new URL(normalized.includes("://") ? normalized : `https://${normalized}`);
+    const origin = url.origin.toLowerCase();
+    const path = url.pathname.replace(/\/+$/, "").toLowerCase();
+    const terms = new Set([`${origin}${path}`, path]);
+    const shopMatch = url.pathname.match(/\/shop\/([^/?#]+)/i);
+    const itemMatch = url.pathname.match(/\/item\/([^/?#]+)/i);
+    if (shopMatch?.[1]) terms.add(shopMatch[1].toLowerCase());
+    if (itemMatch?.[1]) terms.add(itemMatch[1].toLowerCase());
+    return { normalized, isUrl: true, terms: Array.from(terms).filter(Boolean) };
+  } catch {
+    return { normalized, isUrl: false, terms: Array.from(new Set([normalized])).filter(Boolean) };
+  }
+}
+
+function looksLikePublicMerchantUrlQuery(value: string): boolean {
+  if (value.includes("://")) return true;
+  if (/\/(?:shop|item)\//i.test(value)) return true;
+  return /^[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/?#]|$)/i.test(value);
+}
+
+function publicMerchantMatchesQuery(
+  merchant: PublicMerchantSummary,
+  query: PublicMerchantSearchQuery,
+  haystack: string,
+): boolean {
+  if (!query.normalized) return true;
+
+  if (!query.isUrl) {
+    return query.terms.some((term) => haystack.includes(term));
+  }
+
+  const urlTargets = [
+    merchant.entryUrl,
+    merchant.shopUrl || "",
+  ].flatMap(publicMerchantUrlSearchValues);
+
+  return query.terms.some((term) => urlTargets.some((target) => target.includes(term)));
+}
+
+function publicMerchantUrlSearchValues(value: string): string[] {
+  const raw = value.trim().toLowerCase();
+  if (!raw) return [];
+
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    const path = url.pathname.replace(/\/+$/, "").toLowerCase();
+    const values = new Set([`${url.origin.toLowerCase()}${path}`, path]);
+    const tokenMatch = path.match(/\/(?:shop|item)\/([^/?#]+)/i);
+    if (tokenMatch?.[1]) values.add(tokenMatch[1].toLowerCase());
+    return Array.from(values).filter(Boolean);
+  } catch {
+    return [raw];
+  }
+}
+
+function comparePublicMerchantsBySort(a: PublicMerchantSummary, b: PublicMerchantSummary, sort: string): number {
+  if (sort === "updated") {
+    const updatedDelta = (b.latestSeenAt || "").localeCompare(a.latestSeenAt || "");
+    if (updatedDelta !== 0) return updatedDelta;
+  }
+
+  if (sort === "channels") {
+    const coverageDelta = b.productCount - a.productCount;
+    if (coverageDelta !== 0) return coverageDelta;
+  }
+
+  if (sort === "price") {
+    const priceDelta = (a.representativePrice ?? Number.MAX_SAFE_INTEGER) - (b.representativePrice ?? Number.MAX_SAFE_INTEGER);
+    if (priceDelta !== 0) return priceDelta;
+  }
+
+  return comparePublicMerchants(a, b);
 }
 
 async function loadPublicOffers(filters: OfferListFilters & { skipSnapshot?: boolean } = {}): Promise<PublicOffersResult> {
@@ -3247,6 +3421,44 @@ function compactPublicOffer(offer: RawOffer): RawOffer {
     effectiveStatus: offer.effectiveStatus,
     freshnessStatus: offer.freshnessStatus,
     riskFeedback: offer.riskFeedback,
+  };
+}
+
+function compactPublicMerchant(merchant: PublicMerchantSummary): PublicMerchantSummary {
+  return {
+    id: merchant.id,
+    name: merchant.name,
+    sourceName: merchant.sourceName,
+    entryUrl: merchant.entryUrl,
+    shopUrl: merchant.shopUrl,
+    host: merchant.host,
+    collectorGroup: merchant.collectorGroup,
+    collectorLabel: merchant.collectorLabel,
+    productCount: merchant.productCount,
+    offerCount: merchant.offerCount,
+    inStockCount: merchant.inStockCount,
+    outOfStockCount: merchant.outOfStockCount,
+    platformCount: merchant.platformCount,
+    platforms: merchant.platforms,
+    productTypes: merchant.productTypes,
+    lowestHitCount: merchant.lowestHitCount,
+    warrantyLowestHitCount: merchant.warrantyLowestHitCount,
+    riskFeedbackCount: merchant.riskFeedbackCount,
+    latestSeenAt: merchant.latestSeenAt,
+    observationStartedAt: merchant.observationStartedAt,
+    includedAt: merchant.includedAt,
+    shopCreatedAt: merchant.shopCreatedAt,
+    representativeProduct: merchant.representativeProduct,
+    representativeOfferTitle: merchant.representativeOfferTitle,
+    representativePrice: merchant.representativePrice,
+    hasPlatformAftersalesMechanism: merchant.hasPlatformAftersalesMechanism,
+  };
+}
+
+function compactPublicMerchantsResult(value: PublicMerchantsResult): PublicMerchantsResult {
+  return {
+    ...value,
+    rows: value.rows.map(compactPublicMerchant),
   };
 }
 

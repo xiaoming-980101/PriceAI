@@ -76,7 +76,7 @@ const checks = [
   {
     path: "/api/merchants",
     status: 200,
-    maxBytes: 160_000,
+    maxBytes: 100_000,
     cache: true,
     json: validateMerchantsJson,
   },
