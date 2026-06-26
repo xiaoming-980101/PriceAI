@@ -157,6 +157,7 @@ export type PublicMerchantSummary = {
   storeName?: string | null;
   sourceName: string;
   entryUrl: string;
+  shopUrl?: string | null;
   host?: string | null;
   collectorKind?: CollectorKind | null;
   collectorGroup: MerchantCollectorGroup;

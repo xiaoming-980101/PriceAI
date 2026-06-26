@@ -69,6 +69,7 @@ const EXPLORER_OFFER_SEARCH_TEXT_MAX_LENGTH = 480;
 const STALE_PUBLIC_DATA_MESSAGE = "报价服务响应变慢，已先显示最近缓存结果。";
 const PUBLIC_EXPLORER_SNAPSHOT_KEY = "default";
 const PUBLIC_OFFERS_SNAPSHOT_KEY = "default:limit:80";
+const PUBLIC_MERCHANTS_SNAPSHOT_KEY = "default:v3";
 const PUBLIC_OFFERS_SNAPSHOT_LIMIT = 80;
 const PUBLIC_OFFERS_SNAPSHOT_OFFSET = 0;
 const PUBLIC_PRODUCT_OFFERS_SNAPSHOT_LIMIT = 80;
@@ -122,6 +123,7 @@ type PublicOfferData = {
   generatedAt: string;
   offers: RawOffer[];
   products: CanonicalProduct[];
+  sources?: Source[];
 };
 
 type PublicRiskFeedbackSummary = {
@@ -193,6 +195,7 @@ export type PublicApiSnapshotRefreshResult = {
   mode: "full" | "incremental";
   explorer?: boolean;
   offers?: boolean;
+  merchants?: boolean;
   productOffers: Array<{ key: string; ok: boolean }>;
   productIds: string[];
 };
@@ -241,6 +244,8 @@ let publicOfferDataCache: { expiresAt: number; value: PublicOfferData } | null =
 let publicOfferDataPromise: Promise<PublicOfferData> | null = null;
 let explorerDataCache: { expiresAt: number; value: ExplorerData } | null = null;
 let explorerDataPromise: Promise<ExplorerData> | null = null;
+let publicMerchantsCache: { expiresAt: number; value: PublicMerchantsResult } | null = null;
+let publicMerchantsPromise: Promise<PublicMerchantsResult> | null = null;
 let dashboardDataCache: { expiresAt: number; value: DashboardData } | null = null;
 let dashboardDataPromise: Promise<DashboardData> | null = null;
 let adminSummaryCache: { expiresAt: number; value: AdminSummary } | null = null;
@@ -284,6 +289,8 @@ export function clearPublicDataCache(): void {
   publicOfferDataPromise = null;
   explorerDataCache = null;
   explorerDataPromise = null;
+  publicMerchantsCache = null;
+  publicMerchantsPromise = null;
   dashboardDataCache = null;
   dashboardDataPromise = null;
   clearAdminDataCache();
@@ -691,6 +698,14 @@ export async function refreshPublicApiSnapshots(): Promise<PublicApiSnapshotRefr
     generatedAt: offersData.generatedAt,
   });
 
+  const merchantsData = await buildPublicMerchants({ skipSnapshot: true });
+  const merchants = !merchantsData.degraded && await writePublicApiSnapshot({
+    kind: "merchants",
+    key: PUBLIC_MERCHANTS_SNAPSHOT_KEY,
+    payload: merchantsData,
+    generatedAt: merchantsData.generatedAt,
+  });
+
   const productRefs = explorerData.products
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((product) => ({ id: product.id, slug: product.slug }));
@@ -701,6 +716,7 @@ export async function refreshPublicApiSnapshots(): Promise<PublicApiSnapshotRefr
     mode: "full",
     explorer,
     offers,
+    merchants,
     productOffers,
     productIds: productRefs.map((product) => product.id),
   };
@@ -715,6 +731,7 @@ async function refreshPublicApiSnapshotsForScope({
 }): Promise<PublicApiSnapshotRefreshResult> {
   let explorer: boolean | undefined;
   let offers: boolean | undefined;
+  let merchants: boolean | undefined;
   let explorerProducts: Array<{ id: string; slug?: string | null }> = [];
 
   if (refreshGlobal) {
@@ -738,6 +755,14 @@ async function refreshPublicApiSnapshotsForScope({
       payload: offersData,
       generatedAt: offersData.generatedAt,
     });
+
+    const merchantsData = await buildPublicMerchants({ skipSnapshot: true });
+    merchants = !merchantsData.degraded && await writePublicApiSnapshot({
+      kind: "merchants",
+      key: PUBLIC_MERCHANTS_SNAPSHOT_KEY,
+      payload: merchantsData,
+      generatedAt: merchantsData.generatedAt,
+    });
   }
 
   const productRefs = await resolvePublicSnapshotProductRefs(productIds, explorerProducts);
@@ -748,6 +773,7 @@ async function refreshPublicApiSnapshotsForScope({
     mode: "incremental",
     explorer,
     offers,
+    merchants,
     productOffers,
     productIds: productRefs.map((product) => product.id),
   };
@@ -945,14 +971,15 @@ async function loadPublicOfferData(): Promise<PublicOfferData> {
   }
 
   try {
-    const [offerRows, products, riskFeedback] = await Promise.all([
+    const [offerRows, products, riskFeedback, sources] = await Promise.all([
       listVisibleRawOfferRows(),
       listActiveCanonicalProducts(),
       listPublicRiskFeedbackSummary(),
+      listPublicSourcesForOffers(),
     ]);
 
     const publicProducts = publicCatalogProducts(products.length ? products : canonicalCatalog);
-    const mappedOffers = await attachSourceCollectorKinds(offerRows.map(mapRawOffer));
+    const mappedOffers = attachKnownSourceCollectorKinds(offerRows.map(mapRawOffer), sourceCollectorKindMap(sources));
     const offers = attachPublicRiskFeedback(
       mappedOffers.filter((offer) => isPublicOfferForProducts(offer, publicProducts)),
       riskFeedback,
@@ -962,6 +989,7 @@ async function loadPublicOfferData(): Promise<PublicOfferData> {
       generatedAt: new Date().toISOString(),
       offers,
       products: publicProducts,
+      sources,
     };
   } catch (error) {
     console.error("Supabase public offer read failed:", error);
@@ -1519,6 +1547,16 @@ function preferStaleProductOffers<T extends {
   };
 }
 
+function preferStalePublicMerchants(staleValue: PublicMerchantsResult | null, value: PublicMerchantsResult): PublicMerchantsResult {
+  if (!value.degraded || value.rows.length || !staleValue?.rows.length) return value;
+
+  return {
+    ...staleValue,
+    degraded: true,
+    message: STALE_PUBLIC_DATA_MESSAGE,
+  };
+}
+
 function hydrateGeneratedAt<T extends { generatedAt: string }>(snapshot: PublicApiSnapshotPayload<T>): T {
   return {
     ...snapshot.value,
@@ -1549,6 +1587,14 @@ function isProductOffersSnapshot(value: unknown): value is PublicProductOffersRe
 function isPublicOffersSnapshot(value: unknown): value is PublicOffersResult {
   if (!value || typeof value !== "object") return false;
   const record = value as Partial<PublicOffersResult>;
+  return typeof record.generatedAt === "string" &&
+    Array.isArray(record.rows) &&
+    typeof record.total === "number";
+}
+
+function isPublicMerchantsSnapshot(value: unknown): value is PublicMerchantsResult {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Partial<PublicMerchantsResult>;
   return typeof record.generatedAt === "string" &&
     Array.isArray(record.rows) &&
     typeof record.total === "number";
@@ -2503,25 +2549,78 @@ export async function listPublicOffers(filters: OfferListFilters = {}) {
 }
 
 export async function listPublicMerchants(): Promise<PublicMerchantsResult> {
+  const now = Date.now();
+  if (publicMerchantsCache && publicMerchantsCache.expiresAt > now) {
+    return publicMerchantsCache.value;
+  }
+
+  if (publicMerchantsPromise) return publicMerchantsPromise;
+
+  const staleValue = publicMerchantsCache?.value || null;
+  publicMerchantsPromise = buildPublicMerchants()
+    .then((value) => {
+      const nextValue = preferStalePublicMerchants(staleValue, value);
+      publicMerchantsCache = {
+        expiresAt: Date.now() + PUBLIC_DATA_CACHE_TTL_MS,
+        value: nextValue,
+      };
+      return nextValue;
+    })
+    .finally(() => {
+      publicMerchantsPromise = null;
+    });
+
+  return publicMerchantsPromise;
+}
+
+async function buildPublicMerchants(options: { skipSnapshot?: boolean } = {}): Promise<PublicMerchantsResult> {
+  if (!options.skipSnapshot) {
+    const snapshot = await readPublicApiSnapshot<PublicMerchantsResult>("merchants", PUBLIC_MERCHANTS_SNAPSHOT_KEY);
+    if (snapshot && isPublicMerchantsSnapshot(snapshot.value)) {
+      return hydrateGeneratedAt(snapshot);
+    }
+  }
+
   const rpcData = await listPublicMerchantsFromDatabase();
-  if (rpcData) return rpcData;
+  if (rpcData) {
+    if (!options.skipSnapshot && !rpcData.degraded) {
+      await writePublicApiSnapshot({
+        kind: "merchants",
+        key: PUBLIC_MERCHANTS_SNAPSHOT_KEY,
+        payload: rpcData,
+        generatedAt: rpcData.generatedAt,
+      });
+    }
+    return rpcData;
+  }
 
   const publicData = await readPublicOfferData();
   const productGroups = buildProductGroups(publicData.offers, publicData.products).map(toExplorerProductSummary);
+  const sources = publicData.sources || await listPublicSourcesForOffers(publicData.offers);
   const rows = buildPublicMerchantSummaries({
     offers: dedupePublicOffers(publicData.offers).filter((offer) => !offer.hidden),
     products: productGroups,
-    sources: [],
+    sources,
     generatedAt: publicData.generatedAt,
   });
-
-  return {
+  const value = {
     rows,
     total: rows.length,
     generatedAt: publicData.generatedAt,
     degraded: publicData.degraded,
     message: publicData.message,
   };
+
+  if (!options.skipSnapshot && !value.degraded) {
+    await writePublicApiSnapshot({
+      kind: "merchants",
+      key: PUBLIC_MERCHANTS_SNAPSHOT_KEY,
+      payload: value,
+      generatedAt: value.generatedAt,
+    });
+  }
+
+  return value;
 }
 
 async function loadPublicOffers(filters: OfferListFilters & { skipSnapshot?: boolean } = {}): Promise<PublicOffersResult> {
@@ -2680,6 +2779,44 @@ async function listPublicMerchantsFromDatabase(): Promise<PublicMerchantsResult 
   };
 }
 
+async function listPublicSourcesForOffers(offers?: RawOffer[]): Promise<Source[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+
+  const sourceIds = offers
+    ? Array.from(new Set(
+        offers
+          .map((offer) => offer.sourceId)
+          .filter((id): id is string => Boolean(id)),
+      ))
+    : [];
+
+  const rows: Record<string, unknown>[] = [];
+  const batches = sourceIds.length ? chunks(sourceIds, 100) : [[]];
+  for (const ids of batches) {
+    let query = supabase
+      .from("sources")
+      .select("id,name,base_url,entry_url,collection_method,collector_kind,enabled,notes,health_status,last_checked_at,last_success_at,consecutive_failures,last_error,updated_at")
+      .abortSignal(publicSupabaseReadSignal());
+
+    if (ids.length) {
+      query = query.in("id", ids);
+    } else {
+      query = query.eq("enabled", true);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn("Public source lookup failed:", error.message);
+      return rows.map(mapSource);
+    }
+
+    rows.push(...((data || []) as Record<string, unknown>[]));
+  }
+
+  return rows.map(mapSource);
+}
+
 function buildPublicMerchantSummaries({
   offers,
   products,
@@ -2712,6 +2849,13 @@ function buildPublicMerchantSummaries({
     const collectorGroup = merchantCollectorGroup(collectorKind);
     const timestamp = offerTimestamp(offer) || null;
     const available = isOfferAvailableForPublicList(offer);
+    const merchantEntryUrl = source?.entryUrl || offer.url;
+    const merchantShopUrl = inferMerchantShopUrl({
+      sourceId: offer.sourceId,
+      sourceName: offer.sourceName || source?.name,
+      entryUrl: merchantEntryUrl,
+      host: source ? sourceHost(source) : offerHost(offer.url),
+    });
 
     const current = existing || {
       summary: {
@@ -2720,7 +2864,8 @@ function buildPublicMerchantSummaries({
         name: sourceLabel(offer),
         storeName: offer.sourceStoreName || null,
         sourceName: offer.sourceName || source?.name || sourceLabel(offer),
-        entryUrl: source?.entryUrl || offer.url,
+        entryUrl: merchantEntryUrl,
+        shopUrl: merchantShopUrl,
         host: source ? sourceHost(source) : offerHost(offer.url),
         collectorKind,
         collectorGroup,
@@ -2801,6 +2946,12 @@ function mapPublicMerchantSummaryRow(row: PublicMerchantRow): PublicMerchantSumm
     storeName: row.store_name ? String(row.store_name) : null,
     sourceName: String(row.source_name || row.name || "未记录渠道"),
     entryUrl: String(row.entry_url || ""),
+    shopUrl: inferMerchantShopUrl({
+      sourceId: row.source_id ? String(row.source_id) : null,
+      sourceName: row.source_name ? String(row.source_name) : null,
+      entryUrl: row.shop_url ? String(row.shop_url) : row.entry_url ? String(row.entry_url) : null,
+      host: row.host ? String(row.host) : null,
+    }),
     host: row.host ? String(row.host) : null,
     collectorKind,
     collectorGroup,
@@ -3324,6 +3475,46 @@ function offerHost(value: string | null | undefined): string | null {
   } catch {
     return raw.replace(/^https?:\/\//, "").split("/")[0].replace(/^www\./, "") || null;
   }
+}
+
+function inferShopUrlFromOfferUrl(value: string | null | undefined): string | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    const path = url.pathname.replace(/\/+$/, "");
+    if (!path || path === "/") return url.origin;
+    if (/^\/shop\/[^/]+$/i.test(path)) return `${url.origin}${path}`;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function inferMerchantShopUrl({
+  sourceId,
+  sourceName,
+  entryUrl,
+  host,
+}: {
+  sourceId?: string | null;
+  sourceName?: string | null;
+  entryUrl?: string | null;
+  host?: string | null;
+}): string | null {
+  const explicit = inferShopUrlFromOfferUrl(entryUrl);
+  if (explicit) return explicit;
+
+  const parsedHost = offerHost(entryUrl) || host;
+  if (parsedHost !== "pay.ldxp.cn" && parsedHost !== "ldxp.cn") return null;
+
+  const idMatch = String(sourceId || "").match(/^ldxp-([^/]+)$/i);
+  const nameMatch = String(sourceName || "").match(/LDXP\s*\/\s*([^/\s]+)/i);
+  const token = (idMatch?.[1] || nameMatch?.[1] || "").trim();
+  if (!token || token === "cn") return null;
+
+  return `https://pay.ldxp.cn/shop/${encodeURIComponent(token)}`;
 }
 
 function dedupePublicOffers(offers: RawOffer[]): RawOffer[] {

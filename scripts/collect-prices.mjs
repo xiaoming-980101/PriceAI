@@ -750,6 +750,7 @@ async function collectShopApi(target, options = {}) {
               {
                 ...target,
                 sourceUrl,
+                sourceEntryUrl: sourceUrl,
                 sourceStoreName: storeName,
               },
               {
@@ -1809,6 +1810,7 @@ function crawlLogPayloadFor(target, offers, status, message, options = {}, detai
     sourceId: target.sourceId,
     sourceName: target.sourceName,
     sourceUrl: target.sourceUrl,
+    sourceEntryUrl: target.sourceEntryUrl,
     mode: "http",
     status,
     message,

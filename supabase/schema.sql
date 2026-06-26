@@ -828,6 +828,7 @@ returns table (
   store_name text,
   source_name text,
   entry_url text,
+  shop_url text,
   host text,
   collector_kind text,
   health_status text,
@@ -976,8 +977,20 @@ as $$
       coalesce(max(deduped.public_source_label), max(deduped.resolved_source_name), '未记录商家') as name,
       max(deduped.source_store_name) as store_name,
       coalesce(max(deduped.source_name), max(deduped.resolved_source_name), max(deduped.public_source_label), '未记录渠道') as source_name,
-      coalesce(max(deduped.entry_url), max(deduped.url)) as entry_url,
-      lower(regexp_replace((regexp_match(coalesce(max(deduped.entry_url), max(deduped.base_url), max(deduped.url), ''), '^https?://(?:www\.)?([^/?#]+)'))[1], '^www\.', '')) as host,
+      max(deduped.entry_url) as entry_url,
+      coalesce(
+        max(deduped.entry_url) filter (where deduped.entry_url ~ '/shop/'),
+        max(deduped.entry_url) filter (where deduped.entry_url !~ '/item/'),
+        'https://pay.ldxp.cn/shop/' || nullif(substring(
+          coalesce(
+            min(deduped.source_id) filter (where deduped.source_id ~* '^ldxp-[^/]+$' and deduped.source_id <> 'ldxp-cn'),
+            max(deduped.source_name) filter (where deduped.source_name ~* 'LDXP\s*/\s*[^/\s]+')
+          )
+          from '(?:^ldxp-|LDXP\s*/\s*)([^/\s]+)'
+        ), ''),
+        max(deduped.base_url)
+      ) as shop_url,
+      lower(regexp_replace((regexp_match(coalesce(max(deduped.entry_url), max(deduped.base_url), ''), '^https?://(?:www\.)?([^/?#]+)'))[1], '^www\.', '')) as host,
       max(deduped.collector_kind) as collector_kind,
       max(deduped.health_status) as health_status,
       max(deduped.last_success_at) as last_success_at,
@@ -1016,6 +1029,7 @@ as $$
     merchant_rows.store_name,
     merchant_rows.source_name,
     merchant_rows.entry_url,
+    merchant_rows.shop_url,
     merchant_rows.host,
     merchant_rows.collector_kind,
     merchant_rows.health_status,

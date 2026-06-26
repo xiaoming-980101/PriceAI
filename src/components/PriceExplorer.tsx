@@ -108,7 +108,7 @@ const productTypeLabels: Record<string, string> = {
 const OFFER_PAGE_SIZE = 80;
 const PRODUCT_SKELETON_ROWS = [0, 1, 2];
 const EXPLORER_CACHE_KEY = "priceai:explorer:v3";
-const MERCHANT_LIST_CACHE_KEY = "priceai:merchants:v1";
+const MERCHANT_LIST_CACHE_KEY = "priceai:merchants:v3";
 const EXPLORER_CACHE_TTL_MS = PRICE_DATA_CACHE_TTL_MS;
 const OFFER_LIST_CACHE_TTL_MS = PRICE_DATA_CACHE_TTL_MS;
 const MERCHANT_LIST_CACHE_TTL_MS = PRICE_DATA_CACHE_TTL_MS;
@@ -175,8 +175,10 @@ export function PriceExplorer({
   const [minPrice, setMinPrice] = useState(initialState.minPrice ?? "");
   const [maxPrice, setMaxPrice] = useState(initialState.maxPrice ?? "");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>(initialState.viewMode ?? "table");
-  const [scopeMode, setScopeMode] = useState<ScopeMode>(initialState.scopeMode ?? "products");
+  const initialScopeMode = initialState.scopeMode ?? "products";
+  const initialViewMode = initialState.viewMode ?? (initialScopeMode === "merchants" ? "cards" : "table");
+  const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
+  const [scopeMode, setScopeMode] = useState<ScopeMode>(initialScopeMode);
   const [merchantCollector, setMerchantCollector] = useState<MerchantCollectorFilter>(initialState.merchantCollector ?? "all");
   const [merchantSignal, setMerchantSignal] = useState<MerchantSignalFilter>(initialState.merchantSignal ?? "all");
   const [urlStateReady, setUrlStateReady] = useState(!restoreStateFromUrl);
@@ -214,8 +216,8 @@ export function PriceExplorer({
       setSort(nextState.sort ?? "available_price");
       setMinPrice(nextState.minPrice ?? "");
       setMaxPrice(nextState.maxPrice ?? "");
-      setViewMode(nextState.viewMode ?? "table");
       setScopeMode(nextState.scopeMode ?? "products");
+      setViewMode(nextState.viewMode ?? (nextState.scopeMode === "merchants" ? "cards" : "table"));
       setMerchantCollector(nextState.merchantCollector ?? "all");
       setMerchantSignal(nextState.merchantSignal ?? "all");
       readyFrameId = window.requestAnimationFrame(() => setUrlStateReady(true));
@@ -315,6 +317,9 @@ export function PriceExplorer({
     [effectiveQuery, maxPrice, merchantCollector, merchantResponse?.rows, merchantSignal, minPrice, platform, productType, sort, stock],
   );
   const title = buildTitle(platform, productType, scopeMode);
+  const searchPlaceholder = showingMerchants
+    ? "搜索店铺名或粘贴店铺链接"
+    : "搜索 ChatGPT、Gemini、邮箱";
   const activeFilterChips = buildActiveFilterChips({ productType, stock, minPrice, maxPrice, merchantCollector, merchantSignal, showingMerchants });
   const platformOffers = offerResponse?.rows ?? [];
   const resultCount = showingMerchants ? merchantRows.length : showingOffers ? offerResponse?.total ?? 0 : products.length;
@@ -447,6 +452,7 @@ export function PriceExplorer({
 
   function changeScope(nextScope: ScopeMode) {
     setScopeMode(nextScope);
+    setViewMode(nextScope === "merchants" ? "cards" : "table");
     trackAnalyticsEvent("scope_change", { scope: nextScope, platform });
   }
 
@@ -716,7 +722,7 @@ export function PriceExplorer({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索 ChatGPT、Gemini、邮箱"
+                placeholder={searchPlaceholder}
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#9aa2a3]"
               />
             </label>
@@ -813,7 +819,7 @@ export function PriceExplorer({
                 onClick={() => changeScope("merchants")}
               />
             </div>
-            {scopeMode === "products" ? (
+            {scopeMode === "products" || scopeMode === "merchants" ? (
               <div className="h-11 shrink-0 items-center rounded-full bg-[#edf0f1] p-1 md:inline-flex">
                 <ViewToggleButton
                   active={viewMode === "cards"}
@@ -962,7 +968,7 @@ export function PriceExplorer({
                   {merchantsError}。已保留当前商家数据，可稍后重试或切换筛选条件。
                 </div>
               ) : null}
-              <MerchantTable merchants={merchantRows} />
+              <MerchantView merchants={merchantRows} viewMode={viewMode} />
             </>
           ) : (
             <>
@@ -1314,90 +1320,106 @@ function PlatformOfferCard({
   );
 }
 
+function MerchantView({ merchants, viewMode }: { merchants: PublicMerchantSummary[]; viewMode: ViewMode }) {
+  if (viewMode === "table") {
+    return (
+      <>
+        <MerchantTable merchants={merchants} />
+        <div className="grid gap-3 md:hidden">
+          {merchants.map((merchant) => (
+            <MerchantCard key={merchant.id} merchant={merchant} />
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {merchants.map((merchant) => (
+        <MerchantCard key={merchant.id} merchant={merchant} />
+      ))}
+    </div>
+  );
+}
+
 function MerchantTable({ merchants }: { merchants: PublicMerchantSummary[] }) {
   return (
-    <>
-      <div className="hidden overflow-hidden rounded-lg bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15 md:block">
-        <div className="overflow-x-auto">
-          <table className="min-w-[1180px] w-full border-collapse text-left text-sm">
-            <colgroup>
-              <col className="w-[260px]" />
-              <col className="w-[120px]" />
-              <col className="w-[210px]" />
-              <col className="w-[170px]" />
-              <col className="w-[150px]" />
-              <col className="w-[150px]" />
-              <col className="w-[120px]" />
-              <col className="w-[120px]" />
-              <col className="w-[90px]" />
-            </colgroup>
-            <thead className="bg-[#f2f4f4] text-[0.68rem] font-semibold text-[#5a6061]">
-              <tr>
-                <TableHead>商家/店铺</TableHead>
-                <TableHead>采集来源</TableHead>
-                <TableHead>覆盖</TableHead>
-                <TableHead>库存</TableHead>
-                <TableHead>最低价命中</TableHead>
-                <TableHead>质保命中</TableHead>
-                <TableHead>售后信号</TableHead>
-                <TableHead>最近更新</TableHead>
-                <TableHead className="text-center">操作</TableHead>
+    <div className="hidden overflow-hidden rounded-lg bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15 md:block">
+      <div className="overflow-x-auto">
+        <table className="min-w-[1180px] w-full border-collapse text-left text-sm">
+          <colgroup>
+            <col className="w-[260px]" />
+            <col className="w-[120px]" />
+            <col className="w-[210px]" />
+            <col className="w-[170px]" />
+            <col className="w-[150px]" />
+            <col className="w-[150px]" />
+            <col className="w-[120px]" />
+            <col className="w-[120px]" />
+            <col className="w-[90px]" />
+          </colgroup>
+          <thead className="bg-[#f2f4f4] text-[0.68rem] font-semibold text-[#5a6061]">
+            <tr>
+              <TableHead>商家/店铺</TableHead>
+              <TableHead>采集来源</TableHead>
+              <TableHead>覆盖</TableHead>
+              <TableHead>库存</TableHead>
+              <TableHead>最低价命中</TableHead>
+              <TableHead>质保命中</TableHead>
+              <TableHead>观察标签</TableHead>
+              <TableHead>最近更新</TableHead>
+              <TableHead className="text-center">操作</TableHead>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#edf0f1]">
+            {merchants.map((merchant) => (
+              <tr key={merchant.id} className="transition hover:bg-[#f7f9f9]">
+                <td className="max-w-[260px] px-5 py-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] text-[#5a6061]">
+                      <Store size={18} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-[#202829]">{merchant.name}</span>
+                      <span className="mt-1 block truncate text-xs text-[#5a6061]">{merchant.host || merchant.sourceName}</span>
+                    </span>
+                  </div>
+                </td>
+                <td className="px-5 py-4">
+                  <CollectorBadge merchant={merchant} />
+                </td>
+                <td className="max-w-[210px] px-5 py-4">
+                  <p className="font-semibold text-[#202829]">{merchant.productCount} 个商品</p>
+                  <p className="mt-1 truncate text-xs text-[#5a6061]">{merchant.platforms.slice(0, 3).join(" / ") || "未记录平台"}</p>
+                </td>
+                <td className="px-5 py-4">
+                  <div className="flex flex-wrap gap-1.5">
+                    <CountBadge tone="good">有货 {merchant.inStockCount}</CountBadge>
+                    <CountBadge tone="danger">缺货 {merchant.outOfStockCount}</CountBadge>
+                  </div>
+                </td>
+                <td className="px-5 py-4">
+                  <MetricStack value={merchant.lowestHitCount} label="标准最低" />
+                </td>
+                <td className="px-5 py-4">
+                  <MetricStack value={merchant.warrantyLowestHitCount} label="质保最低" />
+                </td>
+                <td className="px-5 py-4">
+                  <MerchantSignalBadges merchant={merchant} />
+                </td>
+                <td className="px-5 py-4 text-[#5a6061]">
+                  <RelativeTime value={merchant.latestSeenAt} />
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <MerchantSourceLink merchant={merchant} />
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-[#edf0f1]">
-              {merchants.map((merchant) => (
-                <tr key={merchant.id} className="transition hover:bg-[#f7f9f9]">
-                  <td className="max-w-[260px] px-5 py-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] text-[#5a6061]">
-                        <Store size={18} />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate font-semibold text-[#202829]">{merchant.name}</span>
-                        <span className="mt-1 block truncate text-xs text-[#5a6061]">{merchant.host || merchant.sourceName}</span>
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <CollectorBadge merchant={merchant} />
-                  </td>
-                  <td className="max-w-[210px] px-5 py-4">
-                    <p className="font-semibold text-[#202829]">{merchant.productCount} 个商品</p>
-                    <p className="mt-1 truncate text-xs text-[#5a6061]">{merchant.platforms.slice(0, 3).join(" / ") || "未记录平台"}</p>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex flex-wrap gap-1.5">
-                      <CountBadge tone="good">有货 {merchant.inStockCount}</CountBadge>
-                      <CountBadge tone="danger">缺货 {merchant.outOfStockCount}</CountBadge>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <MetricStack value={merchant.lowestHitCount} label="标准最低" />
-                  </td>
-                  <td className="px-5 py-4">
-                    <MetricStack value={merchant.warrantyLowestHitCount} label="质保最低" />
-                  </td>
-                  <td className="px-5 py-4">
-                    <MerchantSignalBadges merchant={merchant} />
-                  </td>
-                  <td className="px-5 py-4 text-[#5a6061]">
-                    <RelativeTime value={merchant.latestSeenAt} />
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    <MerchantSourceLink merchant={merchant} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
-      <div className="grid gap-3 md:hidden">
-        {merchants.map((merchant) => (
-          <MerchantCard key={merchant.id} merchant={merchant} />
-        ))}
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -1405,28 +1427,47 @@ function MerchantCard({ merchant }: { merchant: PublicMerchantSummary }) {
   return (
     <article
       data-merchant-card="true"
-      className="rounded-lg bg-white p-4 shadow-[0_16px_45px_rgba(45,52,53,0.04)] ring-1 ring-[#adb3b4]/15"
+      className="flex min-h-[260px] flex-col rounded-lg bg-white p-5 shadow-[0_16px_45px_rgba(45,52,53,0.04)] ring-1 ring-[#adb3b4]/15"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-base font-semibold text-[#202829]">{merchant.name}</p>
-          <p className="mt-1 truncate text-xs text-[#5a6061]">{merchant.host || merchant.sourceName}</p>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#f2f4f4] text-[#5a6061] ring-1 ring-[#adb3b4]/15">
+            <Store size={19} />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold text-[#202829]">{merchant.name}</p>
+            <p className="mt-1 truncate text-xs text-[#5a6061]">{merchant.host || merchant.sourceName}</p>
+          </div>
         </div>
         <CollectorBadge merchant={merchant} />
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-        <MobileMerchantMetric label="商品" value={merchant.productCount} />
-        <MobileMerchantMetric label="有货" value={merchant.inStockCount} />
-        <MobileMerchantMetric label="最低价命中" value={merchant.lowestHitCount} />
-        <MobileMerchantMetric label="质保命中" value={merchant.warrantyLowestHitCount} />
-      </div>
+
+      <p className="mt-4 line-clamp-2 min-h-[48px] text-sm leading-6 text-[#5a6061]">
+        {merchantDescription(merchant)}
+      </p>
+
       <div className="mt-3 flex flex-wrap gap-1.5">
         <MerchantSignalBadges merchant={merchant} />
       </div>
-      <p className="mt-3 line-clamp-1 text-xs text-[#5a6061]">
-        {merchant.representativeProduct || "未记录代表商品"} · <RelativeTime value={merchant.latestSeenAt} />
-      </p>
-      <div className="mt-4">
+
+      <div className="mt-5 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        <MobileMerchantMetric label="商品" value={merchant.productCount} />
+        <MobileMerchantMetric label="有货" value={merchant.inStockCount} />
+        <MobileMerchantMetric label="低价" value={merchant.lowestHitCount} />
+        <MobileMerchantMetric label="质保" value={merchant.warrantyLowestHitCount} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {merchant.platforms.slice(0, 5).map((item) => (
+          <CountBadge key={item} tone="muted">{item}</CountBadge>
+        ))}
+      </div>
+
+      <div className="mt-auto flex items-end justify-between gap-3 pt-5">
+        <p className="min-w-0 text-xs leading-5 text-[#5a6061]">
+          <span className="block truncate">{merchant.representativeProduct || "未记录代表商品"}</span>
+          <span className="block">更新 <RelativeTime value={merchant.latestSeenAt} /></span>
+        </p>
         <MerchantSourceLink merchant={merchant} />
       </div>
     </article>
@@ -1438,19 +1479,47 @@ function CollectorBadge({ merchant }: { merchant: PublicMerchantSummary }) {
   return <CountBadge tone={tone}>{merchant.collectorLabel}</CountBadge>;
 }
 
+function merchantDescription(merchant: PublicMerchantSummary): string {
+  const platforms = merchant.platforms.slice(0, 3).join(" / ") || "未记录平台";
+  const stockText = merchant.inStockCount > 0
+    ? `当前观察到 ${merchant.inStockCount} 个有货报价`
+    : "当前未观察到有货报价";
+  const priceText = merchant.lowestHitCount || merchant.warrantyLowestHitCount
+    ? `，有 ${merchant.lowestHitCount} 次标准最低、${merchant.warrantyLowestHitCount} 次质保最低命中`
+    : "";
+
+  return `覆盖 ${platforms} 等 ${merchant.productCount} 个标准商品，${stockText}${priceText}。`;
+}
+
 function MerchantSignalBadges({ merchant }: { merchant: PublicMerchantSummary }) {
+  const observedDays = daysSince(merchant.observationStartedAt);
   return (
     <div className="flex flex-wrap gap-1.5 text-xs">
+      {observedDays !== null ? (
+        <CountBadge tone={observedDays >= 30 ? "info" : "muted"}>
+          {observedDays >= 30 ? "观察较久" : "新观察"}
+        </CountBadge>
+      ) : null}
       {merchant.hasPlatformAftersalesMechanism ? (
         <CountBadge tone="info">平台售后</CountBadge>
       ) : null}
+      {merchant.latestSeenAt ? (
+        <CountBadge tone="muted">近期更新</CountBadge>
+      ) : null}
       {merchant.riskFeedbackCount > 0 ? (
-        <CountBadge tone="warn">风险反馈 {merchant.riskFeedbackCount}</CountBadge>
+        <CountBadge tone="warn">待核验反馈 {merchant.riskFeedbackCount}</CountBadge>
       ) : (
-        <CountBadge tone="muted">暂无风险反馈</CountBadge>
+        <CountBadge tone="muted">暂无待核验</CountBadge>
       )}
     </div>
   );
+}
+
+function daysSince(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
 }
 
 function MetricStack({ value, label }: { value: number; label: string }) {
@@ -1472,17 +1541,40 @@ function MobileMerchantMetric({ label, value }: { label: string; value: number }
 }
 
 function MerchantSourceLink({ merchant }: { merchant: PublicMerchantSummary }) {
+  const href = merchant.shopUrl || merchant.entryUrl;
+  const usableHref = isMerchantShopUrl(href) ? href : null;
+
+  if (!usableHref) {
+    return (
+      <span className="inline-flex h-9 items-center justify-center rounded-full bg-[#e4e9ea] px-3 text-xs font-semibold text-[#5a6061]">
+        待补入口
+      </span>
+    );
+  }
+
   return (
     <a
-      href={merchant.entryUrl}
+      href={usableHref}
       target="_blank"
       rel="noreferrer"
       className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[#2d3435] px-3 text-xs font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526]"
     >
-      原站
+      进店
       <ChevronRight size={14} />
     </a>
   );
+}
+
+function isMerchantShopUrl(value: string | null | undefined): value is string {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  try {
+    const url = new URL(raw);
+    const path = url.pathname.replace(/\/+$/, "");
+    return !/\/item\//i.test(path);
+  } catch {
+    return false;
+  }
 }
 
 function OfferStatusBadge({ available }: { available: boolean }) {
@@ -2230,6 +2322,9 @@ function buildExplorerSearchParams({
 }
 
 function parseExplorerInitialState(params: URLSearchParams): ExplorerInitialState {
+  const scopeMode = pickParam(params.get("scope") || "", scopeOptions, "products");
+  const defaultViewMode: ViewMode = scopeMode === "merchants" ? "cards" : "table";
+
   return {
     query: params.get("q") || "",
     platform: pickParam(params.get("platform") || "", ["全部", ...visiblePlatformOptions], "全部"),
@@ -2238,8 +2333,8 @@ function parseExplorerInitialState(params: URLSearchParams): ExplorerInitialStat
     sort: pickParam(params.get("sort") || "", sortOptions, "available_price"),
     minPrice: numericParam(params.get("min") || ""),
     maxPrice: numericParam(params.get("max") || ""),
-    viewMode: pickParam(params.get("view") || "", viewOptions, "table"),
-    scopeMode: pickParam(params.get("scope") || "", scopeOptions, "products"),
+    viewMode: pickParam(params.get("view") || "", viewOptions, defaultViewMode),
+    scopeMode,
     merchantCollector: pickParam(params.get("collector") || "", merchantCollectorOptions, "all"),
     merchantSignal: pickParam(params.get("signal") || "", merchantSignalOptions, "all"),
   };
@@ -2314,7 +2409,7 @@ function filterAndSortMerchants(
     maxPrice: string;
   },
 ): PublicMerchantSummary[] {
-  const normalizedQuery = query.trim().toLowerCase();
+  const merchantQuery = parseMerchantQuery(query);
   const min = minPrice ? Number(minPrice) : null;
   const max = maxPrice ? Number(maxPrice) : null;
 
@@ -2325,6 +2420,8 @@ function filterAndSortMerchants(
         merchant.name,
         merchant.sourceName,
         merchant.host || "",
+        merchant.entryUrl,
+        merchant.shopUrl || "",
         merchant.collectorLabel,
         merchant.representativeProduct || "",
         merchant.representativeOfferTitle || "",
@@ -2332,7 +2429,7 @@ function filterAndSortMerchants(
         ...merchant.productTypes,
       ].join(" ").toLowerCase();
 
-      if (normalizedQuery && !haystack.includes(normalizedQuery)) return false;
+      if (!merchantMatchesQuery(merchant, merchantQuery, haystack)) return false;
       if (platform !== "全部" && !merchant.platforms.includes(platform)) return false;
       if (productType !== "全部" && !merchant.productTypes.includes(productType)) return false;
       if (stock === "available" && merchant.inStockCount === 0) return false;
@@ -2383,6 +2480,69 @@ function compareMerchantsBySort(a: PublicMerchantSummary, b: PublicMerchantSumma
   if (riskDelta !== 0) return riskDelta;
 
   return a.name.localeCompare(b.name, "zh-CN");
+}
+
+type MerchantSearchQuery = {
+  normalized: string;
+  isUrl: boolean;
+  terms: string[];
+};
+
+function parseMerchantQuery(query: string): MerchantSearchQuery {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return { normalized, isUrl: false, terms: [] };
+
+  try {
+    const url = new URL(normalized.includes("://") ? normalized : `https://${normalized}`);
+    const origin = url.origin.toLowerCase();
+    const path = url.pathname.replace(/\/+$/, "").toLowerCase();
+    const terms = new Set([
+      `${origin}${path}`,
+      path,
+    ]);
+    const shopMatch = url.pathname.match(/\/shop\/([^/?#]+)/i);
+    const itemMatch = url.pathname.match(/\/item\/([^/?#]+)/i);
+    if (shopMatch?.[1]) terms.add(shopMatch[1].toLowerCase());
+    if (itemMatch?.[1]) terms.add(itemMatch[1].toLowerCase());
+    return { normalized, isUrl: true, terms: Array.from(terms).filter(Boolean) };
+  } catch {
+    const terms = new Set([normalized]);
+    for (const part of normalized.split(/[\s/]+/)) {
+      if (part) terms.add(part);
+    }
+    return { normalized, isUrl: false, terms: Array.from(terms).filter(Boolean) };
+  }
+}
+
+function merchantMatchesQuery(merchant: PublicMerchantSummary, query: MerchantSearchQuery, haystack: string): boolean {
+  if (!query.normalized) return true;
+
+  if (!query.isUrl) {
+    return query.terms.some((term) => haystack.includes(term));
+  }
+
+  const urlTargets = [
+    merchant.entryUrl,
+    merchant.shopUrl || "",
+  ].flatMap(merchantUrlSearchValues);
+
+  return query.terms.some((term) => urlTargets.some((target) => target.includes(term)));
+}
+
+function merchantUrlSearchValues(value: string): string[] {
+  const raw = value.trim().toLowerCase();
+  if (!raw) return [];
+
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    const path = url.pathname.replace(/\/+$/, "").toLowerCase();
+    const values = new Set([`${url.origin.toLowerCase()}${path}`, path]);
+    const tokenMatch = path.match(/\/(?:shop|item)\/([^/?#]+)/i);
+    if (tokenMatch?.[1]) values.add(tokenMatch[1].toLowerCase());
+    return Array.from(values).filter(Boolean);
+  } catch {
+    return [raw];
+  }
 }
 
 function trackProductDetailOpen(product: Pick<CanonicalProduct, "id" | "platform" | "productType">) {

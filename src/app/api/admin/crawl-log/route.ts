@@ -36,6 +36,7 @@ const crawlLogPayloadSchema = z.object({
   sourceId: z.string().min(1).optional(),
   sourceName: z.string().min(1),
   sourceUrl: z.string().url(),
+  sourceEntryUrl: z.string().url().optional(),
   mode: z.enum(["browser", "http", "manual"]).default("browser"),
   status: z.enum(["success", "partial", "failed", "skipped"]).default("success"),
   message: z.string().optional(),
@@ -115,7 +116,7 @@ async function saveCrawlLogRun(
   const source = await upsertSource({
     id: payload.sourceId,
     name: payload.sourceName,
-    entryUrl: payload.sourceUrl,
+    entryUrl: payload.sourceEntryUrl || payload.sourceUrl,
     collectionMethod: payload.mode,
     collectorKind: collectorKindFromDetails(payload.details),
     notes: "由采集日志自动维护。",
