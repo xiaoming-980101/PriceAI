@@ -10,8 +10,8 @@ const fallbackHtmlMarkers = [
   "配置 Supabase",
   "01/01 08:00",
   "2026-01-01T00:00:00.000Z",
-  '"configured":false',
-  '\\"configured\\":false',
+  { pattern: '"configured":false', isAllowed: isSponsorSettingsDefaultMarker },
+  { pattern: '\\"configured\\":false', isAllowed: isSponsorSettingsDefaultMarker },
   '"offerTotal":10',
   '\\"offerTotal\\":10',
 ];
@@ -163,8 +163,10 @@ function validateText(text, expectations) {
   const failures = [];
 
   for (const marker of expectations.forbidden || []) {
-    if (text.includes(marker)) {
-      failures.push(`forbidden:${marker}`);
+    const pattern = typeof marker === "string" ? marker : marker.pattern;
+    const index = text.indexOf(pattern);
+    if (index >= 0 && !(typeof marker === "object" && marker.isAllowed?.(text, index))) {
+      failures.push(`forbidden:${pattern}`);
     }
   }
 
@@ -176,6 +178,21 @@ function validateText(text, expectations) {
   }
 
   return failures;
+}
+
+function isSponsorSettingsDefaultMarker(text, index) {
+  const before = text.slice(Math.max(0, index - 80), index);
+  const after = text.slice(index, index + 700);
+  const looksLikeSponsorSettings =
+    before.includes('"sponsorSettings":{') ||
+    before.includes('\\"sponsorSettings\\":{') ||
+    before.includes('"settings":{') ||
+    before.includes('\\"settings\\":{');
+
+  return looksLikeSponsorSettings &&
+    (after.includes('"tableReady":true') || after.includes('\\"tableReady\\":true')) &&
+    after.includes("赞助位配置尚未保存") &&
+    (after.includes('"placements":{') || after.includes('\\"placements\\":{'));
 }
 
 function validateJson(text, validator) {
