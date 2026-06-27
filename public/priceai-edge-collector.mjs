@@ -288,6 +288,7 @@ async function collectShopApi(target) {
 
     const storeName = cleanText(shopInfo.data.nickname || target.sourceStoreName || target.sourceName);
     const sourceUrl = shopInfo.data.link || `${target.baseUrl}/shop/${token}`;
+    const shopCreatedAt = timestampFromShopApiValue(shopInfo.data.create_time);
     const defaultChannelId = await getShopApiDefaultChannelId(target.baseUrl, token, sourceUrl);
     const categoriesPayload = await postJson(
       `${target.baseUrl}/shopApi/Shop/categoryList`,
@@ -344,6 +345,7 @@ async function collectShopApi(target) {
                 ...target,
                 sourceUrl,
                 sourceStoreName: storeName,
+                sourceShopCreatedAt: shopCreatedAt,
               },
               {
                 title,
@@ -472,10 +474,14 @@ function shouldIncludeFullSnapshot(status, offers, extraDetails = {}) {
 }
 
 function crawlRunPayload(target, status, message, offers, extraDetails = {}) {
+  const sourceShopCreatedAt =
+    target.sourceShopCreatedAt || offers.find((offer) => offer.sourceShopCreatedAt)?.sourceShopCreatedAt || null;
+
   return {
     sourceId: target.sourceId,
     sourceName: target.sourceName,
     sourceUrl: target.sourceUrl,
+    sourceShopCreatedAt,
     mode: "http",
     status,
     message,
@@ -690,6 +696,7 @@ function makeOffer(target, input) {
     sourceName: target.sourceName,
     sourceUrl: target.sourceUrl,
     sourceStoreName: target.sourceStoreName || target.sourceName,
+    sourceShopCreatedAt: target.sourceShopCreatedAt || null,
     sourceTitle: input.title,
     price: input.price,
     listedPrice: input.listedPrice ?? null,
@@ -987,6 +994,18 @@ function numberOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(String(value).replace(/[^\d.]/g, ""));
   return Number.isFinite(number) ? number : null;
+}
+
+function timestampFromShopApiValue(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+
+  const milliseconds = parsed > 10_000_000_000 ? parsed : parsed * 1000;
+  const date = new Date(milliseconds);
+  if (!Number.isFinite(date.getTime()) || date.getTime() > Date.now() + 86_400_000) return null;
+
+  return date.toISOString();
 }
 
 function compact(values) {
