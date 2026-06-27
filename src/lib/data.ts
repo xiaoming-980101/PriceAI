@@ -1083,7 +1083,7 @@ async function buildExplorerDataFromSource(): Promise<ExplorerData> {
   if (rpcData) return rpcData;
 
   const publicData = await readPublicOfferData();
-  const products = buildProductGroups(publicData.offers, publicData.products);
+  const products = buildProductGroups(dedupePublicOffers(publicData.offers), publicData.products);
 
   return {
     generatedAt: publicData.generatedAt,

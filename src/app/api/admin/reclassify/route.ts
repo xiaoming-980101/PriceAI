@@ -47,12 +47,14 @@ export async function POST(request: Request) {
       if (error) throw error;
     }
 
+    let scannedCount = 0;
     let updatedCount = 0;
     const distribution = new Map<string, number>();
 
     const groupedOfferIds = new Map<string, { canonicalProductId: string; categorySlug: string; ids: string[] }>();
 
     await forEachRawOfferPage(supabase, (rows) => {
+      scannedCount += rows.length;
       for (const row of rows) {
         const canonical = classifyOffer(String(row.source_title || ""), {
           tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
@@ -60,6 +62,9 @@ export async function POST(request: Request) {
           price: typeof row.price === "number" ? row.price : null,
         });
         distribution.set(canonical.id, (distribution.get(canonical.id) || 0) + 1);
+        if (String(row.canonical_product_id || "") === canonical.id && String(row.category_slug || "") === canonical.platform) {
+          continue;
+        }
         const key = `${canonical.id}\u0000${canonical.platform}`;
         const group = groupedOfferIds.get(key) || {
           canonicalProductId: canonical.id,
@@ -93,6 +98,7 @@ export async function POST(request: Request) {
     return Response.json({
       ok: true,
       productCount: canonicalCatalog.length,
+      scannedCount,
       updatedCount,
       inactiveProductCount: inactiveIds.length,
       snapshotRefreshQueued,
@@ -121,6 +127,7 @@ type ReclassifyOfferRow = {
   source_title: unknown;
   tags: unknown;
   category_slug: unknown;
+  canonical_product_id: unknown;
   price: unknown;
 };
 
@@ -133,7 +140,7 @@ async function forEachRawOfferPage(
     const to = from + pageSize - 1;
     const { data, error } = await supabase
       .from("raw_offers")
-      .select("id,source_title,tags,category_slug,price")
+      .select("id,source_title,tags,category_slug,canonical_product_id,price")
       .order("id", { ascending: true })
       .range(from, to);
 
