@@ -88,6 +88,7 @@ export async function POST(request: Request) {
         global: false,
         fullOnProductScopeLimitOnly: true,
         preferProductScope: true,
+        resetRefreshScope: true,
       });
     }
 

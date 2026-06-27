@@ -194,6 +194,7 @@ export type PublicApiSnapshotDirtyScope = {
   full?: boolean;
   fullOnProductScopeLimitOnly?: boolean;
   preferProductScope?: boolean;
+  resetRefreshScope?: boolean;
 };
 
 export type PublicApiSnapshotRefreshResult = {
@@ -332,16 +333,30 @@ export async function markPublicApiSnapshotsDirty(
     PUBLIC_API_SNAPSHOT_REFRESH_STATE_KEY,
   );
   const state = normalizePublicApiSnapshotRefreshState(current?.value);
-  const nextProductIds = mergePublicSnapshotIds(state.affectedProductIds, scope.productIds);
+  const resetRefreshScope = scope.resetRefreshScope === true;
+  const nextProductIds = mergePublicSnapshotIds(
+    resetRefreshScope ? [] : state.affectedProductIds,
+    scope.productIds,
+  );
   const preferProductScope = scope.preferProductScope === true && nextProductIds.length > 0;
-  const nextOfferIds = preferProductScope ? [] : mergePublicSnapshotIds(state.affectedOfferIds, scope.offerIds);
-  const nextSourceIds = preferProductScope ? [] : mergePublicSnapshotIds(state.affectedSourceIds, scope.sourceIds);
+  const nextOfferIds = preferProductScope
+    ? []
+    : mergePublicSnapshotIds(resetRefreshScope ? [] : state.affectedOfferIds, scope.offerIds);
+  const nextSourceIds = preferProductScope
+    ? []
+    : mergePublicSnapshotIds(resetRefreshScope ? [] : state.affectedSourceIds, scope.sourceIds);
   const reachedScopeLimit = publicApiSnapshotDirtyScopeReachedLimit({
     productIds: nextProductIds,
     offerIds: nextOfferIds,
     sourceIds: nextSourceIds,
     productScopeOnly: scope.fullOnProductScopeLimitOnly === true,
   });
+  const nextGlobalDirty = resetRefreshScope
+    ? scope.global !== false
+    : state.globalDirty || scope.global !== false;
+  const nextFullRefreshRequired = resetRefreshScope
+    ? Boolean(scope.full) || reachedScopeLimit
+    : state.fullRefreshRequired || Boolean(scope.full) || reachedScopeLimit;
 
   return writePublicApiSnapshot({
     kind: PUBLIC_API_SNAPSHOT_REFRESH_STATE_KIND,
@@ -352,8 +367,8 @@ export async function markPublicApiSnapshotsDirty(
       dirtyAt: now,
       reason,
       refreshIntervalSeconds: secondsFromMs(PUBLIC_API_SNAPSHOT_INCREMENTAL_REFRESH_MIN_INTERVAL_MS),
-      globalDirty: state.globalDirty || scope.global !== false,
-      fullRefreshRequired: state.fullRefreshRequired || Boolean(scope.full) || reachedScopeLimit,
+      globalDirty: nextGlobalDirty,
+      fullRefreshRequired: nextFullRefreshRequired,
       affectedProductIds: nextProductIds,
       affectedOfferIds: nextOfferIds,
       affectedSourceIds: nextSourceIds,
