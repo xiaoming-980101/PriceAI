@@ -237,5 +237,75 @@
         "keywords": ["claude", "opus", "4.8"]
       }
     ]
+  },
+  {
+    "profileId": "999555999-com-gpt-pro",
+    "stationId": "999555999-com",
+    "apiBaseUrl": "https://api.999555999.com/v1",
+    "apiKeyEnv": "API_TRANSIT_999555999_COM_GPT_PRO_KEY",
+    "protocol": "openai_compatible",
+    "enabled": true,
+    "groupName": "pro号池",
+    "groupId": "3",
+    "accountPool": "pro",
+    "targetLimit": 1,
+    "targetPriority": "latest_highest_available",
+    "targets": [
+      {
+        "family": "gpt",
+        "standardModel": "GPT 5.4",
+        "groupName": "pro号池",
+        "accountPool": "pro",
+        "candidates": ["gpt-5.4"],
+        "keywords": ["gpt", "5.4"]
+      },
+      {
+        "family": "gpt",
+        "standardModel": "GPT 5.5",
+        "groupName": "pro号池",
+        "accountPool": "pro",
+        "candidates": ["gpt-5.5"],
+        "keywords": ["gpt", "5.5"]
+      }
+    ]
+  },
+  {
+    "profileId": "999555999-com-cc-max",
+    "stationId": "999555999-com",
+    "apiBaseUrl": "https://api.999555999.com/v1",
+    "apiKeyEnv": "API_TRANSIT_999555999_COM_CC_MAX_KEY",
+    "protocol": "openai_compatible",
+    "enabled": true,
+    "groupName": "CC MAX官转",
+    "groupId": "6",
+    "accountPool": "max",
+    "targetLimit": 1,
+    "targetPriority": "latest_highest_available",
+    "targets": [
+      {
+        "family": "claude",
+        "standardModel": "Claude Opus 4.6",
+        "groupName": "CC MAX官转",
+        "accountPool": "max",
+        "candidates": ["claude-opus-4-6"],
+        "keywords": ["claude", "opus", "4.6"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Opus 4.7",
+        "groupName": "CC MAX官转",
+        "accountPool": "max",
+        "candidates": ["claude-opus-4-7"],
+        "keywords": ["claude", "opus", "4.7"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Opus 4.8",
+        "groupName": "CC MAX官转",
+        "accountPool": "max",
+        "candidates": ["claude-opus-4-8", "claude-opus4-8"],
+        "keywords": ["claude", "opus", "4.8"]
+      }
+    ]
   }
 ]
