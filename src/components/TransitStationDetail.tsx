@@ -1,12 +1,13 @@
 "use client";
 
 import type { MouseEvent, ReactNode } from "react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  ChevronDown,
   CheckCircle2,
   Clock,
   Copy,
@@ -355,16 +356,60 @@ export default function TransitStationDetail({ station, children }: Props) {
 }
 
 export function TransitStationPricingPanels({ station }: { station: TransitStation }) {
-  const families = getStationPriceFamilies(station);
+  const families = useMemo(() => getStationPriceFamilies(station), [station]);
+  const familyKey = families.join("|");
+
+  return (
+    <TransitStationPricingPanelList
+      key={`${station.id}:${familyKey}`}
+      station={station}
+      families={families}
+    />
+  );
+}
+
+function TransitStationPricingPanelList({
+  station,
+  families,
+}: {
+  station: TransitStation;
+  families: TransitModelFamily[];
+}) {
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<TransitModelFamily>>(
+    () => getDefaultExpandedFamilies(families),
+  );
+
+  const toggleFamily = useCallback((family: TransitModelFamily) => {
+    setExpandedFamilies((current) => {
+      const next = new Set(current);
+      if (next.has(family)) {
+        next.delete(family);
+      } else {
+        next.add(family);
+      }
+      return next;
+    });
+  }, []);
 
   return (
     <>
       {families.map((family) => (
-        <PriceTable key={family} station={station} family={family} />
+        <PriceTable
+          key={family}
+          station={station}
+          family={family}
+          expanded={expandedFamilies.has(family)}
+          onToggle={() => toggleFamily(family)}
+        />
       ))}
       <AvailabilityTable station={station} />
     </>
   );
+}
+
+function getDefaultExpandedFamilies(families: TransitModelFamily[]) {
+  const visibleCount = families.length > 3 ? 2 : families.length;
+  return new Set(families.slice(0, visibleCount));
 }
 
 export function TransitStationPricingSkeleton() {
@@ -831,71 +876,95 @@ function verificationDotClass(status: NonNullable<TransitStation["verificationEv
 function PriceTable({
   station,
   family,
+  expanded,
+  onToggle,
 }: {
   station: TransitStation;
   family: TransitModelFamily;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const groups = getFamilyPriceGroups(station, family);
   const summary = getFamilyRateSummary(station, family);
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const trend = buildFamilyTrend(groups);
+  const panelId = useId();
+  const titleId = useId();
 
   return (
     <section className="overflow-hidden rounded-lg border border-[#dfe4e5] bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)]">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#dfe4e5] bg-[#f2f4f4] px-4 py-3 sm:px-5">
-        <h2 className="text-base font-extrabold text-[#202829]">
-          {TRANSIT_MODEL_FAMILY_LABELS[family]} 价格表
-        </h2>
-        <span className="text-xs font-semibold text-[#5a6061]">
-          最低综合倍率 {formatRate(summary.combinedRateMin)}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#dfe4e5] bg-[#f2f4f4] px-4 py-3 sm:px-5">
+        <div className="min-w-0">
+          <h2 id={titleId} className="text-base font-extrabold text-[#202829]">
+            {TRANSIT_MODEL_FAMILY_LABELS[family]} 价格表
+          </h2>
+          <p className="mt-0.5 text-xs font-semibold text-[#5a6061]">
+            {summary.priceCount} 条报价 · {groups.length} 个分组
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          aria-label={`${expanded ? "收起" : "展开"} ${TRANSIT_MODEL_FAMILY_LABELS[family]} 价格表`}
+          className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#dfe4e5] bg-white px-3 py-2 text-xs font-extrabold text-[#2d3435] shadow-sm transition-colors hover:bg-[#edf4f1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2f7a4b]"
+        >
+          <span className="hidden sm:inline">最低综合倍率</span>
+          <span>{formatRate(summary.combinedRateMin)}</span>
+          <span className="h-3.5 w-px bg-[#dfe4e5]" aria-hidden="true" />
+          <span>{expanded ? "收起" : "展开"}</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
+        </button>
       </div>
-      {groups.length ? (
-        <>
-          <MultiplierTrendPanel family={family} groups={groups} trend={trend} />
-          {isDesktop === false ? (
-            <div className="divide-y divide-[#dfe4e5]">
-              {groups.map((group) => (
-                <PriceGroupMobileCard
-                  key={`${family}-${group.groupName}`}
-                  station={station}
-                  group={group}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] table-fixed border-collapse">
-                <colgroup>
-                  <col className="w-[30%]" />
-                  <col className="w-[14%]" />
-                  <col className="w-[28%]" />
-                  <col className="w-[28%]" />
-                </colgroup>
-                <thead>
-                  <tr className="bg-[#f2f4f4]/50">
-                    <DataTableHead compact>分组 / 模型</DataTableHead>
-                    <DataTableHead compact>综合倍率</DataTableHead>
-                    <DataTableHead compact>监测模型价格</DataTableHead>
-                    <DataTableHead compact>监测 / 确认</DataTableHead>
-                  </tr>
-                </thead>
-                <tbody>
+      <div id={panelId}>
+        {expanded && groups.length ? (
+          <>
+            <MultiplierTrendPanel family={family} groups={groups} trend={trend} />
+            {isDesktop === false ? (
+              <div className="divide-y divide-[#dfe4e5]">
                 {groups.map((group) => (
-                  <PriceGroupRow
+                  <PriceGroupMobileCard
                     key={`${family}-${group.groupName}`}
                     station={station}
                     group={group}
                   />
                 ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="px-4 py-8 text-sm text-[#5a6061] sm:px-5">这个站点暂未收录 {TRANSIT_MODEL_FAMILY_LABELS[family]} 报价。</div>
-      )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] table-fixed border-collapse">
+                  <colgroup>
+                    <col className="w-[30%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[28%]" />
+                    <col className="w-[28%]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-[#f2f4f4]/50">
+                      <DataTableHead compact>分组 / 模型</DataTableHead>
+                      <DataTableHead compact>综合倍率</DataTableHead>
+                      <DataTableHead compact>监测模型价格</DataTableHead>
+                      <DataTableHead compact>监测 / 确认</DataTableHead>
+                    </tr>
+                  </thead>
+                  <tbody>
+                  {groups.map((group) => (
+                    <PriceGroupRow
+                      key={`${family}-${group.groupName}`}
+                      station={station}
+                      group={group}
+                    />
+                  ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : expanded ? (
+          <div className="px-4 py-8 text-sm text-[#5a6061] sm:px-5">这个站点暂未收录 {TRANSIT_MODEL_FAMILY_LABELS[family]} 报价。</div>
+        ) : null}
+      </div>
     </section>
   );
 }

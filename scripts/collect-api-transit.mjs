@@ -1132,12 +1132,13 @@ async function postRows(rows, options) {
   const staleOfferIds = findStaleRefreshedOfferIds(existingOffers, refreshedOfferKeys);
 
   await upsertRows(supabase, "api_transit_stations", stations, { onConflict: "id" });
-  await upsertRows(supabase, "api_transit_offers", offers, { onConflict: "station_id,standard_model,group_name" });
+  const offerWriteResult = await upsertOfferRows(supabase, offers);
   await deactivateOffersById(supabase, staleOfferIds);
   await upsertRows(supabase, "api_transit_detection_runs", rows.runs, { onConflict: "id" });
 
   return {
     ...plan,
+    compatibility: offerWriteResult.compatibility,
     deactivatedOffers: staleOfferIds.length,
     skipped: false,
     message: postRowsMessage(options, refreshedOfferKeys, autoPublishStationIds),
@@ -1194,6 +1195,22 @@ async function deactivateOffersById(supabase, offerIds) {
       error.table = "api_transit_offers";
       throw error;
     }
+  }
+}
+
+async function upsertOfferRows(supabase, offers) {
+  try {
+    await upsertRows(supabase, "api_transit_offers", offers, { onConflict: "station_id,standard_model,group_name" });
+    return { compatibility: null };
+  } catch (error) {
+    if (!isMissingColumnError(error, "image_output_price")) throw error;
+    const compatibleOffers = offers.map((offer) => {
+      const compatibleOffer = { ...offer };
+      delete compatibleOffer.image_output_price;
+      return compatibleOffer;
+    });
+    await upsertRows(supabase, "api_transit_offers", compatibleOffers, { onConflict: "station_id,standard_model,group_name" });
+    return { compatibility: "api_transit_offers.image_output_price column missing; wrote offers without image output split." };
   }
 }
 
@@ -1372,9 +1389,13 @@ async function readPublishedApiTransitStationIdsWithoutRemovedFilter(supabase) {
 }
 
 function isMissingRemovedAtColumnError(error) {
+  return isMissingColumnError(error, "removed_at");
+}
+
+function isMissingColumnError(error, columnName) {
   const code = String(error?.code || "");
   const message = String(error?.message || error?.details || "");
-  return (code === "42703" || code === "PGRST204") && message.includes("removed_at");
+  return (code === "42703" || code === "PGRST204") && message.includes(columnName);
 }
 
 function compactSnapshot(payload) {
