@@ -18,7 +18,7 @@ import {
 import { TransitAvailabilityStrip } from "@/components/TransitAvailabilityStrip";
 import { TransitStationSystemIcon } from "@/components/TransitStationSystemIcon";
 import { TransitViewTabs } from "@/components/TransitViewTabs";
-import { formatDateDay, formatDateMinute, formatDateShortMinute } from "@/lib/utils";
+import { formatDateMinute, formatDateShortMinute } from "@/lib/utils";
 import type {
   TransitAccountPool,
   TransitChannelType,
@@ -41,7 +41,6 @@ import {
   getPrimaryTransitCommercialOffer,
   getStationComparisonSummary,
   getStationRechargeCoefficient,
-  getSummaryStats,
   getTransitReviewTags,
   getTransitStationSystemLabel,
   parseRechargeRatio,
@@ -158,15 +157,6 @@ export default function TransitStationExplorer({ stations }: Props) {
     return compareStations(result, sortBy);
   }, [channelFilter, familyFilter, poolFilter, search, sortBy, stations]);
 
-  const stats = useMemo(() => getSummaryStats(stations), [stations]);
-  const latestUpdatedAt = useMemo(() => {
-    const latest = stations
-      .map((station) => station.lastUpdatedAt)
-      .filter(Boolean)
-      .sort()
-      .at(-1) ?? null;
-    return formatDateDay(latest);
-  }, [stations]);
   const activeFilterCount =
     [channelFilter, poolFilter].filter((value) => value !== "all").length +
     (search ? 1 : 0) +
@@ -189,7 +179,7 @@ export default function TransitStationExplorer({ stations }: Props) {
 
   return (
     <div>
-      <div className="mb-5 space-y-3 rounded-lg bg-[#f2f4f4] p-3 shadow-[0_18px_50px_rgba(45,52,53,0.04)] ring-1 ring-[#adb3b4]/10">
+      <div className="mb-5 space-y-2">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
           <SearchField
             value={search}
@@ -230,16 +220,8 @@ export default function TransitStationExplorer({ stations }: Props) {
             <TransitAffPreferenceToggle />
           </div>
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#5a6061]">
-          <span>真实站点 {stats.total}</span>
-          <span>Claude 最低 {formatRate(stats.bestClaude)}</span>
-          <span>GPT 最低 {formatRate(stats.bestGpt)}</span>
-          <span>样本 {stats.sevenDaySamples}</span>
-          <span>最近更新 {latestUpdatedAt}</span>
-        </div>
-
         {showFilters ? (
-          <div className="mt-3 hidden grid-cols-1 gap-3 border-t border-[#dfe4e5] pt-3 md:grid md:grid-cols-2">
+          <div className="mt-3 hidden grid-cols-1 gap-3 rounded-lg bg-[#f2f4f4] p-3 ring-1 ring-[#adb3b4]/10 md:grid md:grid-cols-2">
             <SelectFilter
               label="渠道类型"
               value={channelFilter}

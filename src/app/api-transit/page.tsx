@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { getTransitStations } from "@/lib/api-transit-db";
 import { getTransitModelFamilyOptions } from "@/lib/api-transit";
+import { formatRate, getSummaryStats } from "@/lib/api-transit";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TransitFamilyTabs } from "@/components/TransitFamilyTabs";
 import TransitStationExplorer from "@/components/TransitStationExplorer";
@@ -10,6 +11,7 @@ import { TransitSubmissionActions } from "@/components/TransitSubmissionDialog";
 import { JsonLd } from "@/components/JsonLd";
 import { SponsoredPlacementPreview } from "@/components/SponsoredPlacementPreview";
 import { getSponsorSettingsSummary } from "@/lib/sponsor-settings";
+import { formatDateDay } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "API 中转站价格榜",
@@ -31,6 +33,14 @@ export default async function ApiTransitPage() {
     getSponsorSettingsSummary().catch(() => null),
   ]);
   const familyOptions = getTransitModelFamilyOptions(stations);
+  const stats = getSummaryStats(stations);
+  const latestUpdatedAt = formatDateDay(
+    stations
+      .map((station) => station.lastUpdatedAt)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? null,
+  );
 
   return (
     <div className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
@@ -65,18 +75,29 @@ export default async function ApiTransitPage() {
             <h1 className="min-w-0 font-serif text-2xl font-semibold tracking-normal text-[#202829] md:text-4xl">
               API 中转站价格榜
             </h1>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[0.72rem] font-medium text-[#5a6061] md:gap-3">
+              <span>最近更新：{latestUpdatedAt}</span>
+              <span className="h-1 w-1 rounded-full bg-[#adb3b4]" />
+              <span>样本 {stats.sevenDaySamples}</span>
+              <span className="hidden h-1 w-1 rounded-full bg-[#adb3b4] md:inline-block" />
+              <span className="hidden md:inline">Claude 最低 {formatRate(stats.bestClaude)}</span>
+              <span className="hidden h-1 w-1 rounded-full bg-[#adb3b4] lg:inline-block" />
+              <span className="hidden lg:inline">GPT 最低 {formatRate(stats.bestGpt)}</span>
+            </div>
             <p className="mt-2.5 max-w-[860px] text-sm leading-[1.8] text-[#5a6061]">
               先把 Claude / GPT 中转站的价格和稳定性比清楚。这里展示充值系数、模型倍率、综合倍率、近 7 日可用性和来源渠道；不售卖 API，不替商家担保。
               没有完成审核发布的数据不会出现在榜单里，使用前仍建议小额试用并回原站核验。
             </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
             <Link
               href="/guides/api-transit"
-              className="mt-2.5 inline-flex text-sm font-semibold text-[#2f7a4b] underline-offset-4 transition hover:text-[#24633c] hover:underline"
+              className="inline-flex h-11 items-center justify-center rounded-full bg-white px-4 text-sm font-semibold text-[#2d3435] shadow-[0_12px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/15 transition hover:bg-[#f5f7f7] hover:text-[#202829]"
             >
-              查看中转站百科
+              中转站百科
             </Link>
+            <TransitSubmissionActions />
           </div>
-          <TransitSubmissionActions className="shrink-0 lg:justify-end" />
         </div>
 
         <SponsoredPlacementPreview kind="apiTransit" settings={sponsorSettings} className="mb-5" />

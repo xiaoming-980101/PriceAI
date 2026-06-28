@@ -18,7 +18,6 @@ import type { TransitModelFamily, TransitStation } from "@/data/api-transit/type
 import {
   TRANSIT_ACCOUNT_POOL_LABELS,
   TRANSIT_CHANNEL_TYPE_LABELS,
-  TRANSIT_MODEL_FAMILY_LABELS,
   TRANSIT_RISK_LABELS,
   TRANSIT_USAGE_ADVICE_LABELS,
 } from "@/data/api-transit/types";
@@ -78,17 +77,9 @@ export default function TransitModelExplorer({ stations }: Props) {
     );
   }, [family, query, stations]);
 
-  const allSummaries = useMemo(() => getTransitModelSummaries(stations, "all"), [stations]);
-  const bestRate =
-    modelSummaries
-      .map((summary) => summary.bestCombinedRate)
-      .filter((rate): rate is number => rate !== null)
-      .sort((a, b) => a - b)[0] ?? null;
-  const sampleCount = modelSummaries.reduce((total, summary) => total + summary.sampleCount, 0);
-
   return (
     <div>
-      <div className="mb-5 space-y-3 rounded-lg bg-[#f2f4f4] p-3 shadow-[0_18px_50px_rgba(45,52,53,0.04)] ring-1 ring-[#adb3b4]/10">
+      <div className="mb-5 space-y-2">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
           <SearchField
             value={query}
@@ -97,13 +88,6 @@ export default function TransitModelExplorer({ stations }: Props) {
             className="flex-1 xl:max-w-[440px]"
           />
           <TransitViewTabs active="models" className="shrink-0" />
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#5a6061]">
-          <span>真实站点 {stations.length}</span>
-          <span>标准模型 {allSummaries.length}</span>
-          <span>当前 {family === "all" ? "全部" : TRANSIT_MODEL_FAMILY_LABELS[family]}</span>
-          <span>最低综合倍率 {formatRate(bestRate)}</span>
-          <span>样本 {sampleCount}</span>
         </div>
       </div>
 

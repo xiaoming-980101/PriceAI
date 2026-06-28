@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { getTransitStations } from "@/lib/api-transit-db";
-import { getTransitModelFamilyOptions } from "@/lib/api-transit";
+import { formatRate, getTransitModelFamilyOptions, getTransitModelSummaries } from "@/lib/api-transit";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TransitFamilyTabs } from "@/components/TransitFamilyTabs";
 import TransitModelExplorer from "@/components/TransitModelExplorer";
@@ -30,6 +30,13 @@ export default async function ApiTransitModelsPage() {
     getSponsorSettingsSummary().catch(() => null),
   ]);
   const familyOptions = getTransitModelFamilyOptions(stations);
+  const modelSummaries = getTransitModelSummaries(stations, "all");
+  const bestRate =
+    modelSummaries
+      .map((summary) => summary.bestCombinedRate)
+      .filter((rate): rate is number => rate !== null)
+      .sort((a, b) => a - b)[0] ?? null;
+  const sampleCount = modelSummaries.reduce((total, summary) => total + summary.sampleCount, 0);
 
   return (
     <div className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
@@ -56,6 +63,13 @@ export default async function ApiTransitModelsPage() {
           <h1 className="min-w-0 font-serif text-2xl font-semibold tracking-normal text-[#202829] md:text-4xl">
             中转 API 模型对比
           </h1>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[0.72rem] font-medium text-[#5a6061] md:gap-3">
+            <span>标准模型 {modelSummaries.length}</span>
+            <span className="h-1 w-1 rounded-full bg-[#adb3b4]" />
+            <span>样本 {sampleCount}</span>
+            <span className="hidden h-1 w-1 rounded-full bg-[#adb3b4] md:inline-block" />
+            <span className="hidden md:inline">最低综合倍率 {formatRate(bestRate)}</span>
+          </div>
           <p className="mt-2.5 max-w-[860px] text-sm leading-[1.8] text-[#5a6061]">
             按 Claude / GPT 标准模型横向对比各中转站的充值系数、模型倍率、综合倍率和近 7 日稳定性。站点榜仍是主入口，模型页用于快速查某个模型在哪些站点更便宜。
           </p>
