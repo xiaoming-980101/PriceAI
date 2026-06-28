@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ALLOWED_RETURN_KEYS } from "@/lib/api-transit";
-import { getTransitStations, getTransitStationBySlug } from "@/lib/api-transit-db";
-import { sanitizeListReturnHref } from "@/lib/list-return";
+import { Suspense } from "react";
+import { getTransitStationDetailData, getTransitStations, getTransitStationBySlug } from "@/lib/api-transit-db";
 import { SiteHeader } from "@/components/SiteHeader";
-import TransitStationDetail from "@/components/TransitStationDetail";
+import TransitStationDetail, {
+  TransitStationPricingPanels,
+  TransitStationPricingSkeleton,
+} from "@/components/TransitStationDetail";
 import { JsonLd } from "@/components/JsonLd";
+import type { TransitStation } from "@/data/api-transit/types";
 
 export const revalidate = 300;
 export const dynamicParams = true;
@@ -37,22 +40,13 @@ export async function generateMetadata({
 
 export default async function ApiTransitDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ back?: string }>;
 }) {
   const { slug } = await params;
-  const { back } = await searchParams;
-  const station = await getTransitStationBySlug(slug, { includeHistory: true });
+  const station = await getTransitStationBySlug(slug);
 
   if (!station) notFound();
-
-  const backHref = sanitizeListReturnHref(
-    "/api-transit",
-    back,
-    ALLOWED_RETURN_KEYS as unknown as readonly string[]
-  );
 
   return (
     <div className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
@@ -78,8 +72,17 @@ export default async function ApiTransitDetailPage({
       </div>
 
       <main className="mx-auto max-w-[1500px] px-4 py-6 pb-20 sm:px-5 sm:py-7">
-        <TransitStationDetail station={station} backHref={backHref} />
+        <TransitStationDetail station={station}>
+          <Suspense fallback={<TransitStationPricingSkeleton />}>
+            <TransitStationPricingData station={station} />
+          </Suspense>
+        </TransitStationDetail>
       </main>
     </div>
   );
+}
+
+async function TransitStationPricingData({ station }: { station: TransitStation }) {
+  const detailedStation = await getTransitStationDetailData(station);
+  return <TransitStationPricingPanels station={detailedStation} />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import type { MouseEvent } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
@@ -44,6 +44,7 @@ import {
   TRANSIT_VERIFICATION_EVENT_SOURCE_LABELS,
 } from "@/data/api-transit/types";
 import {
+  ALLOWED_RETURN_KEYS,
   getActiveTransitCommercialOffers,
   formatAvailability,
   formatPercent,
@@ -61,10 +62,11 @@ import {
   getTransitStationSystemLabel,
   getUsageAdviceBadgeClass,
 } from "@/lib/api-transit";
+import { sanitizeListReturnHref } from "@/lib/list-return";
 
 interface Props {
   station: TransitStation;
-  backHref: string;
+  children?: ReactNode;
 }
 
 type TransitPriceGroup = {
@@ -100,7 +102,7 @@ const TRANSIT_RISK_CONFIRMATION_STORAGE_PREFIX = "priceai.apiTransit.riskConfirm
 const TRANSIT_RISK_WARNING_TEXT =
   "中转站存在跑路、余额损失、价格变动和渠道不可控风险。首次使用建议小额充值，勿囤积余额，充值前请回原站核验价格与规则。PriceAI 不售卖 API，也不替任何商家担保。";
 
-export default function TransitStationDetail({ station, backHref }: Props) {
+export default function TransitStationDetail({ station, children }: Props) {
   const router = useRouter();
   const [affEnabled] = useTransitAffPreference();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -116,12 +118,19 @@ export default function TransitStationDetail({ station, backHref }: Props) {
   const hasAffLink = affEnabled && station.commercialRelation === "affiliate" && Boolean(primaryOffer?.url);
 
   const handleBack = useCallback(() => {
-    if (backHref.includes("?")) {
-      router.push(backHref);
-    } else {
-      router.back();
+    const back = typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("back");
+    if (back) {
+      router.push(sanitizeListReturnHref(
+        "/api-transit",
+        back,
+        ALLOWED_RETURN_KEYS as unknown as readonly string[]
+      ));
+      return;
     }
-  }, [backHref, router]);
+    router.back();
+  }, [router]);
 
   const copyOfferCode = useCallback(async (offerId: string, code: string) => {
     try {
@@ -263,9 +272,7 @@ export default function TransitStationDetail({ station, backHref }: Props) {
 
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
-          <PriceTable station={station} family="claude" />
-          <PriceTable station={station} family="gpt" />
-          <AvailabilityTable station={station} />
+          {children ?? <TransitStationPricingPanels station={station} />}
         </div>
 
         <aside className="space-y-5">
@@ -334,6 +341,42 @@ export default function TransitStationDetail({ station, backHref }: Props) {
         />
       ) : null}
       <TransitRiskTicker />
+    </div>
+  );
+}
+
+export function TransitStationPricingPanels({ station }: { station: TransitStation }) {
+  return (
+    <>
+      <PriceTable station={station} family="claude" />
+      <PriceTable station={station} family="gpt" />
+      <AvailabilityTable station={station} />
+    </>
+  );
+}
+
+export function TransitStationPricingSkeleton() {
+  return (
+    <div className="space-y-5" aria-label="正在加载价格和监测历史" aria-busy="true">
+      {["Claude 价格表", "GPT 价格表", "监测样本"].map((title) => (
+        <section
+          key={title}
+          className="overflow-hidden rounded-lg border border-[#dfe4e5] bg-white shadow-[0_20px_55px_rgba(45,52,53,0.045)]"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-[#dfe4e5] bg-[#f2f4f4] px-4 py-3 sm:px-5">
+            <div className="text-base font-extrabold text-[#202829]">{title}</div>
+            <div className="h-5 w-24 rounded-full bg-[#dde4e5]" />
+          </div>
+          <div className="space-y-3 px-4 py-4 sm:px-5">
+            <div className="h-[96px] rounded-lg border border-dashed border-[#cfd8d9] bg-[#f7f9f9]" />
+            <div className="grid gap-2 md:grid-cols-4">
+              {[0, 1, 2, 3].map((item) => (
+                <div key={item} className="h-16 rounded-md bg-[#f2f4f4]" />
+              ))}
+            </div>
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { getSupabaseServerClient } from "@/lib/supabase";
 
 let cached: TransitStation[] | null = null;
 let cachedAt = 0;
+const cachedBySlug = new Map<string, { station: TransitStation; cachedAt: number }>();
 let hasWarnedMissingEnhancementColumns = false;
 let hasWarnedMissingHistoryTable = false;
 const CACHE_TTL_MS = 30_000;
@@ -19,10 +20,82 @@ const PUBLIC_TRANSIT_BUILD_READ_TIMEOUT_MS = 15_000;
 const NEXT_PRODUCTION_BUILD_PHASE = "phase-production-build";
 const TRANSIT_HISTORY_DAYS = 45;
 const TRANSIT_HISTORY_STATION_LIMIT = 320;
+const STATION_CORE_COLUMNS = [
+  "id",
+  "slug",
+  "name",
+  "website_url",
+  "status",
+  "source_type",
+  "commercial_relation",
+  "summary",
+  "collector_kind",
+  "channel_types",
+  "account_pools",
+  "payment_methods",
+  "minimum_top_up",
+  "balance_expiry",
+  "support_channels",
+  "refund_policy",
+  "risk_labels",
+  "usage_advice",
+  "data_status",
+  "availability_seven_day_rate",
+  "availability_seven_day_samples",
+  "availability_last_checked_at",
+  "availability_note",
+  "feedback_pending_count",
+  "feedback_verified_risk_count",
+  "feedback_merchant_responded_count",
+  "feedback_main_themes",
+  "feedback_public_notes",
+  "last_updated_at",
+  "updated_at",
+].join(",");
+const STATION_ENHANCEMENT_COLUMNS = [
+  "id",
+  "logo_url",
+  "monitor_url",
+  "strengths",
+  "cautions",
+  "commercial_offers",
+  "verification_events",
+].join(",");
+const STATION_ENHANCEMENT_COLUMNS_WITHOUT_LOGO = [
+  "id",
+  "monitor_url",
+  "strengths",
+  "cautions",
+  "commercial_offers",
+  "verification_events",
+].join(",");
+const OFFER_COLUMNS = [
+  "id",
+  "station_id",
+  "family",
+  "standard_model",
+  "group_name",
+  "recharge_ratio",
+  "model_multiplier",
+  "input_price",
+  "output_price",
+  "cache_read_price",
+  "cache_write_price",
+  "currency",
+  "account_pool",
+  "channel_type",
+  "price_source",
+  "last_verified_at",
+  "availability_seven_day_rate",
+  "availability_seven_day_samples",
+  "availability_last_checked_at",
+  "availability_note",
+].join(",");
 
 export function clearTransitStationsCache(): void {
   cached = null;
   cachedAt = 0;
+  cachedBySlug.clear();
 }
 
 export async function getTransitStations(): Promise<TransitStation[]> {
@@ -31,6 +104,10 @@ export async function getTransitStations(): Promise<TransitStation[]> {
 
   cached = await readStationsFromSupabase();
   cachedAt = now;
+  cachedBySlug.clear();
+  for (const station of cached) {
+    cachedBySlug.set(station.slug, { station, cachedAt });
+  }
   return cached;
 }
 
@@ -38,10 +115,23 @@ export async function getTransitStationBySlug(
   slug: string,
   options: { includeHistory?: boolean } = {}
 ): Promise<TransitStation | undefined> {
-  const stations = await getTransitStations();
-  const station = stations.find((item) => item.slug === slug);
+  const station = getCachedStationBySlug(slug) ?? await readStationFromSupabaseBySlug(slug);
   if (!station || !options.includeHistory) return station;
+  return getTransitStationDetailData(station);
+}
+
+export async function getTransitStationDetailData(station: TransitStation): Promise<TransitStation> {
   return enrichStationWithDetailData(station);
+}
+
+function getCachedStationBySlug(slug: string): TransitStation | undefined {
+  const now = Date.now();
+  if (cached && now - cachedAt < CACHE_TTL_MS) {
+    return cached.find((item) => item.slug === slug);
+  }
+  const entry = cachedBySlug.get(slug);
+  if (!entry || now - entry.cachedAt >= CACHE_TTL_MS) return undefined;
+  return entry.station;
 }
 
 async function readStationsFromSupabase(): Promise<TransitStation[]> {
@@ -54,69 +144,13 @@ async function readStationsFromSupabase(): Promise<TransitStation[]> {
     const [stationsResult, offersResult] = await Promise.all([
       supabase
         .from("api_transit_stations")
-        .select(
-          [
-            "id",
-            "slug",
-            "name",
-            "website_url",
-            "status",
-            "source_type",
-            "commercial_relation",
-            "summary",
-            "collector_kind",
-            "channel_types",
-            "account_pools",
-            "payment_methods",
-            "minimum_top_up",
-            "balance_expiry",
-            "support_channels",
-            "refund_policy",
-            "risk_labels",
-            "usage_advice",
-            "data_status",
-            "availability_seven_day_rate",
-            "availability_seven_day_samples",
-            "availability_last_checked_at",
-            "availability_note",
-            "feedback_pending_count",
-            "feedback_verified_risk_count",
-            "feedback_merchant_responded_count",
-            "feedback_main_themes",
-            "feedback_public_notes",
-            "last_updated_at",
-            "updated_at",
-          ].join(",")
-        )
+        .select(STATION_CORE_COLUMNS)
         .eq("published", true)
         .order("last_updated_at", { ascending: false })
         .abortSignal(signal),
       supabase
         .from("api_transit_offers")
-        .select(
-          [
-            "id",
-            "station_id",
-            "family",
-            "standard_model",
-            "group_name",
-            "recharge_ratio",
-            "model_multiplier",
-            "input_price",
-            "output_price",
-            "cache_read_price",
-            "cache_write_price",
-            "currency",
-            "account_pool",
-            "channel_type",
-            "price_source",
-            "last_verified_at",
-            "availability_seven_day_rate",
-            "availability_seven_day_samples",
-            "availability_last_checked_at",
-            "availability_note",
-          ].join(",")
-        )
+        .select(OFFER_COLUMNS)
         .eq("status", "active")
         .order("standard_model", { ascending: true })
         .abortSignal(signal),
@@ -159,17 +193,7 @@ async function readStationsFromSupabase(): Promise<TransitStation[]> {
     try {
       const { data, error } = await client
         .from("api_transit_stations")
-        .select(
-          [
-            "id",
-            "logo_url",
-            "monitor_url",
-            "strengths",
-            "cautions",
-            "commercial_offers",
-            "verification_events",
-          ].join(",")
-        )
+        .select(STATION_ENHANCEMENT_COLUMNS)
         .eq("published", true)
         .abortSignal(signal);
       if (error) throw error;
@@ -190,16 +214,7 @@ async function readStationsFromSupabase(): Promise<TransitStation[]> {
     try {
       const { data, error } = await client
         .from("api_transit_stations")
-        .select(
-          [
-            "id",
-            "monitor_url",
-            "strengths",
-            "cautions",
-            "commercial_offers",
-            "verification_events",
-          ].join(",")
-        )
+        .select(STATION_ENHANCEMENT_COLUMNS_WITHOUT_LOGO)
         .eq("published", true)
         .abortSignal(signal);
       if (error) throw error;
@@ -213,6 +228,97 @@ async function readStationsFromSupabase(): Promise<TransitStation[]> {
     }
   }
 
+}
+
+async function readStationFromSupabaseBySlug(slug: string): Promise<TransitStation | undefined> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return seedStations.find((station) => station.slug === slug);
+
+  try {
+    const stationResult = await supabase
+      .from("api_transit_stations")
+      .select(STATION_CORE_COLUMNS)
+      .eq("published", true)
+      .eq("slug", slug)
+      .limit(1)
+      .abortSignal(publicTransitReadSignal());
+    if (stationResult.error) throw stationResult.error;
+
+    const stationRow = dbRows(stationResult.data)[0];
+    if (!stationRow) return undefined;
+
+    const stationId = stringValue(stationRow.id);
+    if (!stationId) return undefined;
+
+    const signal = publicTransitReadSignal();
+    const [offersResult, enhancementRow] = await Promise.all([
+      supabase
+        .from("api_transit_offers")
+        .select(OFFER_COLUMNS)
+        .eq("station_id", stationId)
+        .eq("status", "active")
+        .order("standard_model", { ascending: true })
+        .abortSignal(signal),
+      readStationEnhancementRow(supabase, stationId, signal),
+    ]);
+    if (offersResult.error) throw offersResult.error;
+
+    const station = mapStationRow(stationRow, dbRows(offersResult.data), enhancementRow);
+    cachedBySlug.set(station.slug, { station, cachedAt: Date.now() });
+    return station;
+  } catch (error) {
+    console.warn("Returning no API transit station because Supabase detail read failed:", error);
+    return undefined;
+  }
+}
+
+async function readStationEnhancementRow(
+  client: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  stationId: string,
+  signal: AbortSignal
+): Promise<DbRow | undefined> {
+  try {
+    const { data, error } = await client
+      .from("api_transit_stations")
+      .select(STATION_ENHANCEMENT_COLUMNS)
+      .eq("id", stationId)
+      .limit(1)
+      .abortSignal(signal);
+    if (error) throw error;
+    return dbRows(data)[0];
+  } catch (error) {
+    if (isMissingColumnError(error)) {
+      return readStationEnhancementRowWithoutLogo(client, stationId, signal);
+    }
+    if (!hasWarnedMissingEnhancementColumns) {
+      hasWarnedMissingEnhancementColumns = true;
+      console.warn("API transit station enhancement columns are unavailable:", error);
+    }
+    return undefined;
+  }
+}
+
+async function readStationEnhancementRowWithoutLogo(
+  client: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  stationId: string,
+  signal: AbortSignal
+): Promise<DbRow | undefined> {
+  try {
+    const { data, error } = await client
+      .from("api_transit_stations")
+      .select(STATION_ENHANCEMENT_COLUMNS_WITHOUT_LOGO)
+      .eq("id", stationId)
+      .limit(1)
+      .abortSignal(signal);
+    if (error) throw error;
+    return dbRows(data)[0];
+  } catch (fallbackError) {
+    if (!hasWarnedMissingEnhancementColumns) {
+      hasWarnedMissingEnhancementColumns = true;
+      console.warn("API transit station enhancement columns are unavailable:", fallbackError);
+    }
+    return undefined;
+  }
 }
 
 async function enrichStationWithDetailData(station: TransitStation): Promise<TransitStation> {

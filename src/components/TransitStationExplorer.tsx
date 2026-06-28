@@ -18,6 +18,7 @@ import {
 import { TransitAvailabilityStrip } from "@/components/TransitAvailabilityStrip";
 import { TransitStationSystemIcon } from "@/components/TransitStationSystemIcon";
 import { TransitViewTabs } from "@/components/TransitViewTabs";
+import { listDetailNavigationHref } from "@/lib/list-return";
 import { formatDateMinute, formatDateShortMinute } from "@/lib/utils";
 import type {
   TransitAccountPool,
@@ -162,19 +163,33 @@ export default function TransitStationExplorer({ stations }: Props) {
     (search ? 1 : 0) +
     (sortBy !== "overall" ? 1 : 0);
 
-  const navigateToStation = useCallback(
-    (slug: string) => {
-      const params = new URLSearchParams();
-      if (search) params.set("q", search);
-      if (familyFilter !== "all") params.set("family", familyFilter);
-      if (channelFilter !== "all") params.set("channel", channelFilter);
-      if (poolFilter !== "all") params.set("pool", poolFilter);
-      if (sortBy !== "overall") params.set("sort", sortBy);
-      const query = params.toString();
+  const returnQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("q", search);
+    if (familyFilter !== "all") params.set("family", familyFilter);
+    if (channelFilter !== "all") params.set("channel", channelFilter);
+    if (poolFilter !== "all") params.set("pool", poolFilter);
+    if (sortBy !== "overall") params.set("sort", sortBy);
+    return params.toString();
+  }, [channelFilter, familyFilter, poolFilter, search, sortBy]);
 
-      router.push(`/api-transit/${slug}${query ? `?back=${encodeURIComponent(query)}` : ""}`);
+  const stationDetailHref = useCallback(
+    (slug: string) => listDetailNavigationHref(`/api-transit/${slug}`, returnQuery),
+    [returnQuery]
+  );
+
+  const navigateToStation = useCallback(
+    (href: string) => {
+      router.push(href);
     },
-    [channelFilter, familyFilter, poolFilter, router, search, sortBy]
+    [router]
+  );
+
+  const prefetchStation = useCallback(
+    (slug: string) => {
+      router.prefetch(`/api-transit/${slug}`);
+    },
+    [router]
   );
 
   return (
@@ -297,7 +312,9 @@ export default function TransitStationExplorer({ stations }: Props) {
                     <StationRow
                       key={station.id}
                       station={station}
-                      onClick={() => navigateToStation(station.slug)}
+                      href={stationDetailHref(station.slug)}
+                      onClick={navigateToStation}
+                      onWarm={() => prefetchStation(station.slug)}
                     />
                   ))}
                 </tbody>
@@ -309,7 +326,9 @@ export default function TransitStationExplorer({ stations }: Props) {
               <StationCard
                 key={station.id}
                 station={station}
-                onClick={() => navigateToStation(station.slug)}
+                href={stationDetailHref(station.slug)}
+                onClick={navigateToStation}
+                onWarm={() => prefetchStation(station.slug)}
               />
             ))}
           </div>
@@ -395,23 +414,29 @@ function CompactRateTag({ label, value, missing }: { label: string; value: strin
 
 function StationRow({
   station,
+  href,
   onClick,
+  onWarm,
 }: {
   station: TransitStation;
-  onClick: () => void;
+  href: string;
+  onClick: (href: string) => void;
+  onWarm: () => void;
 }) {
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onClick();
+      onClick(href);
     }
   };
 
   return (
     <tr
       className="cursor-pointer align-top transition hover:bg-[#f7f9f9] focus-visible:bg-[#f7f9f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#45bf78]/40"
-      onClick={onClick}
+      onClick={() => onClick(href)}
+      onFocus={onWarm}
       onKeyDown={handleKeyDown}
+      onMouseEnter={onWarm}
       tabIndex={0}
       role="row"
       aria-label={`查看 ${station.name} 详情`}
@@ -439,8 +464,10 @@ function StationRow({
       </td>
       <td className="px-5 py-4 text-center">
         <Link
-          href={`/api-transit/${station.slug}`}
+          href={href}
           onClick={(event) => event.stopPropagation()}
+          onFocus={onWarm}
+          onMouseEnter={onWarm}
           className="inline-flex h-9 min-w-[76px] items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[#2d3435] px-3 text-xs font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526]"
         >
           查看
@@ -453,23 +480,29 @@ function StationRow({
 
 function StationCard({
   station,
+  href,
   onClick,
+  onWarm,
 }: {
   station: TransitStation;
-  onClick: () => void;
+  href: string;
+  onClick: (href: string) => void;
+  onWarm: () => void;
 }) {
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onClick();
+      onClick(href);
     }
   };
 
   return (
     <div
       className="cursor-pointer rounded-lg bg-white p-4 shadow-[0_20px_55px_rgba(45,52,53,0.045)] ring-1 ring-[#adb3b4]/15 transition-colors hover:bg-[#fbfcfc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#45bf78]/40"
-      onClick={onClick}
+      onClick={() => onClick(href)}
+      onFocus={onWarm}
       onKeyDown={handleKeyDown}
+      onMouseEnter={onWarm}
       tabIndex={0}
       role="button"
       aria-label={`查看 ${station.name} 详情`}
