@@ -19,71 +19,68 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  enqueue:
+  probe:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci --omit=dev
+
       - name: Run API transit probe
         env:
-          COLLECT_PRICES_URL: ${{ secrets.COLLECT_PRICES_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          API_TRANSIT_CREDENTIAL_ENCRYPTION_KEY: ${{ secrets.API_TRANSIT_CREDENTIAL_ENCRYPTION_KEY }}
           REQUESTED_STATION: ${{ github.event.inputs.station }}
           REQUESTED_TARGET_LIMIT: ${{ github.event.inputs.target_limit }}
         run: |
           set -euo pipefail
 
-          if [ -z "$COLLECT_PRICES_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "缺少 COLLECT_PRICES_URL 或 CRON_SECRET secret"
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ] || [ -z "$API_TRANSIT_CREDENTIAL_ENCRYPTION_KEY" ]; then
+            echo "缺少 NEXT_PUBLIC_SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY 或 API_TRANSIT_CREDENTIAL_ENCRYPTION_KEY secret"
             exit 1
           fi
 
-          BASE_URL=$(node <<'NODE'
-          const raw = process.env.COLLECT_PRICES_URL;
-          const url = new URL(raw);
-          url.hash = "";
-          url.search = "";
-          url.pathname = url.pathname.replace(/\/api\/cron\/(?:collect-prices|api-transit-probe)\/?$/, "") || "/";
-          console.log(url.toString().replace(/\/$/, ""));
-          NODE
-          )
+          node --input-type=module <<'NODE'
+          import { probeApiTransitStations } from "./scripts/probe-api-transit.mjs";
 
-          STATION="${REQUESTED_STATION:-}"
-          TARGET_LIMIT="${REQUESTED_TARGET_LIMIT:-1}"
-
-          BASE_URL="$BASE_URL" STATION="$STATION" TARGET_LIMIT="$TARGET_LIMIT" node <<'NODE'
-          const url = new URL("/api/cron/api-transit-probe", process.env.BASE_URL);
-          if (process.env.STATION) url.searchParams.set("station", process.env.STATION);
-          url.searchParams.set("targetLimit", process.env.TARGET_LIMIT);
-
-          const response = await fetch(url, {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${process.env.CRON_SECRET}`,
-            },
+          const station = process.env.REQUESTED_STATION || undefined;
+          const targetLimit = Number(process.env.REQUESTED_TARGET_LIMIT || 1);
+          const result = await probeApiTransitStations({
+            station,
+            post: true,
+            dbCredentials: true,
+            targetLimit,
           });
-          const text = await response.text();
-          let payload = null;
-          try {
-            payload = text ? JSON.parse(text) : null;
-          } catch {
-            payload = null;
-          }
 
-          if (!response.ok || payload?.ok === false) {
-            throw new Error(payload?.message || text || `HTTP ${response.status}`);
-          }
-
-          const counts = payload?.counts || {};
+          const counts = result.counts || {};
           const probed = Number(counts.probed || 0);
           const skipped = Number(counts.skipped || 0);
-          const unexpectedSkipped = Array.isArray(payload?.skipped)
-            ? payload.skipped.filter((item) => item?.reason !== "profile_disabled")
+          const unexpectedSkipped = Array.isArray(result.skipped)
+            ? result.skipped.filter((item) => item?.reason !== "profile_disabled")
             : [];
           if (probed === 0 || unexpectedSkipped.length > 0) {
             throw new Error(`API transit probe incomplete: probed=${probed}, skipped=${skipped}, unexpectedSkipped=${unexpectedSkipped.length}`);
           }
 
           console.log(`API transit probe ok: probed=${probed}, skipped=${skipped}, disabled=${skipped - unexpectedSkipped.length}, success=${counts.successfulRuns || 0}, failed=${counts.failedRuns || 0}`);
+          console.log(JSON.stringify({
+            counts,
+            skipped: result.skipped,
+            rollups: result.rollups?.map((rollup) => ({
+              stationId: rollup.stationId,
+              station: rollup.station,
+              lastCheckedAt: rollup.lastCheckedAt,
+            })),
+          }, null, 2));
           NODE
 
       - name: Notify failure
