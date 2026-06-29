@@ -210,7 +210,7 @@ export function TransitDetectorClient({ serviceUrl = "" }: DetectorClientProps) 
       await pollDetectorJob(data.status_url, nextRunId, localId);
     } catch (error) {
       if (runIdRef.current !== nextRunId) return;
-      const message = error instanceof Error ? error.message : "检测提交失败，请稍后再试。";
+      const message = normalizeDetectorError(error);
       setTaskStatus("error");
       updateResult(localId, { status: "error", message });
     }
@@ -526,6 +526,14 @@ export function TransitDetectorClient({ serviceUrl = "" }: DetectorClientProps) 
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function normalizeDetectorError(error: unknown) {
+  if (!(error instanceof Error)) return "检测提交失败，请稍后再试。";
+  if (error.message === "Failed to fetch") {
+    return "无法连接检测后端。请确认本地 8017 服务已启动，并允许来自当前页面的跨域请求。";
+  }
+  return error.message;
 }
 
 function StatusPill({ tone, children }: { tone: StatusTone; children: string }) {
