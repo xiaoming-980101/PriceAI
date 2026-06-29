@@ -27,6 +27,7 @@ export const revalidate = 300;
 export default async function ApiTransitDetectorPage() {
   const familyOptions = getTransitModelFamilyOptions();
   const detectorServiceUrl = process.env.NEXT_PUBLIC_TRANSIT_DETECTOR_API_BASE_URL ?? "";
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
   const stations = await getTransitStations();
   const stationOptions: DetectorStationOption[] = stations
     .filter((station) => station.status !== "unavailable")
@@ -98,7 +99,11 @@ export default async function ApiTransitDetectorPage() {
           </div>
         </div>
 
-        <TransitDetectorClient serviceUrl={detectorServiceUrl} stations={stationOptions} />
+        <TransitDetectorClient
+          serviceUrl={detectorServiceUrl}
+          stations={stationOptions}
+          turnstileSiteKey={turnstileSiteKey}
+        />
       </main>
     </div>
   );

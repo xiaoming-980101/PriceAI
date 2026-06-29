@@ -1,6 +1,7 @@
 "use client";
 
-import { type FormEvent, useMemo, useRef, useState } from "react";
+import Script from "next/script";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Clock3,
   Eye,
@@ -45,6 +46,7 @@ interface DetectorStatusPayload {
 interface DetectorClientProps {
   serviceUrl?: string;
   stations?: DetectorStationOption[];
+  turnstileSiteKey?: string;
 }
 
 interface PresetModel {
@@ -106,6 +108,27 @@ interface CostEstimate {
   detailLabel: string;
   sourceLabel: string;
   priceNote: string;
+}
+
+interface TurnstileApi {
+  render: (
+    container: HTMLElement,
+    options: {
+      sitekey: string;
+      callback: (token: string) => void;
+      "expired-callback": () => void;
+      "error-callback": () => void;
+      theme: "light";
+      size: "normal";
+    },
+  ) => string;
+  reset: (widgetId?: string) => void;
+}
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileApi;
+  }
 }
 
 const presetModels: PresetModel[] = [
@@ -171,8 +194,10 @@ const upstreamOptions: Array<{ value: UpstreamType; label: string; detail: strin
   { value: "mixed_pool", label: "混合线路", detail: "需要多次采样，不同请求可能命中不同上游。" },
 ];
 
-export function TransitDetectorClient({ serviceUrl = "", stations = [] }: DetectorClientProps) {
+export function TransitDetectorClient({ serviceUrl = "", stations = [], turnstileSiteKey = "" }: DetectorClientProps) {
   const runIdRef = useRef(0);
+  const turnstileRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
   const defaultPreset = presetModels[0];
   const [selectedModelId, setSelectedModelId] = useState(defaultPreset.id);
   const [protocol, setProtocol] = useState<DetectorProtocol>(defaultPreset.protocol);
@@ -186,9 +211,14 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [] }: Detect
   const [showApiKey, setShowApiKey] = useState(false);
   const [taskStatus, setTaskStatus] = useState<DetectionStatus | "idle">("idle");
   const [results, setResults] = useState<DetectionResult[]>([]);
+  const [turnstileScriptReady, setTurnstileScriptReady] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileError, setTurnstileError] = useState("");
 
   const normalizedServiceUrl = serviceUrl.trim().replace(/\/$/, "");
+  const normalizedTurnstileSiteKey = turnstileSiteKey.trim();
   const serviceConnected = Boolean(normalizedServiceUrl);
+  const turnstileEnabled = Boolean(normalizedTurnstileSiteKey);
   const selectedPreset = presetModels.find((item) => item.id === selectedModelId) ?? defaultPreset;
   const selectedIntensity = intensityOptions.find((item) => item.value === intensity) ?? intensityOptions[1];
   const effectiveIncludeLongContext = protocol !== "gemini" && includeLongContext;
@@ -198,7 +228,11 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [] }: Detect
   const activeCostProfile = buildCostProfile(selectedIntensity, effectiveIncludeLongContext);
   const costEstimate = buildCostEstimate(activeCostProfile, effectiveStandardModel, selectedPreset.priceNote);
   const activeDetection = taskStatus === "queued" || taskStatus === "running";
-  const canSubmit = serviceConnected && Boolean(baseUrl.trim() && apiKey.trim() && model.trim()) && !activeDetection;
+  const canSubmit =
+    serviceConnected &&
+    Boolean(baseUrl.trim() && apiKey.trim() && model.trim()) &&
+    (!turnstileEnabled || Boolean(turnstileToken)) &&
+    !activeDetection;
   const apiKeyPreview = apiKey ? maskSecretPreview(apiKey) : "未填入";
 
   const summaryText = useMemo(() => {
@@ -233,6 +267,43 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [] }: Detect
     setShowApiKey(false);
   }
 
+  const handleTurnstileReady = useCallback(() => {
+    if (!normalizedTurnstileSiteKey || !turnstileRef.current || !window.turnstile) return;
+    if (turnstileWidgetIdRef.current) return;
+
+    turnstileWidgetIdRef.current = window.turnstile.render(turnstileRef.current, {
+      sitekey: normalizedTurnstileSiteKey,
+      theme: "light",
+      size: "normal",
+      callback: (token) => {
+        setTurnstileToken(token);
+        setTurnstileError("");
+      },
+      "expired-callback": () => {
+        setTurnstileToken("");
+        setTurnstileError("人机校验已过期，请重新验证。");
+      },
+      "error-callback": () => {
+        setTurnstileToken("");
+        setTurnstileError("人机校验加载失败，请刷新或稍后再试。");
+      },
+    });
+  }, [normalizedTurnstileSiteKey]);
+
+  useEffect(() => {
+    if (!turnstileEnabled || !turnstileScriptReady) return;
+    handleTurnstileReady();
+  }, [handleTurnstileReady, turnstileEnabled, turnstileScriptReady]);
+
+  function resetTurnstile() {
+    if (!turnstileEnabled) return;
+    setTurnstileToken("");
+    const widgetId = turnstileWidgetIdRef.current;
+    if (widgetId && window.turnstile) {
+      window.turnstile.reset(widgetId);
+    }
+  }
+
   function updateResult(localId: string, patch: Partial<DetectionResult>) {
     setResults((current) =>
       current.map((item) => (item.localId === localId ? { ...item, ...patch } : item)),
@@ -241,6 +312,11 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [] }: Detect
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (turnstileEnabled && !turnstileToken) {
+      setTurnstileError("请先完成人机校验。");
+      return;
+    }
+
     const nextRunId = runIdRef.current + 1;
     const localId = `${nextRunId}-${selectedModelId}`;
     const submittedAt = new Date().toLocaleString("zh-CN", { hour12: false });
@@ -274,6 +350,9 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [] }: Detect
       payload.set("api_key", apiKey.trim());
       payload.set("model", model.trim());
       payload.set("mode", backendModeForIntensity(intensity));
+      if (turnstileEnabled) {
+        payload.set("turnstile_token", turnstileToken);
+      }
       if (protocol !== "gemini") {
         payload.set("include_long_context", effectiveIncludeLongContext ? "true" : "false");
         payload.set("include_long_context_extreme", "false");
@@ -305,6 +384,8 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [] }: Detect
       const message = normalizeDetectorError(error);
       setTaskStatus("error");
       updateResult(localId, { status: "error", message });
+    } finally {
+      resetTurnstile();
     }
   }
 
@@ -356,6 +437,19 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [] }: Detect
 
   return (
     <div className="space-y-5">
+      {turnstileEnabled ? (
+        <Script
+          id="priceai-turnstile"
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+          strategy="afterInteractive"
+          onReady={() => setTurnstileScriptReady(true)}
+          onError={() => {
+            setTurnstileScriptReady(false);
+            setTurnstileToken("");
+            setTurnstileError("人机校验脚本加载失败，请刷新后重试。");
+          }}
+        />
+      ) : null}
       <section className="rounded-lg bg-white ring-1 ring-[#adb3b4]/15">
         <div className="border-b border-[#edf0f1] px-5 py-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -375,7 +469,7 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [] }: Detect
         </div>
 
         <form className="space-y-5 px-5 py-5" onSubmit={handleSubmit}>
-          <div className="grid gap-3 xl:grid-cols-[minmax(200px,0.7fr)_minmax(300px,1fr)_minmax(340px,1fr)]">
+          <div className="grid gap-3 xl:grid-cols-[minmax(170px,0.62fr)_minmax(280px,0.95fr)_minmax(300px,0.9fr)]">
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-[#202829]">已收录站点</span>
               <select
@@ -587,7 +681,7 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [] }: Detect
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-[#edf0f1] pt-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 border-t border-[#edf0f1] pt-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="max-w-[860px] space-y-1 text-xs leading-5 text-[#5a6061]">
               <p>
                 当前选择：{protocolLabels[protocol]} · {protocolHints[protocol]} · {selectedUpstream.detail}
@@ -597,14 +691,26 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [] }: Detect
                 {costEstimate.priceNote ? `，${costEstimate.priceNote}` : ""}。
               </p>
             </div>
-            <button
-              type="submit"
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#202829] px-5 text-sm font-semibold text-white transition hover:bg-[#2d3435] disabled:cursor-not-allowed disabled:bg-[#adb3b4]"
-              disabled={!canSubmit}
-            >
-              <Play className="h-4 w-4" />
-              {submitLabel(taskStatus, serviceConnected)}
-            </button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              {turnstileEnabled ? (
+                <div className="min-w-[300px]">
+                  <div ref={turnstileRef} className="min-h-[65px]" />
+                  {turnstileError ? (
+                    <p className="mt-1 text-xs font-medium text-[#8a4c00]">{turnstileError}</p>
+                  ) : (
+                    <p className="mt-1 text-xs text-[#5a6061]">用于防止检测接口被批量滥用。</p>
+                  )}
+                </div>
+              ) : null}
+              <button
+                type="submit"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#202829] px-5 text-sm font-semibold text-white transition hover:bg-[#2d3435] disabled:cursor-not-allowed disabled:bg-[#adb3b4]"
+                disabled={!canSubmit}
+              >
+                <Play className="h-4 w-4" />
+                {submitLabel(taskStatus, serviceConnected, turnstileEnabled && !turnstileToken)}
+              </button>
+            </div>
           </div>
         </form>
       </section>
@@ -837,8 +943,13 @@ function resultStatusLabel(status: DetectionStatus) {
   return "失败";
 }
 
-function submitLabel(status: DetectionStatus | "idle", serviceConnected: boolean) {
+function submitLabel(
+  status: DetectionStatus | "idle",
+  serviceConnected: boolean,
+  waitingForVerification = false,
+) {
   if (!serviceConnected) return "检测服务未连接";
+  if (waitingForVerification) return "等待校验";
   if (status === "queued") return "提交中";
   if (status === "running") return "检测中";
   return "开始检测";
