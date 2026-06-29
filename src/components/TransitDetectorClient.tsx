@@ -198,6 +198,7 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [], turnstil
   const runIdRef = useRef(0);
   const turnstileRef = useRef<HTMLDivElement>(null);
   const turnstileWidgetIdRef = useRef<string | null>(null);
+  const turnstilePollTimerRef = useRef<number | null>(null);
   const defaultPreset = presetModels[0];
   const [selectedModelId, setSelectedModelId] = useState(defaultPreset.id);
   const [protocol, setProtocol] = useState<DetectorProtocol>(defaultPreset.protocol);
@@ -271,6 +272,12 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [], turnstil
     if (!normalizedTurnstileSiteKey || !turnstileRef.current || !window.turnstile) return;
     if (turnstileWidgetIdRef.current) return;
 
+    if (turnstilePollTimerRef.current) {
+      window.clearInterval(turnstilePollTimerRef.current);
+      turnstilePollTimerRef.current = null;
+    }
+
+    setTurnstileError("");
     turnstileWidgetIdRef.current = window.turnstile.render(turnstileRef.current, {
       sitekey: normalizedTurnstileSiteKey,
       theme: "light",
@@ -291,8 +298,53 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [], turnstil
   }, [normalizedTurnstileSiteKey]);
 
   useEffect(() => {
+    if (!turnstileEnabled || turnstileScriptReady) return;
+
+    const startedAt = Date.now();
+    const timerId = window.setInterval(() => {
+      if (window.turnstile) {
+        window.clearInterval(timerId);
+        setTurnstileScriptReady(true);
+        return;
+      }
+
+      if (Date.now() - startedAt > 10_000) {
+        window.clearInterval(timerId);
+        setTurnstileError("人机校验脚本加载超时，请刷新后重试。");
+      }
+    }, 200);
+
+    return () => window.clearInterval(timerId);
+  }, [turnstileEnabled, turnstileScriptReady]);
+
+  useEffect(() => {
     if (!turnstileEnabled || !turnstileScriptReady) return;
+    if (turnstileWidgetIdRef.current) return;
+
+    const startedAt = Date.now();
     handleTurnstileReady();
+
+    if (turnstileWidgetIdRef.current) return;
+    turnstilePollTimerRef.current = window.setInterval(() => {
+      if (window.turnstile) {
+        handleTurnstileReady();
+        return;
+      }
+      if (Date.now() - startedAt > 10_000) {
+        if (turnstilePollTimerRef.current) {
+          window.clearInterval(turnstilePollTimerRef.current);
+          turnstilePollTimerRef.current = null;
+        }
+        setTurnstileError("人机校验脚本加载超时，请刷新后重试。");
+      }
+    }, 200);
+
+    return () => {
+      if (turnstilePollTimerRef.current) {
+        window.clearInterval(turnstilePollTimerRef.current);
+        turnstilePollTimerRef.current = null;
+      }
+    };
   }, [handleTurnstileReady, turnstileEnabled, turnstileScriptReady]);
 
   function resetTurnstile() {
@@ -442,6 +494,7 @@ export function TransitDetectorClient({ serviceUrl = "", stations = [], turnstil
           id="priceai-turnstile"
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
           strategy="afterInteractive"
+          onLoad={() => setTurnstileScriptReady(true)}
           onReady={() => setTurnstileScriptReady(true)}
           onError={() => {
             setTurnstileScriptReady(false);
