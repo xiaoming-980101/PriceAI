@@ -1,16 +1,13 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useMemo, useRef, useState } from "react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 import {
-  AlertCircle,
-  CheckCircle2,
   Clock3,
-  Fingerprint,
   KeyRound,
   Link2,
   Network,
+  Play,
   ShieldAlert,
-  SlidersHorizontal,
 } from "lucide-react";
 
 type DetectorProtocol = "openai" | "claude" | "gemini";
@@ -23,9 +20,8 @@ type UpstreamType =
   | "kiro_claude_code"
   | "reverse_client"
   | "mixed_pool";
-
 type StatusTone = "pending" | "ready" | "muted" | "warn";
-type TaskStatus = "idle" | "submitting" | "running" | "done" | "error";
+type DetectionStatus = "queued" | "running" | "done" | "error";
 
 interface DetectorStatusPayload {
   job_id?: string;
@@ -42,16 +38,54 @@ interface DetectorClientProps {
   serviceUrl?: string;
 }
 
-const protocolOptions: Array<{ value: DetectorProtocol; label: string; hint: string }> = [
-  { value: "openai", label: "OpenAI 兼容", hint: "适合大多数 OpenAI 格式的中转接口" },
-  { value: "claude", label: "Claude", hint: "适合 Anthropic / Claude 格式接口" },
-  { value: "gemini", label: "Gemini", hint: "适合 Google Gemini 兼容接口" },
+interface PresetModel {
+  id: string;
+  label: string;
+  model: string;
+  protocol: DetectorProtocol;
+  badge?: string;
+}
+
+interface DetectionResult {
+  localId: string;
+  modelLabel: string;
+  model: string;
+  protocolLabel: string;
+  modeLabel: string;
+  upstreamLabel: string;
+  status: DetectionStatus;
+  message: string;
+  submittedAt: string;
+  jobId?: string;
+  resultUrl?: string;
+}
+
+const presetModels: PresetModel[] = [
+  { id: "gpt-5-5", label: "GPT 5.5", model: "gpt-5.5", protocol: "openai", badge: "常用" },
+  { id: "gpt-5-4", label: "GPT 5.4", model: "gpt-5.4", protocol: "openai" },
+  { id: "claude-opus-4-8", label: "Opus 4.8", model: "claude-opus-4-8", protocol: "claude" },
+  { id: "claude-opus-4-7", label: "Opus 4.7", model: "claude-opus-4-7", protocol: "claude" },
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6", model: "claude-sonnet-4-6", protocol: "claude" },
+  { id: "gemini-3-1-pro", label: "Gemini 3.1 Pro", model: "gemini-3.1-pro", protocol: "gemini" },
+  { id: "custom", label: "自定义", model: "", protocol: "openai" },
 ];
 
+const protocolLabels: Record<DetectorProtocol, string> = {
+  openai: "OpenAI 兼容",
+  claude: "Claude",
+  gemini: "Gemini",
+};
+
+const protocolHints: Record<DetectorProtocol, string> = {
+  openai: "OpenAI 格式接口",
+  claude: "Anthropic / Claude 格式接口",
+  gemini: "Google Gemini 兼容接口",
+};
+
 const modeOptions: Array<{ value: DetectorMode; label: string; hint: string }> = [
-  { value: "quick", label: "快速", hint: "核验协议、模型名和基础响应" },
-  { value: "standard", label: "标准", hint: "加入能力指纹和计费口径检查" },
-  { value: "deep", label: "深度", hint: "增加多轮、长上下文和稳定性采样" },
+  { value: "quick", label: "快速", hint: "协议、模型名、基础响应" },
+  { value: "standard", label: "标准", hint: "能力指纹和计费口径" },
+  { value: "deep", label: "深度", hint: "多轮、长上下文、稳定性采样" },
 ];
 
 const upstreamOptions: Array<{ value: UpstreamType; label: string; detail: string }> = [
@@ -64,89 +98,84 @@ const upstreamOptions: Array<{ value: UpstreamType; label: string; detail: strin
   { value: "mixed_pool", label: "混合线路", detail: "需要多次采样，不同请求可能命中不同上游。" },
 ];
 
-const modelPlaceholders: Record<DetectorProtocol, string> = {
-  openai: "输入要检测的模型名，例如 gpt-4o",
-  claude: "输入要检测的模型名，例如 claude-sonnet-4",
-  gemini: "输入要检测的模型名，例如 gemini-2.5-pro",
-};
-
 export function TransitDetectorClient({ serviceUrl = "" }: DetectorClientProps) {
   const runIdRef = useRef(0);
-  const [protocol, setProtocol] = useState<DetectorProtocol>("openai");
+  const defaultPreset = presetModels[0];
+  const [selectedModelId, setSelectedModelId] = useState(defaultPreset.id);
+  const [protocol, setProtocol] = useState<DetectorProtocol>(defaultPreset.protocol);
   const [mode, setMode] = useState<DetectorMode>("standard");
   const [upstream, setUpstream] = useState<UpstreamType>("unknown");
   const [baseUrl, setBaseUrl] = useState("");
-  const [model, setModel] = useState("");
+  const [model, setModel] = useState(defaultPreset.model);
   const [apiKey, setApiKey] = useState("");
   const [longContext, setLongContext] = useState(false);
-  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
-  const [taskStatus, setTaskStatus] = useState<TaskStatus>("idle");
-  const [taskMessage, setTaskMessage] = useState("填写参数后开始检测，结果会在这里更新。");
-  const [jobId, setJobId] = useState("");
-  const [resultUrl, setResultUrl] = useState("");
+  const [taskStatus, setTaskStatus] = useState<DetectionStatus | "idle">("idle");
+  const [results, setResults] = useState<DetectionResult[]>([]);
 
   const normalizedServiceUrl = serviceUrl.trim().replace(/\/$/, "");
   const serviceConnected = Boolean(normalizedServiceUrl);
-  const canSubmit = serviceConnected && Boolean(baseUrl.trim() && apiKey.trim() && model.trim());
-
-  const selectedProtocol = protocolOptions.find((item) => item.value === protocol) ?? protocolOptions[0];
+  const selectedPreset = presetModels.find((item) => item.id === selectedModelId) ?? defaultPreset;
   const selectedMode = modeOptions.find((item) => item.value === mode) ?? modeOptions[1];
   const selectedUpstream = upstreamOptions.find((item) => item.value === upstream) ?? upstreamOptions[0];
+  const activeDetection = taskStatus === "queued" || taskStatus === "running";
+  const canSubmit = serviceConnected && Boolean(baseUrl.trim() && apiKey.trim() && model.trim()) && !activeDetection;
 
-  const scopeRows = useMemo(
-    () => [
-      {
-        label: "协议类型",
-        value: selectedProtocol.label,
-        detail: selectedProtocol.hint,
-      },
-      {
-        label: "模型名",
-        value: model.trim() || "未填写",
-        detail: "检测会以这个模型名向中转接口发起请求。",
-      },
-      {
-        label: "线路类型",
-        value: selectedUpstream.label,
-        detail: selectedUpstream.detail,
-      },
-      {
-        label: "检测强度",
-        value: selectedMode.label,
-        detail: selectedMode.hint,
-      },
-      {
-        label: "长上下文",
-        value: longContext && protocol !== "gemini" ? "开启" : "关闭",
-        detail: longContext && protocol !== "gemini" ? "会消耗更多额度，用于确认上下文上限。" : "默认先做低消耗检测。",
-      },
-    ],
-    [longContext, model, protocol, selectedMode, selectedProtocol, selectedUpstream],
-  );
+  const summaryText = useMemo(() => {
+    if (!results.length) return "暂无检测记录";
+    const done = results.filter((item) => item.status === "done").length;
+    const failed = results.filter((item) => item.status === "error").length;
+    return `${results.length} 次检测，${done} 次完成${failed ? `，${failed} 次失败` : ""}`;
+  }, [results]);
 
-  function handleProtocolChange(nextProtocol: DetectorProtocol) {
-    setProtocol(nextProtocol);
-    if (nextProtocol === "gemini") {
+  function handlePresetClick(preset: PresetModel) {
+    setSelectedModelId(preset.id);
+    setProtocol(preset.protocol);
+    setModel(preset.model);
+    if (preset.protocol === "gemini") {
       setLongContext(false);
     }
+  }
+
+  function handleModelInput(nextModel: string) {
+    setModel(nextModel);
+    if (selectedModelId !== "custom") {
+      setSelectedModelId("custom");
+    }
+  }
+
+  function updateResult(localId: string, patch: Partial<DetectionResult>) {
+    setResults((current) =>
+      current.map((item) => (item.localId === localId ? { ...item, ...patch } : item)),
+    );
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextRunId = runIdRef.current + 1;
+    const localId = `${nextRunId}-${selectedModelId}`;
+    const submittedAt = new Date().toLocaleString("zh-CN", { hour12: false });
     runIdRef.current = nextRunId;
-    setSubmittedAt(new Date().toLocaleString("zh-CN", { hour12: false }));
-    setResultUrl("");
-    setJobId("");
+
+    const nextResult: DetectionResult = {
+      localId,
+      modelLabel: selectedPreset.id === "custom" ? "自定义模型" : selectedPreset.label,
+      model: model.trim(),
+      protocolLabel: protocolLabels[protocol],
+      modeLabel: selectedMode.label,
+      upstreamLabel: selectedUpstream.label,
+      status: "queued",
+      message: "正在提交检测任务。",
+      submittedAt,
+    };
+    setResults((current) => [nextResult, ...current].slice(0, 12));
 
     if (!normalizedServiceUrl) {
       setTaskStatus("error");
-      setTaskMessage("检测服务未连接，暂时不能提交任务。");
+      updateResult(localId, { status: "error", message: "检测服务未连接。" });
       return;
     }
 
-    setTaskStatus("submitting");
-    setTaskMessage("正在提交检测任务。");
+    setTaskStatus("queued");
 
     try {
       const payload = new FormData();
@@ -172,18 +201,22 @@ export function TransitDetectorClient({ serviceUrl = "" }: DetectorClientProps) 
       }
       if (runIdRef.current !== nextRunId) return;
 
-      setJobId(data.job_id);
       setTaskStatus("running");
-      setTaskMessage("检测任务已创建，正在等待报告返回。");
-      await pollDetectorJob(data.status_url, nextRunId);
+      updateResult(localId, {
+        jobId: data.job_id,
+        status: "running",
+        message: "检测运行中，通常需要 30 到 90 秒。",
+      });
+      await pollDetectorJob(data.status_url, nextRunId, localId);
     } catch (error) {
       if (runIdRef.current !== nextRunId) return;
+      const message = error instanceof Error ? error.message : "检测提交失败，请稍后再试。";
       setTaskStatus("error");
-      setTaskMessage(error instanceof Error ? error.message : "检测提交失败，请稍后再试。");
+      updateResult(localId, { status: "error", message });
     }
   }
 
-  async function pollDetectorJob(statusUrl: string, runId: number) {
+  async function pollDetectorJob(statusUrl: string, runId: number, localId: string) {
     const statusEndpoint = statusUrl.startsWith("http") ? statusUrl : `${normalizedServiceUrl}${statusUrl}`;
 
     for (let attempt = 0; attempt < 90; attempt += 1) {
@@ -204,8 +237,11 @@ export function TransitDetectorClient({ serviceUrl = "" }: DetectorClientProps) 
           : "";
         if (runIdRef.current !== runId) return;
         setTaskStatus("done");
-        setTaskMessage("检测完成，报告已经返回。");
-        setResultUrl(nextResultUrl);
+        updateResult(localId, {
+          resultUrl: nextResultUrl,
+          status: "done",
+          message: "检测完成，已生成报告。",
+        });
         return;
       }
 
@@ -214,8 +250,12 @@ export function TransitDetectorClient({ serviceUrl = "" }: DetectorClientProps) 
       }
 
       if (runIdRef.current === runId) {
-        setTaskStatus(data.status === "queued" ? "submitting" : "running");
-        setTaskMessage(data.status === "queued" ? "任务排队中。" : "检测运行中，通常需要 30 到 90 秒。");
+        const queued = data.status === "queued";
+        setTaskStatus(queued ? "queued" : "running");
+        updateResult(localId, {
+          status: queued ? "queued" : "running",
+          message: queued ? "任务排队中。" : "检测运行中。",
+        });
       }
     }
 
@@ -223,45 +263,29 @@ export function TransitDetectorClient({ serviceUrl = "" }: DetectorClientProps) 
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,0.68fr)_minmax(360px,0.32fr)]">
+    <div className="space-y-5">
       <section className="rounded-lg bg-white ring-1 ring-[#adb3b4]/15">
         <div className="border-b border-[#edf0f1] px-5 py-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-[#202829]">检测任务</h2>
-              <p className="mt-1 text-sm leading-6 text-[#5a6061]">建议使用低余额、可撤销的临时 Key。检测完成后可打开独立报告查看详细证据。</p>
+              <h2 className="text-lg font-semibold text-[#202829]">接口配置</h2>
+              <p className="mt-1 text-sm leading-6 text-[#5a6061]">
+                填入中转站 API 地址和临时 Key，选择一个预置模型后开始检测。
+              </p>
             </div>
-            <StatusPill tone={serviceConnected ? "ready" : "warn"}>
-              {serviceConnected ? "检测服务已连接" : "检测服务未连接"}
-            </StatusPill>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill tone={serviceConnected ? "ready" : "warn"}>
+                {serviceConnected ? "检测服务已连接" : "检测服务未连接"}
+              </StatusPill>
+              <StatusPill tone={results.length ? "pending" : "muted"}>{summaryText}</StatusPill>
+            </div>
           </div>
         </div>
 
         <form className="space-y-5 px-5 py-5" onSubmit={handleSubmit}>
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-[#202829]">接口协议</label>
-            <div className="grid gap-2 md:grid-cols-3">
-              {protocolOptions.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => handleProtocolChange(item.value)}
-                  className={`min-h-20 rounded-lg border px-3 py-3 text-left transition ${
-                    protocol === item.value
-                      ? "border-[#45bf78]/60 bg-[#edf8f1] text-[#202829]"
-                      : "border-[#dfe4e5] bg-[#f9f9f9] text-[#5a6061] hover:border-[#adb3b4]"
-                  }`}
-                >
-                  <span className="block text-sm font-semibold">{item.label}</span>
-                  <span className="mt-1 block text-xs leading-5">{item.hint}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.45fr)]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.42fr)]">
             <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-[#202829]">Base URL</span>
+              <span className="mb-2 block text-sm font-semibold text-[#202829]">API 接口地址</span>
               <input
                 value={baseUrl}
                 onChange={(event) => setBaseUrl(event.target.value)}
@@ -270,19 +294,7 @@ export function TransitDetectorClient({ serviceUrl = "" }: DetectorClientProps) 
               />
             </label>
             <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-[#202829]">模型名</span>
-              <input
-                value={model}
-                onChange={(event) => setModel(event.target.value)}
-                placeholder={modelPlaceholders[protocol]}
-                className="h-11 w-full rounded-lg border border-[#dfe4e5] bg-white px-3 text-sm text-[#202829] outline-none transition placeholder:text-[#7a8284] focus:border-[#45bf78]"
-              />
-            </label>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.45fr)]">
-            <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-[#202829]">检测 Key</span>
+              <span className="mb-2 block text-sm font-semibold text-[#202829]">API Key</span>
               <div className="relative">
                 <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5a6061]" />
                 <input
@@ -294,6 +306,66 @@ export function TransitDetectorClient({ serviceUrl = "" }: DetectorClientProps) 
                   className="h-11 w-full rounded-lg border border-[#dfe4e5] bg-white pl-9 pr-3 text-sm text-[#202829] outline-none transition placeholder:text-[#7a8284] focus:border-[#45bf78]"
                 />
               </div>
+            </label>
+          </div>
+
+          <div>
+            <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <label className="text-sm font-semibold text-[#202829]">目标模型</label>
+              <span className="text-xs leading-5 text-[#5a6061]">点击模型会自动匹配接口协议，仍可手动修改模型名。</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+              {presetModels.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handlePresetClick(preset)}
+                  className={`relative min-h-[66px] rounded-lg border px-3 py-2 text-left transition ${
+                    selectedModelId === preset.id
+                      ? "border-[#45bf78] bg-[#edf8f1] text-[#202829]"
+                      : "border-[#dfe4e5] bg-[#f9f9f9] text-[#5a6061] hover:border-[#adb3b4]"
+                  }`}
+                >
+                  {preset.badge ? (
+                    <span className="absolute -top-2 left-3 rounded-full bg-[#45bf78] px-1.5 py-0.5 text-[0.62rem] font-semibold text-white">
+                      {preset.badge}
+                    </span>
+                  ) : null}
+                  <span className="block truncate text-sm font-semibold">{preset.label}</span>
+                  <span className="mt-1 block truncate text-xs">{preset.model || "手动输入模型名"}</span>
+                  <span className="mt-1 block text-[0.68rem] font-semibold text-[#5a6061]">{protocolLabels[preset.protocol]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_170px_210px]">
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-[#202829]">当前提交模型名</span>
+              <input
+                value={model}
+                onChange={(event) => handleModelInput(event.target.value)}
+                placeholder="输入要检测的模型名"
+                className="h-11 w-full rounded-lg border border-[#dfe4e5] bg-white px-3 text-sm text-[#202829] outline-none transition placeholder:text-[#7a8284] focus:border-[#45bf78]"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-[#202829]">接口协议</span>
+              <select
+                value={protocol}
+                onChange={(event) => {
+                  const nextProtocol = event.target.value as DetectorProtocol;
+                  setProtocol(nextProtocol);
+                  if (nextProtocol === "gemini") setLongContext(false);
+                }}
+                className="h-11 w-full rounded-lg border border-[#dfe4e5] bg-white px-3 text-sm font-medium text-[#202829] outline-none transition focus:border-[#45bf78]"
+              >
+                {Object.entries(protocolLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-[#202829]">线路类型</span>
@@ -311,127 +383,143 @@ export function TransitDetectorClient({ serviceUrl = "" }: DetectorClientProps) 
             </label>
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-[#202829]">检测强度</label>
-            <div className="grid gap-2 md:grid-cols-3">
-              {modeOptions.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setMode(item.value)}
-                  className={`rounded-lg border px-3 py-3 text-left transition ${
-                    mode === item.value
-                      ? "border-[#45bf78]/60 bg-[#edf8f1] text-[#202829]"
-                      : "border-[#dfe4e5] bg-[#f9f9f9] text-[#5a6061] hover:border-[#adb3b4]"
-                  }`}
-                >
-                  <span className="block text-sm font-semibold">{item.label}</span>
-                  <span className="mt-1 block text-xs leading-5">{item.hint}</span>
-                </button>
-              ))}
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px]">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-[#202829]">检测强度</label>
+              <div className="grid gap-2 md:grid-cols-3">
+                {modeOptions.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setMode(item.value)}
+                    className={`rounded-lg border px-3 py-3 text-left transition ${
+                      mode === item.value
+                        ? "border-[#45bf78]/60 bg-[#edf8f1] text-[#202829]"
+                        : "border-[#dfe4e5] bg-[#f9f9f9] text-[#5a6061] hover:border-[#adb3b4]"
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold">{item.label}</span>
+                    <span className="mt-1 block text-xs leading-5">{item.hint}</span>
+                  </button>
+                ))}
+              </div>
             </div>
+            <label
+              className={`flex min-h-[82px] items-center justify-between gap-3 rounded-lg border border-[#dfe4e5] bg-[#f9f9f9] px-3 py-3 text-sm text-[#202829] ${
+                protocol === "gemini" ? "opacity-65" : "cursor-pointer"
+              }`}
+            >
+              <span className="min-w-0">
+                <span className="block font-semibold">长上下文</span>
+                <span className="mt-0.5 block text-xs leading-5 text-[#5a6061]">
+                  {protocol === "gemini" ? "Gemini 暂不启用" : "确认上下文上限"}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={longContext}
+                disabled={protocol === "gemini"}
+                onChange={(event) => setLongContext(event.target.checked)}
+                className="h-4 w-4 shrink-0 accent-[#45bf78]"
+              />
+            </label>
           </div>
 
-          <label
-            className={`flex min-h-14 items-center justify-between gap-3 rounded-lg border border-[#dfe4e5] bg-[#f9f9f9] px-3 py-3 text-sm text-[#202829] ${
-              protocol === "gemini" ? "opacity-65" : "cursor-pointer"
-            }`}
-          >
-            <span className="min-w-0">
-              <span className="block font-semibold">长上下文测试</span>
-              <span className="mt-0.5 block text-xs leading-5 text-[#5a6061]">
-                {protocol === "gemini" ? "Gemini 线路暂不启用这一项。" : "会消耗更多额度，仅在需要确认上下文上限时开启。"}
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={longContext}
-              disabled={protocol === "gemini"}
-              onChange={(event) => setLongContext(event.target.checked)}
-              className="h-4 w-4 shrink-0 accent-[#45bf78]"
-            />
-          </label>
-
-          <div className="flex flex-col gap-3 border-t border-[#edf0f1] pt-4 md:flex-row md:items-center md:justify-between">
-            <p className="max-w-[620px] text-xs leading-5 text-[#5a6061]">
-              PriceAI 主站只负责发起任务和展示报告入口。Key 会随请求提交给独立检测服务，不会写入 PriceAI 数据库。
+          <div className="flex flex-col gap-3 border-t border-[#edf0f1] pt-4 lg:flex-row lg:items-center lg:justify-between">
+            <p className="max-w-[720px] text-xs leading-5 text-[#5a6061]">
+              当前选择：{protocolLabels[protocol]} · {protocolHints[protocol]} · {selectedUpstream.detail}
+              Key 会随请求提交给独立检测服务，不会写入 PriceAI 数据库。
             </p>
             <button
               type="submit"
               className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#202829] px-5 text-sm font-semibold text-white transition hover:bg-[#2d3435] disabled:cursor-not-allowed disabled:bg-[#adb3b4]"
-              disabled={!canSubmit || taskStatus === "submitting" || taskStatus === "running"}
+              disabled={!canSubmit}
             >
-              <SlidersHorizontal className="h-4 w-4" />
+              <Play className="h-4 w-4" />
               {submitLabel(taskStatus, serviceConnected)}
             </button>
           </div>
         </form>
       </section>
 
-      <aside className="space-y-5">
-        <section className="rounded-lg bg-white ring-1 ring-[#adb3b4]/15">
-          <div className="border-b border-[#edf0f1] px-5 py-4">
-            <div className="flex items-start justify-between gap-3">
+      <section className="rounded-lg bg-white ring-1 ring-[#adb3b4]/15">
+        <div className="flex flex-col gap-2 border-b border-[#edf0f1] px-5 py-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[#202829]">检测结果</h2>
+            <p className="mt-1 text-sm leading-6 text-[#5a6061]">每次检测会生成一行记录，完成后可打开独立报告查看完整证据。</p>
+          </div>
+          <StatusPill tone={taskTone(taskStatus)}>{statusLabel(taskStatus)}</StatusPill>
+        </div>
+
+        {results.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+              <thead className="bg-[#f2f4f4] text-[0.68rem] font-semibold text-[#5a6061]">
+                <tr>
+                  <th className="px-5 py-3">模型</th>
+                  <th className="px-5 py-3">协议</th>
+                  <th className="px-5 py-3">检测强度</th>
+                  <th className="px-5 py-3">线路类型</th>
+                  <th className="px-5 py-3">状态</th>
+                  <th className="px-5 py-3">提交时间</th>
+                  <th className="px-5 py-3 text-right">报告</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#edf0f1]">
+                {results.map((item) => (
+                  <tr key={item.localId} className={item.status === "done" ? "bg-[#f4fbf7]" : "bg-white"}>
+                    <td className="px-5 py-4">
+                      <p className="font-semibold text-[#202829]">{item.modelLabel}</p>
+                      <p className="mt-1 break-all text-xs text-[#5a6061]">{item.model}</p>
+                    </td>
+                    <td className="px-5 py-4 text-[#2d3435]">{item.protocolLabel}</td>
+                    <td className="px-5 py-4 text-[#2d3435]">{item.modeLabel}</td>
+                    <td className="px-5 py-4 text-[#2d3435]">{item.upstreamLabel}</td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-col gap-1">
+                        <StatusPill tone={resultTone(item.status)}>{resultStatusLabel(item.status)}</StatusPill>
+                        <span className="max-w-[220px] text-xs leading-5 text-[#5a6061]">{item.message}</span>
+                        {item.jobId ? <span className="max-w-[220px] break-all text-[0.68rem] text-[#7a8284]">任务：{item.jobId}</span> : null}
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 whitespace-nowrap text-[#5a6061]">{item.submittedAt}</td>
+                    <td className="px-5 py-4 text-right">
+                      {item.resultUrl ? (
+                        <a
+                          href={item.resultUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex h-9 items-center justify-center rounded-full bg-[#202829] px-4 text-xs font-semibold text-white transition hover:bg-[#2d3435]"
+                        >
+                          打开报告
+                        </a>
+                      ) : (
+                        <span className="text-xs text-[#7a8284]">等待返回</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="px-5 py-10">
+            <div className="flex flex-col gap-3 rounded-lg bg-[#f9f9f9] px-4 py-5 text-sm text-[#5a6061] ring-1 ring-[#adb3b4]/12 sm:flex-row sm:items-center">
+              <Clock3 className="h-5 w-5 shrink-0 text-[#5a6061]" />
               <div>
-                <h2 className="text-lg font-semibold text-[#202829]">检测结果</h2>
-                <p className="mt-1 text-sm leading-6 text-[#5a6061]">报告返回后，这里会保留任务状态和报告入口。</p>
-              </div>
-              <StatusPill tone={taskTone(taskStatus)}>{statusLabel(taskStatus)}</StatusPill>
-            </div>
-          </div>
-
-          <div className="px-5 py-4">
-            <div className="rounded-lg bg-[#f9f9f9] px-3 py-3 text-sm leading-6 text-[#5a6061] ring-1 ring-[#adb3b4]/12">
-              <div className="flex items-start gap-2">
-                {taskStatus === "error" ? (
-                  <AlertCircle className="mt-1 h-4 w-4 shrink-0 text-[#9b3328]" />
-                ) : taskStatus === "done" ? (
-                  <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#278a57]" />
-                ) : (
-                  <Clock3 className="mt-1 h-4 w-4 shrink-0 text-[#5a6061]" />
-                )}
-                <div className="min-w-0">
-                  <p className="font-medium text-[#202829]">{taskMessage}</p>
-                  {submittedAt ? <p className="mt-1 text-xs text-[#5a6061]">提交时间：{submittedAt}</p> : null}
-                  {jobId ? <p className="mt-1 break-all text-xs text-[#5a6061]">任务编号：{jobId}</p> : null}
-                  {resultUrl ? (
-                    <a
-                      href={resultUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-2 inline-flex font-semibold text-[#278a57] hover:text-[#202829]"
-                    >
-                      打开检测报告
-                    </a>
-                  ) : null}
-                </div>
+                <p className="font-semibold text-[#202829]">还没有检测结果</p>
+                <p className="mt-1 leading-6">选择上方预置模型并开始检测后，结果会按时间倒序显示在这里。</p>
               </div>
             </div>
           </div>
+        )}
+      </section>
 
-          <div className="border-t border-[#edf0f1]">
-            {scopeRows.map((row) => (
-              <div key={row.label} className="grid grid-cols-[84px_minmax(0,1fr)] gap-3 border-b border-[#edf0f1] px-5 py-3 last:border-b-0">
-                <span className="text-xs font-semibold text-[#5a6061]">{row.label}</span>
-                <div className="min-w-0">
-                  <p className="break-words text-sm font-semibold text-[#202829]">{row.value}</p>
-                  <p className="mt-0.5 text-xs leading-5 text-[#5a6061]">{row.detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-lg bg-white p-5 ring-1 ring-[#adb3b4]/15">
-          <h2 className="text-base font-semibold text-[#202829]">检测口径</h2>
-          <div className="mt-4 space-y-3">
-            <PrincipleItem icon={<Fingerprint className="h-4 w-4" />} title="能力指纹" text="用能力边界和协议细节判断是否只是套壳。" />
-            <PrincipleItem icon={<Link2 className="h-4 w-4" />} title="同题基线" text="把官方或可信线路作为参照，不只看一次回答像不像。" />
-            <PrincipleItem icon={<ShieldAlert className="h-4 w-4" />} title="来源风险" text="官方 API、云厂商、账号池、逆向线路会分开标注。" />
-            <PrincipleItem icon={<Network className="h-4 w-4" />} title="多次采样" text="混合池和账号池需要重复请求，单次结果不能直接下结论。" />
-          </div>
-        </section>
-      </aside>
+      <section className="grid gap-3 md:grid-cols-3">
+        <PrincipleItem icon={<Link2 className="h-4 w-4" />} title="同题基线" text="把官方或可信线路作为参照，不只看一次回答像不像。" />
+        <PrincipleItem icon={<ShieldAlert className="h-4 w-4" />} title="来源风险" text="官方 API、云厂商、账号池、逆向线路会分开标注。" />
+        <PrincipleItem icon={<Network className="h-4 w-4" />} title="多次采样" text="混合池和账号池需要重复请求，单次结果不能直接下结论。" />
+      </section>
     </div>
   );
 }
@@ -457,36 +545,50 @@ function StatusPill({ tone, children }: { tone: StatusTone; children: string }) 
   );
 }
 
-function taskTone(status: TaskStatus): StatusTone {
+function taskTone(status: DetectionStatus | "idle"): StatusTone {
   if (status === "done") return "ready";
   if (status === "error") return "warn";
   if (status === "idle") return "muted";
   return "pending";
 }
 
-function statusLabel(status: TaskStatus) {
-  if (status === "submitting") return "提交中";
+function resultTone(status: DetectionStatus): StatusTone {
+  if (status === "done") return "ready";
+  if (status === "error") return "warn";
+  return "pending";
+}
+
+function statusLabel(status: DetectionStatus | "idle") {
+  if (status === "queued") return "排队中";
   if (status === "running") return "检测中";
   if (status === "done") return "已完成";
   if (status === "error") return "失败";
   return "未开始";
 }
 
-function submitLabel(status: TaskStatus, serviceConnected: boolean) {
-  if (!serviceConnected) return "检测服务未连接";
-  if (status === "submitting") return "提交中";
+function resultStatusLabel(status: DetectionStatus) {
+  if (status === "queued") return "排队中";
   if (status === "running") return "检测中";
-  if (status === "done") return "重新检测";
+  if (status === "done") return "已完成";
+  return "失败";
+}
+
+function submitLabel(status: DetectionStatus | "idle", serviceConnected: boolean) {
+  if (!serviceConnected) return "检测服务未连接";
+  if (status === "queued") return "提交中";
+  if (status === "running") return "检测中";
   return "开始检测";
 }
 
-function PrincipleItem({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
+function PrincipleItem({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
   return (
-    <div className="flex gap-3">
-      <div className="mt-0.5 text-[#45bf78]">{icon}</div>
-      <div>
-        <p className="text-sm font-semibold text-[#202829]">{title}</p>
-        <p className="mt-0.5 text-xs leading-5 text-[#5a6061]">{text}</p>
+    <div className="rounded-lg bg-white p-4 ring-1 ring-[#adb3b4]/15">
+      <div className="flex gap-3">
+        <div className="mt-0.5 text-[#45bf78]">{icon}</div>
+        <div>
+          <p className="text-sm font-semibold text-[#202829]">{title}</p>
+          <p className="mt-0.5 text-xs leading-5 text-[#5a6061]">{text}</p>
+        </div>
       </div>
     </div>
   );
