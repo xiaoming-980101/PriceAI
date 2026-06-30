@@ -5,8 +5,8 @@
 <h1 align="center">PriceAI</h1>
 
 <p align="center">
-  <strong>AI 订阅卡网与模型 API 比价雷达，把分散渠道报价整理成可比较的标准商品。</strong><br/>
-  聚合 100+ 卡网渠道里的 ChatGPT、Claude、Gemini、Grok、邮箱、API/CDK 和模型 API 等多渠道报价，看有货最低价，对比来源，跳转原站购买。
+  <strong>AI 订阅与模型 API 的比价雷达。</strong><br/>
+  先看清官方订阅、卡网低价、官方 API 和中转 API 的价格来源、可用性与风险边界，再决定怎么买、从哪里接入。
 </p>
 
 <p align="center">
@@ -17,105 +17,76 @@
 
 <p align="center">
   <a href="https://priceai.cc">在线访问</a> ·
-  <a href="https://linux.do">LINUX DO</a> ·
-  <a href="#在线使用">在线使用</a> ·
+  <a href="#四个模块">四个模块</a> ·
   <a href="#为什么做-priceai">为什么做</a> ·
-  <a href="#适合谁">适合谁</a> ·
   <a href="#priceai-怎么解决">怎么解决</a> ·
-  <a href="#用户指南">用户指南</a> ·
   <a href="#快速开始">快速开始</a> ·
-  <a href="#faq">FAQ</a> ·
-  <a href="#文档">文档</a> ·
-  <a href="#star-趋势">Star 趋势</a>
+  <a href="#公开文档">公开文档</a> ·
+  <a href="#贡献">贡献</a>
 </p>
 
 ---
 
 <p align="center">
-  <img src="docs/assets/priceai-home-2026-06-02.png" alt="PriceAI product screenshot" width="100%" />
+  <img src="assets/priceai-home-2026-06-02.png" alt="PriceAI product screenshot" width="100%" />
 </p>
 
-## 在线使用
+## 四个模块
 
-| 需求 | 入口 |
-| --- | --- |
-| 查看 AI 订阅卡网渠道报价 | [priceai.cc](https://priceai.cc) |
-| 比较 ChatGPT Plus / Pro / Team 报价 | [ChatGPT 比价](https://priceai.cc/platforms/chatgpt) |
-| 查看官方订阅地区价 | [官方订阅地区价](https://priceai.cc/official-prices) |
-| 比较模型 API 和免费 API 渠道 | [模型 API](https://priceai.cc/api-models) |
-| 了解卡网渠道是否靠谱 | [AI 订阅卡网渠道靠谱吗？](https://priceai.cc/guides/are-ai-subscription-card-shops-reliable) |
+PriceAI 不再只是一个卡网订阅比价页，而是围绕“AI 能力怎么来”的购买前决策入口。
+
+| 模块 | 解决的问题 | 入口 |
+| --- | --- | --- |
+| 官方订阅地区价 | ChatGPT、Claude、Gemini、Grok 等官方订阅在不同地区的价格基准 | [官方订阅地区价](https://priceai.cc/official-prices) |
+| AI 卡网低价订阅 | 卡网、代充、成品号、卡密、CDK、邮箱等第三方渠道报价分散、命名混乱 | [卡网订阅比价](https://priceai.cc/channels) |
+| 官方 API / 模型 API | DeepSeek、Qwen、Kimi、GLM 等 API 入口、免费额度、Token Plan 和限制不容易横向比较 | [API 模型雷达](https://priceai.cc/api-models) |
+| 中转 API 比价雷达 | API 中转站倍率、充值系数、模型覆盖、可用性和来源披露不透明 | [API 中转站价格榜](https://priceai.cc/api-transit) |
+
+可以把它理解成四类搜索心智：
+
+- AI 比价雷达
+- AI 低价卡网 / AI 卡网低价订阅
+- 官方订阅地区价查询
+- 中转 API 比价雷达
 
 ## 为什么做 PriceAI
 
-PriceAI 的起点是一个很具体的购买困惑：为什么同样是 Gemini Pro、ChatGPT Plus、Claude Pro 这类 AI 订阅，有人按官网正价购买，有人能用地区价、学生资格或设备权益拿到更低价格，也有人在闲鱼、群聊或各种代购页面里花高得多的价格购买？
+AI 产品的价格已经不再只有“去官网订阅”一种答案。
 
-AI 订阅已经不再只有“去官网付费”这一种路径。对很多国内用户来说，还会遇到海外银行卡、App Store / Google Play 地区优惠、账号免费使用资格、代订、成品号、卡密、CDK、共享号、渠道批发等一串复杂问题。便宜渠道确实存在，但它们往往分散在闲鱼、卡网、Telegram 群和个人收藏链接里，而且每个渠道擅长的品类不一样。
+同一个 ChatGPT Plus、Claude Pro、Gemini Pro，可能同时存在官网正价、App Store 地区价、学生或设备权益价、代充价、成品号价、卡密价和第三方渠道价。开发者接入 API 时，也会面对官方 API、免费额度、模型路由、Coding Plan、Token Plan 和中转 API 等不同路径。
 
-结果就是：用户想买一个 ChatGPT Plus 或 Gemini Pro，可能要打开十几个网页，自己判断哪个有货、哪个最低、哪个标题其实不是同一种商品、哪个链接已经失效。这个过程低效，也很容易买贵、买错、买到缺货商品。
+问题是，这些信息通常分散在官网文档、App Store 页面、卡网、Telegram 群、闲鱼、公开价格页和中转站后台里。用户很难快速判断：哪个价格是官方基准，哪个是真有货低价，哪个只是过期报价，哪个渠道需要额外承担售后、账号或模型真实性风险。
 
-PriceAI 想把这件事变成一个清楚的购买前参考工具。它把分散在多个渠道里的 AI 订阅报价收拢起来，按平台和标准商品重新整理，让用户快速回答三个问题：
-
-- 这个商品现在有没有货？
-- 有货报价里的最低价是多少？
-- 这个价格来自哪个渠道，什么时候确认过？
-
-PriceAI 不卖货、不收款、不担保渠道售后。它更像一个价格雷达：帮用户少开几个网页，少踩一点信息差。
-
-## 适合谁
-
-**经常购买 AI 订阅、账号或额度的人。**  
-比如正在找 ChatGPT Plus、ChatGPT Pro、Claude Pro、Gemini Pro、Super Grok、Gmail 老号、API/CDK 额度等商品，希望购买前先横向比较价格和库存。
-
-**注重性价比、但不想自己折腾复杂渠道的人。**  
-这类用户愿意为 AI 付费，但不想总按最高价付费，也不想自己研究地区号、海外支付、学生资格、设备权益、bug 号和各种临时教程。
-
-**海外支付受限的用户。**  
-他们知道官方服务在哪里买，但缺少合适的支付条件，于是需要代订或渠道服务，同时又担心加价过高、来源不清、售后不稳。
-
-**已经收藏了多个卡网或群链接的进阶用户。**  
-他们知道低价渠道存在，也愿意自己判断风险，但缺少一个统一面板来比较不同渠道的价格、库存和更新时间。
-
-**同时使用多个 AI 产品的人。**  
-ChatGPT、Claude、Gemini、Grok、Cursor、API 额度叠加起来会变成长期成本。PriceAI 可以作为持续观察 AI 工具栈成本的小面板。
-
-## 解决的痛点
-
-- **价格不透明**：官网正价、地区价、代订价、渠道价和低价账号被不同卡网混在一起，用户很难看到横向关系。
-- **渠道太分散**：卡网、Telegram 群、聚合站、二手平台、私人收藏链接都可能有报价，手动打开和比较很耗时间。
-- **商品命名混乱**：`Plus 土区直充`、`GPT PLUS 月卡`、`Plus 成品号` 可能都在描述相近商品，但标题并不统一。
-- **库存和更新时间不可靠**：低价不代表现在能买，缺货报价如果还参与最低价，会误导用户。
-- **风险层级混在一起**：官网代订、地区价、学生权益、设备权益、成品号、共享号、来源不透明账号的风险不同，但常常都被包装成“低价 AI 订阅”。
+PriceAI 想把这件事变成一个清楚的购买前参考工具：把分散信息整理成一个可搜索、可比较、可核验的 AI 获取成本雷达。
 
 ## PriceAI 怎么解决
 
-PriceAI 的核心不是简单堆商品，而是把“原始报价”整理成“可比较的标准商品”。
+PriceAI 不卖货、不收款、不替任何渠道担保。它更像一个购买前决策工具：
+
+- **分清价格来源**：官方订阅、第三方卡网、官方 API 和中转 API 不混成同一种风险。
+- **整理标准对象**：把混乱的商品标题、模型名称和站点资料整理成标准商品、标准模型和标准站点。
+- **展示可核验信息**：保留来源、原始标题、价格、库存、倍率、更新时间和原站链接。
+- **有货最低价优先**：缺货、隐藏、未审核或异常报价不参与外层最低价。
+- **保留风险边界**：中转 API 展示倍率、可用性、来源披露和风险标签，不包装成官方 API。
+- **支持社区补充**：用户和站长可以提交渠道、站点资料和反馈，经过审核后进入公开列表。
 
 ```text
-多个自有或用户配置渠道
-  -> 自动采集原始标题、价格、库存、购买链接
-  -> 归类为 ChatGPT Plus / Gemini Pro / Super Grok 等标准商品
-  -> 展示有货最低价、渠道数、更新时间和详情报价
-  -> 跳转原站购买
+公开来源 / 用户提交 / 站点资料
+  -> 采集、导入或人工审核
+  -> 标准商品、标准模型、标准站点归类
+  -> 展示价格、库存、倍率、来源和更新时间
+  -> 用户回到原站核验并自行决策
 ```
-
-产品原则：
-
-- **有货最低价优先**：列表页最低价只取有货报价，缺货不会冒充可买价格。
-- **保留原始来源**：展示原始渠道名、商品标题、价格、状态、更新时间和购买链接。
-- **标准商品归类**：把乱标题整理为 `ChatGPT Plus`、`Claude Pro`、`Gemini Pro` 等可比较对象。
-- **自动采集优先**：尽量从原站同步价格和库存，不把人工补录当长期方案。
-- **不过度担保**：PriceAI 负责整理信息，不替任何渠道背书；最终购买风险仍由用户判断。
 
 ## 当前能力
 
-- **标准商品比价**：按 ChatGPT、Claude、Gemini、Grok、API/CDK、邮箱、其他等平台整理报价；其他类下包含接码、虚拟卡、明确品牌工具账号和其他商品，未单独拆出的工具账号统一并入其他商品。
-- **有货 / 缺货**：前台只保留两个明确状态，缺货弱化展示。
-- **全部报价视图**：可以直接查看某个平台下所有原始报价。
-- **详情对比页**：展示渠道、原始标题、价格、更新时间和原站购买入口。
-- **渠道提交**：用户可提交新渠道，后台通过试采集和采集器待办形成扩展闭环。
-- **自动采集**：支持公开接口、Shop API、HTML 解析和浏览器兜底采集。
-- **后台管理**：管理来源、试采集、批量采集、报价隐藏、分类重建和采集日志。
-- **访问分析**：可选接入 Google Analytics 4，用于查看访问和推广效果。
+- **官方订阅地区价**：整理公开地区价格、人民币估算、来源链接和更新时间。
+- **卡网订阅比价**：按 ChatGPT、Claude、Gemini、Grok、邮箱、API/CDK、工具账号等整理多渠道报价。
+- **API 模型雷达**：整理官方 API、模型路由、免费/测试额度、Token Plan、价格和限制。
+- **中转 API 价格榜**：展示第三方中转站的充值系数、模型倍率、综合倍率、近 7 日可用性和来源渠道。
+- **指南内容**：解释官方订阅、地区价、卡网渠道、交付方式和风险边界。
+- **提交与反馈**：支持用户提交新渠道、API 模型来源、中转站资料和问题反馈。
+- **后台管理**：用于来源审核、试采集、分类调整、报价隐藏、采集日志和站点资料维护。
 
 当前线上版本：<https://priceai.cc>
 
@@ -123,29 +94,32 @@ PriceAI 的核心不是简单堆商品，而是把“原始报价”整理成“
 
 PriceAI 当前不做交易闭环，不收款，不做担保，也不承诺任何渠道的售后或长期可用性。
 
+PriceAI 也不会把商业合作伪装成客观排名。广告、赞助或 AFF 关系应单独披露，不能直接改变客观排序、最低价计算和风险提示。
+
 ## 用户指南
 
 - [AI 订阅卡网渠道靠谱吗？](https://priceai.cc/guides/are-ai-subscription-card-shops-reliable)
 - [为什么同一个 AI 订阅价格差这么多？](https://priceai.cc/guides/why-ai-subscription-prices-differ)
 - [ChatGPT 有哪些获取方式？](https://priceai.cc/guides/chatgpt-subscription-options)
+- [API 中转站是什么？](https://priceai.cc/guides/api-transit)
 
 ## FAQ
 
-### AI 卡网渠道是什么？
+### PriceAI 是卖 AI 订阅或 API 的吗？
 
-这里的卡网渠道指售卖 AI 订阅、账号、卡密、CDK、邮箱、API 额度等数字商品的发卡站或渠道站。PriceAI 只整理公开报价和原站链接，不参与交易。
+不是。PriceAI 不卖货、不收款、不参与交易，只整理公开或审核通过的价格、来源、库存、倍率、更新时间和原站链接。
 
-### PriceAI 会卖货或担保渠道吗？
+### 为什么要把官方订阅、卡网订阅、官方 API 和中转 API 分开？
 
-不会。PriceAI 不卖货、不收款、不担保售后，只展示来源、原始标题、价格、库存和更新时间。购买前仍需要到原平台核验。
+因为它们的价格来源、风险边界和核验方式完全不同。官方订阅适合作为价格基准，卡网订阅适合看低价现货和交付方式，官方 API 适合看文档、额度和限制，中转 API 则必须额外关注倍率、稳定性和上游披露。
 
-### 为什么同一个 AI 订阅价格差这么多？
+### PriceAI 会担保渠道靠谱吗？
 
-常见原因包括官网正价、官方地区价、代订服务、成品号、卡密、CDK、团队邀请、短期权益和 API 额度等交付方式不同。
+不会。PriceAI 只帮助你看到更多可核验信息。真正购买前仍需要回到原平台确认商品描述、最终价格、售后规则、退款条件和风险。
 
-### GitHub 这个项目和 priceai.cc 是什么关系？
+### GitHub 仓库和 priceai.cc 是什么关系？
 
-GitHub 仓库是 PriceAI 的开源代码和文档入口，priceai.cc 是线上可使用的比价工具。
+GitHub 仓库是 PriceAI 的开源代码和公开说明入口，`priceai.cc` 是线上可使用的比价工具。
 
 ## 快速开始
 
@@ -159,7 +133,7 @@ npm run dev
 - 前台：`http://localhost:3000`
 - 后台：`http://localhost:3000/admin`
 
-未配置 Supabase 时，前台会使用内置演示数据。完整环境变量见 [配置说明](./docs/configuration.md)。
+未配置 Supabase 时，前台会使用内置演示数据。完整环境变量见 [配置说明](./public-docs/configuration.md)。
 
 ## 常用命令
 
@@ -171,24 +145,23 @@ npm run deploy:production -- --check
 npm run deploy:production
 npm run collect:prices -- --all --post
 npm run collect:prices -- --source aisou-pro --post
-npm run collect:browser -- --url https://aisou.pro/ --password your-admin-password --post
+npm run collect:browser -- --url https://example.com/ --password your-admin-password --post
 ```
 
-## 文档
+## 公开文档
 
-- [项目介绍长文](./docs/project-intro.md)
-- [配置说明](./docs/configuration.md)
-- [部署与定时采集](./docs/deployment.md)
-- [采集器与来源扩展](./docs/collectors.md)
-- [架构说明](./docs/architecture.md)
-- [数据策略](./docs/data-policy.md)
+- [公开文档索引](./public-docs/README.md)
+- [项目架构](./public-docs/architecture.md)
+- [配置说明](./public-docs/configuration.md)
+- [部署说明](./public-docs/deployment.md)
+- [采集器贡献](./public-docs/collectors.md)
+- [数据策略](./public-docs/data-policy.md)
+- [API 中转站收录说明](./public-docs/api-transit-station-admission.md)
+- [公开素材](./assets/README.md)
 - [数据与内容授权](./DATA_LICENSE.md)
 - [品牌与商标政策](./TRADEMARKS.md)
-- [产品原则](./PRODUCT.md)
-- [设计系统](./DESIGN.md)
-- [GA4 分析](./docs/analytics.md)
 
-`PRODUCT.md` 和 `DESIGN.md` 保留在根目录，供设计与产品工作流直接读取。
+内部规划、审计、增长方案、运营复盘和 Agent 工作流文件不随开源仓库公开。
 
 ## Star 趋势
 
@@ -202,11 +175,11 @@ npm run collect:browser -- --url https://aisou.pro/ --password your-admin-passwo
 
 ## Roadmap
 
-- 提高采集稳定性，减少失败来源，完善重试和最近确认时间展示。
-- 优化 ChatGPT、Claude、Gemini、Grok、邮箱、API/CDK、其他辅助商品等分类规则。
-- 让用户提交渠道后的解析、试采集、待办和纳入采集形成闭环。
-- 在不做担保的前提下，补充更清晰的交付方式、套餐差异和风险提示。
-- 继续验证它是否适合长期运营、开源协作和社区共建。
+- 把 README 展示图升级为新的四模块总览图。
+- 提高采集稳定性，减少失败来源，完善最近确认时间展示。
+- 优化官方订阅、卡网订阅、官方 API 和中转 API 的交叉解释。
+- 补充更清晰的交付方式、套餐差异、倍率口径和风险提示。
+- 完善用户提交、站长提交、反馈审核和公开披露闭环。
 
 ## 贡献
 
@@ -214,9 +187,10 @@ npm run collect:browser -- --url https://aisou.pro/ --password your-admin-passwo
 
 - 新渠道采集器
 - 价格解析修复
-- 商品分类规则优化
+- 商品或模型分类规则优化
+- API 中转站公开资料补充
 - UI/交互改进
-- 文档补充
+- 公开文档补充
 
 开始前建议先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。涉及验证码、登录墙、WAF 或敏感凭据的站点，不应通过绕过限制的方式采集。
 
@@ -224,4 +198,4 @@ npm run collect:browser -- --url https://aisou.pro/ --password your-admin-passwo
 
 PriceAI 的软件代码使用 [GNU Affero General Public License v3.0](./LICENSE) 开源。
 
-`PriceAI` 名称、Logo、域名、视觉品牌、线上生产数据、渠道数据、价格快照、指南内容和截图不随软件代码授权。Fork、二次开发或部署公开服务时，请阅读 [数据与内容授权](./DATA_LICENSE.md) 和 [品牌与商标政策](./TRADEMARKS.md)，并避免让用户误认为你的服务是官方 PriceAI。
+`PriceAI` 名称、Logo、域名、视觉品牌、线上生产数据、渠道数据、价格快照、指南内容、截图和公开素材不随软件代码授权。Fork、二次开发或部署公开服务时，请阅读 [数据与内容授权](./DATA_LICENSE.md) 和 [品牌与商标政策](./TRADEMARKS.md)，并避免让用户误认为你的服务是官方 PriceAI。
