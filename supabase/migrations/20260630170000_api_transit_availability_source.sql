@@ -161,6 +161,6 @@ set
   end,
   source_url = coalesce(run.logs ->> 'availabilitySourceUrl', station.availability_source_url, run.source_url)
 from api_transit_detection_runs as run
-left join api_transit_stations as station on station.id = sample.station_id
+left join api_transit_stations as station on station.id = run.station_id
 where sample.run_id = run.id
   and (sample.source_type = 'unknown' or sample.source_label is null or sample.source_url is null);
