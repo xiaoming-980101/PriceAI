@@ -24,6 +24,7 @@ const CALLAI_PARTNER_STATUS_COLLECTORS = new Set([
 ]);
 const ONEHOP_PUBLIC_MODEL_COLLECTORS = new Set(["onehop_public_models"]);
 const APINODE_PUBLIC_SITE_INFO_COLLECTORS = new Set(["apinode_public_site_info", "sub2api_public_site_info"]);
+const ZIVV_MODEL_HUB_COLLECTORS = new Set(["zivv_model_hub"]);
 const SOURCE_SKIPPED = Symbol("source_skipped");
 const officialTransitPrices = {
   "Claude Sonnet 4.6": { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, imageOutput: null },
@@ -245,6 +246,9 @@ function parsePricingPayload(source, payload, collectedAt) {
   if (isApinodePublicSiteInfoSource(source)) {
     return parseApinodePublicSiteInfoPayload(source, payload, collectedAt);
   }
+  if (isZivvModelHubSource(source)) {
+    return parseZivvModelHubPayload(source, payload, collectedAt);
+  }
 
   const items = normalizePricingItems(payload);
   const groupRatios = normalizeGroupRatios(payload);
@@ -445,11 +449,173 @@ function isApinodePublicSiteInfoSource(source) {
   return APINODE_PUBLIC_SITE_INFO_COLLECTORS.has(source.collectorKind);
 }
 
+function isZivvModelHubSource(source) {
+  return ZIVV_MODEL_HUB_COLLECTORS.has(source.collectorKind);
+}
+
 function normalizeOneHopPublicModels(payload) {
   if (Array.isArray(payload?.data?.items)) return payload.data.items;
   if (Array.isArray(payload?.items)) return payload.items;
   if (Array.isArray(payload?.data)) return payload.data;
   return [];
+}
+
+function parseZivvModelHubPayload(source, payload, collectedAt) {
+  const items = normalizeZivvModelHubItems(payload);
+  const selected = [];
+  const skippedFixedPriceModels = [];
+
+  for (const item of items) {
+    const rawName = [item?.id, item?.name, item?.model].filter(Boolean).join(" ");
+    const standard = standardizeModelName(rawName);
+    if (!standard) continue;
+
+    if (Number(item?.quota_type) === 2) {
+      skippedFixedPriceModels.push(String(item?.id || standard));
+      continue;
+    }
+
+    const groups = normalizeZivvGroups(item);
+    for (const group of groups) {
+      const offer = buildZivvModelHubOfferRow(source, item, group, standard, collectedAt);
+      if (offer) selected.push(offer);
+    }
+  }
+
+  const deduped = dedupeBestOffers(selected);
+  const collectionError = skippedFixedPriceModels.length
+    ? `跳过 ${skippedFixedPriceModels.length} 个固定按次计费模型：${skippedFixedPriceModels.join(", ")}。`
+    : null;
+
+  return {
+    modelCount: items.length,
+    collectionError,
+    station: buildStationRow(source, collectedAt, {
+      status: deduped.length ? "success" : "partial",
+      offerCount: deduped.length,
+      collectionError,
+      availability: {
+        rate: null,
+        samples: 0,
+        firstCheckedAt: null,
+        lastCheckedAt: null,
+        note: "Zivv 公开模型广场价格已抓取；状态页公开存在，但尚未接入 PriceAI API Key 可用性检测。",
+      },
+    }),
+    offers: deduped,
+  };
+}
+
+function normalizeZivvModelHubItems(payload) {
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.models)) return payload.models;
+  if (Array.isArray(payload)) return payload;
+  return [];
+}
+
+function normalizeZivvGroups(item) {
+  const groups = Array.isArray(item?.groups) && item.groups.length ? item.groups : [null];
+  return groups.map((group) => {
+    const raw = group && typeof group === "object" ? group : {};
+    const key = stringOrNull(raw.id) || stringOrNull(raw.name) || "default";
+    const name = stringOrNull(raw.name) || "default";
+    return {
+      key,
+      name,
+      description: stringOrNull(raw.description),
+      multiplier: numberValue(raw.multiplier),
+      inputRate: numberValue(raw.input_rate ?? item?.input_rate),
+      outputRate: numberValue(raw.output_rate ?? item?.output_rate),
+      cacheReadRate: numberValue(raw.cache_read_rate ?? item?.cache_read_rate),
+      cacheWriteRate: numberValue(raw.cache_write_rate ?? item?.cache_write_rate),
+    };
+  });
+}
+
+function buildZivvModelHubOfferRow(source, item, group, standard, collectedAt) {
+  const family = familyForStandardModel(standard);
+  const official = officialTransitPrices[standard];
+  if (!official) return null;
+
+  const unitPricesUsd = {
+    input: group.inputRate,
+    output: group.outputRate,
+    cacheRead: group.cacheReadRate,
+    cacheWrite: group.cacheWriteRate,
+    imageOutput: null,
+    fixedPrice: numberValue(item?.fixed_price),
+    quotaType: numberValue(item?.quota_type),
+  };
+  const input = unitRatioValue(unitPricesUsd.input, official.input);
+  const output = unitRatioValue(unitPricesUsd.output, official.output);
+  const cacheRead = unitRatioValue(unitPricesUsd.cacheRead, official.cacheRead);
+  const cacheWrite = unitRatioValue(unitPricesUsd.cacheWrite, official.cacheWrite);
+  if (input === null && output === null && cacheRead === null && cacheWrite === null) return null;
+
+  const groupName = group.name || group.key || "default";
+  const sourceText = [item?.id, item?.provider, groupName, group.description].filter(Boolean).join(" ");
+  const autoPublish = shouldAutoPublishSource(source);
+
+  return {
+    id: stableId("api-transit-offer", source.id, standard, groupName),
+    station_id: source.id,
+    family,
+    standard_model: standard,
+    raw_model_name: String(item?.id || item?.name || standard),
+    group_name: groupName,
+    recharge_ratio: source.rechargeRatio || DEFAULT_RECHARGE_RATIO,
+    model_multiplier: round(input ?? output ?? cacheRead ?? cacheWrite, 6),
+    input_price: input === null ? null : round(input, 6),
+    output_price: output === null ? null : round(output, 6),
+    cache_read_price: cacheRead === null ? null : round(cacheRead, 6),
+    cache_write_price: cacheWrite === null ? null : round(cacheWrite, 6),
+    image_output_price: null,
+    currency: "CNY",
+    account_pool: inferAccountPool(sourceText),
+    channel_type: inferChannelType(sourceText),
+    price_source: "Zivv 公开模型广场",
+    source_url: source.pricingUrl || source.pricingEndpointUrl,
+    availability_seven_day_rate: null,
+    availability_seven_day_samples: 0,
+    availability_first_checked_at: null,
+    availability_last_checked_at: null,
+    availability_note: "价格已抓取，尚未运行 API 可用性检测。",
+    last_verified_at: collectedAt,
+    status: autoPublish ? "active" : "needs_review",
+    auto_publish: autoPublish,
+    raw_payload: {
+      collector_kind: source.collectorKind,
+      provider: stringOrNull(item?.provider),
+      model: compactZivvModelPayload(item),
+      group: {
+        id: group.key,
+        name: groupName,
+        description: group.description,
+        multiplier: group.multiplier,
+      },
+      unit_prices_usd: unitPricesUsd,
+      multiplier_basis: "zivv_public_usd_per_million",
+    },
+    created_at: collectedAt,
+  };
+}
+
+function compactZivvModelPayload(item) {
+  if (!item || typeof item !== "object") return item || null;
+  return {
+    id: stringOrNull(item.id),
+    provider: stringOrNull(item.provider),
+    quota_type: numberValue(item.quota_type),
+    input_rate: numberValue(item.input_rate),
+    output_rate: numberValue(item.output_rate),
+    cache_read_rate: numberValue(item.cache_read_rate),
+    cache_write_rate: numberValue(item.cache_write_rate),
+    fixed_price: numberValue(item.fixed_price),
+    context_window: stringOrNull(item.context_window),
+    capabilities: Array.isArray(item.capabilities) ? item.capabilities.map(stringOrNull).filter(Boolean) : [],
+    features: Array.isArray(item.features) ? item.features.map(stringOrNull).filter(Boolean) : [],
+  };
 }
 
 function normalizeSourceGroupName(source, groupName) {
@@ -1343,6 +1509,8 @@ function inferChannelType(text) {
   const value = String(text || "").toLowerCase();
   if (value.includes("official") || value.includes("官方") || value.includes("官转") || value.includes("官key")) return "official_api";
   if (value.includes("kiro")) return "reverse_engineered";
+  if (value.includes("anti") || value.includes("反重力") || value.includes("逆向")) return "reverse_engineered";
+  if (value.includes("自有") || value.includes("号池")) return "first_party_pool";
   if (value.includes("aws") || value.includes("azure") || value.includes("vertex") || value.includes("云")) return "cloud";
   if (value.includes("混")) return "mixed";
   if (value.includes("分销") || value.includes("reseller")) return "reseller";
@@ -1979,5 +2147,6 @@ export const __test = {
   mergeStationForRefresh,
   mergeOfferForRefresh,
   parseApinodePublicSiteInfoPayload,
+  parseZivvModelHubPayload,
   shouldRestrictToPublishedStations,
 };
