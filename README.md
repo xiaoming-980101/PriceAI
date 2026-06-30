@@ -44,7 +44,7 @@
 ---
 
 <p align="center">
-  <img src="assets/priceai-home-2026-07-01.png" alt="PriceAI AI card shop subscription comparison table screenshot" width="100%" />
+  <img src="assets/priceai-home-2026-07-01-v2.png" alt="PriceAI AI card shop subscription comparison table screenshot" width="100%" />
 </p>
 
 ## 四个模块
