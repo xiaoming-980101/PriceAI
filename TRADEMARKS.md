@@ -1,12 +1,12 @@
 # Trademark and Brand Policy
 
-PriceAI is open source, but the project name, logo, icon, domain name, visual identity, screenshots, and public-facing brand assets are not licensed under the software license.
+PriceAI is source-available, but the project name, logo, icon, domain name, visual identity, screenshots, and public-facing brand assets are not licensed under the software license.
 
 ## What You May Do
 
 - Refer to this project as `PriceAI` when describing compatibility, forks, contributions, reviews, or source attribution.
 - Keep the required copyright and license notices when using the source code.
-- Use the software code under the terms of the license in [LICENSE](./LICENSE).
+- Use the software code under the non-commercial and source-available terms in [LICENSE](./LICENSE).
 
 ## What You May Not Do
 

@@ -1,10 +1,10 @@
 # Data and Content Policy
 
-This repository open sources the PriceAI software code. It does not grant a blanket license to copy PriceAI's production data, collected channel data, pricing snapshots, editorial content, screenshots, brand assets, or operational datasets.
+This repository makes the PriceAI source code available under the repository license. It does not grant a blanket license to copy PriceAI's production data, collected channel data, pricing snapshots, editorial content, screenshots, brand assets, or operational datasets.
 
 ## Software Code
 
-Source code in this repository is licensed under the license in [LICENSE](./LICENSE), unless a file states otherwise.
+Source code in this repository is governed by [LICENSE](./LICENSE), unless a file states otherwise. The repository license restricts commercial hosting, monetized deployments, and competitive public services without written permission.
 
 ## Production Data
 
@@ -21,7 +21,7 @@ You may use the public website normally as an end user. Do not scrape PriceAI at
 
 ## Editorial Content and Assets
 
-Guides, long-form explanations, screenshots, logos, icons, and marketing copy are not automatically licensed for reuse just because the code is open source. Short excerpts with attribution are fine for commentary, reviews, and links back to the project.
+Guides, long-form explanations, screenshots, logos, icons, and marketing copy are not automatically licensed for reuse just because the source code is visible. Short excerpts with attribution are fine for commentary, reviews, and links back to the project.
 
 ## Attribution
 

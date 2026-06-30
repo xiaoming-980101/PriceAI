@@ -13,6 +13,6 @@
 
 ## 授权边界
 
-这些素材用于展示官方 PriceAI 项目本身。PriceAI 名称、Logo、域名、视觉品牌、截图和公开素材不随 AGPL-3.0 软件代码授权。Fork、二次开发或公开部署时，请阅读根目录的 `DATA_LICENSE.md` 和 `TRADEMARKS.md`。
+这些素材用于展示官方 PriceAI 项目本身。PriceAI 名称、Logo、域名、视觉品牌、截图和公开素材不随源码授权。Fork、二次开发或公开展示时，请阅读根目录的 `DATA_LICENSE.md` 和 `TRADEMARKS.md`。
 
 不要把内部规划文档、运营截图、后台截图、未公开渠道数据或带有账号信息的素材放进这个目录。
