@@ -10,6 +10,18 @@
 </p>
 
 <p align="center">
+  <a href="https://priceai.cc">
+    <img src="https://img.shields.io/badge/Website-priceai.cc-45bf78?style=flat-square" alt="PriceAI Website" />
+  </a>
+  <a href="https://t.me/priceaicc">
+    <img src="https://img.shields.io/badge/Telegram-%E7%BE%A4%E7%BB%84-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="PriceAI Telegram 群组" />
+  </a>
+  <a href="https://qm.qq.com/q/ze2W6ADwKk">
+    <img src="https://img.shields.io/badge/QQ%20%E7%BE%A4-761822700-1D9BF0?style=flat-square" alt="PriceAI QQ 群 761822700" />
+  </a>
+  <a href="https://x.com/dimension4220">
+    <img src="https://img.shields.io/badge/X-@dimension4220-000000?style=flat-square&logo=x&logoColor=white" alt="X @dimension4220" />
+  </a>
   <a href="https://linux.do">
     <img src="https://img.shields.io/badge/LINUX%20DO-%E7%A4%BE%E5%8C%BA-2d3435?style=flat-square" alt="LINUX DO 社区" />
   </a>
