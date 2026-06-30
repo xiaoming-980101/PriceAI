@@ -23,6 +23,7 @@ const CALLAI_PARTNER_STATUS_COLLECTORS = new Set([
   "subway_api_partner_status",
 ]);
 const ONEHOP_PUBLIC_MODEL_COLLECTORS = new Set(["onehop_public_models"]);
+const APINODE_PUBLIC_SITE_INFO_COLLECTORS = new Set(["apinode_public_site_info"]);
 const SOURCE_SKIPPED = Symbol("source_skipped");
 const officialTransitPrices = {
   "Claude Sonnet 4.6": { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, imageOutput: null },
@@ -241,6 +242,9 @@ function parsePricingPayload(source, payload, collectedAt) {
   if (isOneHopPublicModelsSource(source)) {
     return parseOneHopPublicModelsPayload(source, payload, collectedAt);
   }
+  if (isApinodePublicSiteInfoSource(source)) {
+    return parseApinodePublicSiteInfoPayload(source, payload, collectedAt);
+  }
 
   const items = normalizePricingItems(payload);
   const groupRatios = normalizeGroupRatios(payload);
@@ -296,6 +300,77 @@ function parseOneHopPublicModelsPayload(source, payload, collectedAt) {
       status: deduped.length ? "success" : "partial",
       offerCount: deduped.length,
       availability: summarizeOneHopStationAvailability(deduped, collectedAt),
+    }),
+    offers: deduped,
+  };
+}
+
+function parseApinodePublicSiteInfoPayload(source, payload, collectedAt) {
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
+  const generatedAt = stringOrNull(data.generated_at) || collectedAt;
+  const groups = Array.isArray(data.groups) ? data.groups : [];
+  const availabilityByStandard = apinodeAvailabilityByStandard(data.model_availability, generatedAt);
+  const rechargeRatio = rechargeRatioFromBilling(data.recharge) || source.rechargeRatio || DEFAULT_RECHARGE_RATIO;
+  const offers = [];
+
+  for (const group of groups) {
+    if (!group || typeof group !== "object") continue;
+    const platform = String(group.platform || "").toLowerCase();
+    if (platform && platform !== "openai") continue;
+
+    const groupName = stringOrNull(group.name) || `group-${group.id || "default"}`;
+    const groupText = `${groupName} ${group.platform || ""}`;
+    if (isApinodeImageGroup(group)) {
+      const imageMultiplier = numberValue(group.image_rate_multiplier);
+      if (imageMultiplier !== null && imageMultiplier > 0) {
+        offers.push(
+          buildApinodePublicSiteInfoOfferRow({
+            source,
+            group,
+            standard: "GPT Image 2",
+            rawModelName: "gpt-image-2",
+            multiplier: imageMultiplier,
+            rechargeRatio,
+            availability: availabilityByStandard.get("GPT Image 2"),
+            generatedAt,
+            collectedAt,
+          }),
+        );
+      }
+      continue;
+    }
+
+    const multiplier = numberValue(group.rate_multiplier);
+    if (multiplier === null || multiplier <= 0) continue;
+
+    for (const standard of ["GPT 5.4", "GPT 5.5"]) {
+      offers.push(
+        buildApinodePublicSiteInfoOfferRow({
+          source,
+          group: { ...group, inferred_group_text: groupText },
+          standard,
+          rawModelName: standard === "GPT 5.4" ? "gpt-5.4" : "gpt-5.5",
+          multiplier,
+          rechargeRatio,
+          availability: availabilityByStandard.get(standard),
+          generatedAt,
+          collectedAt,
+        }),
+      );
+    }
+  }
+
+  const deduped = dedupeBestOffers(offers.filter(Boolean));
+  const collectionError = deduped.length ? null : "APINode site-info 未返回可识别 OpenAI 分组倍率。";
+  return {
+    modelCount: availabilityByStandard.size,
+    collectionError,
+    station: buildStationRow(source, collectedAt, {
+      status: deduped.length ? "success" : "partial",
+      offerCount: deduped.length,
+      meta: { generated_at: generatedAt },
+      collectionError,
+      availability: summarizeApinodePublicAvailability(availabilityByStandard, generatedAt),
     }),
     offers: deduped,
   };
@@ -364,6 +439,10 @@ function isCallaiPartnerStatusSource(source) {
 
 function isOneHopPublicModelsSource(source) {
   return ONEHOP_PUBLIC_MODEL_COLLECTORS.has(source.collectorKind);
+}
+
+function isApinodePublicSiteInfoSource(source) {
+  return APINODE_PUBLIC_SITE_INFO_COLLECTORS.has(source.collectorKind);
 }
 
 function normalizeOneHopPublicModels(payload) {
@@ -511,6 +590,64 @@ function buildOneHopPublicModelOfferRow(source, item, standard, collectedAt) {
   };
 }
 
+function buildApinodePublicSiteInfoOfferRow({
+  source,
+  group,
+  standard,
+  rawModelName,
+  multiplier,
+  rechargeRatio,
+  availability,
+  generatedAt,
+  collectedAt,
+}) {
+  const family = familyForStandardModel(standard);
+  const roundedMultiplier = round(multiplier, 6);
+  const groupName = stringOrNull(group?.name) || `group-${group?.id || "default"}`;
+  const accountPool = inferAccountPool(`${groupName} ${group?.inferred_group_text || ""}`);
+  const channelType = inferChannelType(groupName);
+  const isImage = family === "image";
+  const autoPublish = shouldAutoPublishSource(source);
+
+  return {
+    id: stableId("api-transit-offer", source.id, standard, groupName),
+    station_id: source.id,
+    family,
+    standard_model: standard,
+    raw_model_name: rawModelName,
+    group_name: groupName,
+    recharge_ratio: rechargeRatio,
+    model_multiplier: roundedMultiplier,
+    input_price: isImage ? null : roundedMultiplier,
+    output_price: isImage ? null : roundedMultiplier,
+    cache_read_price: null,
+    cache_write_price: null,
+    image_output_price: isImage ? roundedMultiplier : null,
+    currency: "CNY",
+    account_pool: accountPool,
+    channel_type: channelType,
+    price_source: "APINode 公开 site-info",
+    source_url: source.pricingEndpointUrl,
+    availability_seven_day_rate: availability?.rate ?? null,
+    availability_seven_day_samples: availability?.samples ?? 0,
+    availability_first_checked_at: availability?.firstCheckedAt ?? null,
+    availability_last_checked_at: availability?.lastCheckedAt ?? generatedAt,
+    availability_note: apinodeAvailabilityNote(standard, availability),
+    last_verified_at: availability?.lastCheckedAt || generatedAt || collectedAt,
+    status: autoPublish ? "active" : "needs_review",
+    auto_publish: autoPublish,
+    raw_payload: {
+      collector_kind: source.collectorKind,
+      snapshot_generated_at: generatedAt,
+      group,
+      availability: availability?.raw || null,
+      recharge_ratio: rechargeRatio,
+      multiplier_basis: isImage ? "apinode_image_rate_multiplier" : "apinode_rate_multiplier",
+    },
+    created_at: collectedAt,
+  };
+}
+
 function familyForStandardModel(standard) {
   return modelFamilyByStandard[standard] || "gpt";
 }
@@ -627,6 +764,93 @@ function summarizeOneHopStationAvailability(offers, collectedAt) {
     lastCheckedAt: lastCheckedAt || collectedAt,
     note: "OneHop 公开模型目录汇总 uptime14d；这些是商家页面公开样本，仍需 PriceAI 测试 Key 复核。",
   };
+}
+
+function apinodeAvailabilityByStandard(modelAvailability, generatedAt) {
+  const output = new Map();
+  const entries = Array.isArray(modelAvailability) ? modelAvailability : [];
+  for (const entry of entries) {
+    const models = Array.isArray(entry?.models) ? entry.models : [];
+    for (const model of models) {
+      const standard = standardizeModelName([model?.model, model?.name, entry?.name].filter(Boolean).join(" "));
+      if (!standard) continue;
+      const sevenDay = numberValue(model?.availability_7d);
+      const fifteenDay = numberValue(model?.availability_15d);
+      const thirtyDay = numberValue(model?.availability_30d);
+      output.set(standard, {
+        standard,
+        status: stringOrNull(model?.latest_status) || "unknown",
+        rate: percentValueToRate(sevenDay),
+        samples: sevenDay === null ? 0 : 1,
+        firstCheckedAt: generatedAt,
+        lastCheckedAt: generatedAt,
+        sevenDay,
+        fifteenDay,
+        thirtyDay,
+        raw: {
+          monitor: {
+            id: numberValue(entry?.id),
+            name: stringOrNull(entry?.name),
+            provider: stringOrNull(entry?.provider),
+            group_name: stringOrNull(entry?.group_name),
+          },
+          model,
+        },
+      });
+    }
+  }
+  return output;
+}
+
+function summarizeApinodePublicAvailability(availabilityByStandard, generatedAt) {
+  const samples = Array.from(availabilityByStandard.values()).filter((item) => item.rate !== null);
+  if (!samples.length) {
+    return {
+      rate: null,
+      samples: 0,
+      firstCheckedAt: null,
+      lastCheckedAt: generatedAt,
+      note: "APINode site-info 暂未返回可识别模型可用率；非 PriceAI API Key 实测。",
+    };
+  }
+
+  return {
+    rate: round(samples.reduce((total, item) => total + item.rate, 0) / samples.length, 6),
+    samples: samples.length,
+    firstCheckedAt: samples.map((item) => item.firstCheckedAt).filter(Boolean).sort().at(0) || generatedAt,
+    lastCheckedAt: samples.map((item) => item.lastCheckedAt).filter(Boolean).sort().at(-1) || generatedAt,
+    note: "APINode 公开 site-info 模型可用率汇总；接口未返回样本明细，非 PriceAI API Key 实测。",
+  };
+}
+
+function apinodeAvailabilityNote(standard, availability) {
+  if (!availability) return `APINode site-info 未返回 ${standard} 公开可用率；非 PriceAI API Key 实测。`;
+  const windows = [
+    ["7 日", availability.sevenDay],
+    ["15 日", availability.fifteenDay],
+    ["30 日", availability.thirtyDay],
+  ]
+    .filter(([, value]) => value !== null)
+    .map(([label, value]) => `${label} ${formatPercentValue(value)}`);
+  const status = availability.status ? `最新状态 ${availability.status}` : "最新状态未知";
+  return `APINode 公开 site-info 监测：${status}${windows.length ? `，${windows.join("，")}` : ""}；接口未返回样本明细，非 PriceAI API Key 实测。`;
+}
+
+function isApinodeImageGroup(group) {
+  const name = String(group?.name || "").toLowerCase();
+  return Boolean(group?.allow_image_generation) && (name.includes("image") || name.includes("图像") || name.includes("生图"));
+}
+
+function percentValueToRate(value) {
+  const number = numberValue(value);
+  if (number === null) return null;
+  return round(number > 1 ? number / 100 : number, 6);
+}
+
+function formatPercentValue(value) {
+  const number = numberValue(value);
+  if (number === null) return "未知";
+  return `${round(number > 1 ? number : number * 100, 2).toFixed(2)}%`;
 }
 
 function buildCallaiPartnerOfferRow({
@@ -1703,5 +1927,6 @@ export const __test = {
   filterSourcesByPublishedStationIds,
   findStaleRefreshedOfferIds,
   mergeOfferForRefresh,
+  parseApinodePublicSiteInfoPayload,
   shouldRestrictToPublishedStations,
 };

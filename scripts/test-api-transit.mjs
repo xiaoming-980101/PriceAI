@@ -100,4 +100,104 @@ assert.equal(__test.shouldRestrictToPublishedStations({ post: true, source: "pen
 assert.equal(__test.shouldRestrictToPublishedStations({ post: true, publish: true }), false);
 assert.equal(__test.shouldRestrictToPublishedStations({ post: true, dryRun: true }), false);
 
+const apinodePayload = {
+  code: 0,
+  message: "success",
+  data: {
+    generated_at: "2026-06-30T07:11:17Z",
+    groups: [
+      {
+        id: 15,
+        name: "image2 渠道",
+        platform: "openai",
+        rate_multiplier: 0.1,
+        allow_image_generation: true,
+        image_rate_multiplier: 1,
+      },
+      {
+        id: 11,
+        name: "Plus-经济通道",
+        platform: "openai",
+        rate_multiplier: 0.3,
+        allow_image_generation: true,
+        image_rate_multiplier: 1,
+      },
+      {
+        id: 12,
+        name: "Team/Plus-标准通道",
+        platform: "openai",
+        rate_multiplier: 0.5,
+        allow_image_generation: true,
+        image_rate_multiplier: 1,
+      },
+      {
+        id: 13,
+        name: "Team/Plus/Pro-稳定通道",
+        platform: "openai",
+        rate_multiplier: 0.65,
+        allow_image_generation: true,
+        image_rate_multiplier: 1,
+      },
+    ],
+    model_availability: [
+      {
+        id: 8,
+        name: "Plus/Team渠道监控-GPT5.4",
+        provider: "openai",
+        group_name: "",
+        models: [
+          {
+            model: "gpt-5.4",
+            latest_status: "operational",
+            availability_7d: 98.10397553516819,
+            availability_15d: 98.10397553516819,
+            availability_30d: 98.10397553516819,
+          },
+        ],
+      },
+      {
+        id: 2,
+        name: "Plus/Team渠道监控-GPT5.5",
+        provider: "openai",
+        group_name: "OpenAI",
+        models: [
+          {
+            model: "gpt-5.5",
+            latest_status: "operational",
+            availability_7d: 97.64936336924583,
+            availability_15d: 97.11141678129299,
+            availability_30d: 98.24443848834093,
+          },
+        ],
+      },
+    ],
+    recharge: {
+      payment_enabled: true,
+      balance_disabled: false,
+      balance_recharge_multiplier: 1,
+    },
+  },
+};
+const apinodeSource = {
+  id: "apinode-ltd",
+  name: "APINode",
+  websiteUrl: "https://apinode.ltd/",
+  apiBaseUrl: "https://apinode.ltd/v1",
+  pricingEndpointUrl: "https://apinode.ltd/api/v1/public/site-info",
+  collectorKind: "apinode_public_site_info",
+  autoPublish: true,
+};
+const apinode = __test.parseApinodePublicSiteInfoPayload(apinodeSource, apinodePayload, "2026-06-30T07:12:00Z");
+assert.equal(apinode.offers.length, 7);
+assert.equal(apinode.station.availability_seven_day_samples, 2);
+assert.equal(apinode.station.availability_seven_day_rate, 0.978767);
+assert.equal(apinode.offers.some((offer) => offer.standard_model === "GPT 5.4" && offer.group_name === "image2 渠道"), false);
+assert.equal(apinode.offers.some((offer) => offer.standard_model === "GPT Image 2" && offer.group_name === "image2 渠道"), true);
+const apinodeGpt55Economy = apinode.offers.find(
+  (offer) => offer.standard_model === "GPT 5.5" && offer.group_name === "Plus-经济通道",
+);
+assert.equal(apinodeGpt55Economy.model_multiplier, 0.3);
+assert.equal(apinodeGpt55Economy.availability_seven_day_rate, 0.976494);
+assert.match(apinodeGpt55Economy.availability_note, /非 PriceAI API Key 实测/);
+
 console.log("api transit collector refresh test passed");
