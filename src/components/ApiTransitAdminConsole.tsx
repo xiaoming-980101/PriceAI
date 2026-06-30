@@ -1559,7 +1559,7 @@ function StationEditDialog({
               <input name="offerValidUntil" defaultValue={station.commercialOffers[0]?.validUntil || ""} className={adminFieldClassName} placeholder="例如 2026-07-01 / 长期有效" />
             </AdminField>
             <label className="flex h-11 items-center gap-2 rounded-lg border border-[#adb3b4]/30 bg-white px-3 text-sm font-medium text-[#2d3435]">
-              <input name="offerEnabled" type="checkbox" defaultChecked={station.commercialOffers[0]?.enabled ?? false} className="h-4 w-4 accent-[#2d3435]" />
+              <input name="offerEnabled" type="checkbox" defaultChecked={station.commercialOffers[0]?.enabled ?? true} className="h-4 w-4 accent-[#2d3435]" />
               前台展示优惠
             </label>
           </div>
@@ -2212,20 +2212,25 @@ function buildCommercialOffersFromForm(
   station: ApiTransitAdminStation,
 ): ApiTransitCommercialOffer[] {
   const title = formText(formData, "offerTitle");
+  const url = formNullableText(formData, "offerUrl");
+  const code = formNullableText(formData, "offerCode");
+  const description = formNullableText(formData, "offerDescription");
+  const listLabel = formNullableText(formData, "offerListLabel");
+  const disclosure = formNullableText(formData, "offerDisclosure");
   const existing = station.commercialOffers[0];
-  if (!title) return [];
+  if (!title && !url && !code && !description && !listLabel && !disclosure) return [];
 
   return [
     {
       id: existing?.id || "primary-offer",
       type: commercialOfferTypeFromText(formText(formData, "offerType")),
-      title,
-      listLabel: formNullableText(formData, "offerListLabel"),
-      description: formNullableText(formData, "offerDescription"),
-      code: formNullableText(formData, "offerCode"),
-      url: formNullableText(formData, "offerUrl"),
+      title: title || (url ? "优惠入口" : "可用优惠"),
+      listLabel,
+      description,
+      code,
+      url,
       validUntil: formNullableText(formData, "offerValidUntil"),
-      disclosure: formNullableText(formData, "offerDisclosure"),
+      disclosure,
       enabled: formData.get("offerEnabled") === "on",
     },
   ];

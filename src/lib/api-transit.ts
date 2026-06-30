@@ -603,9 +603,10 @@ export function hasTransitAffRelation(station: TransitStation): boolean {
 }
 
 export function getTransitStationOutboundUrl(
+  station: TransitStation,
   offer: TransitCommercialOffer | null | undefined
-): string | null {
-  return offer?.url || null;
+): string {
+  return offer?.url || station.websiteUrl;
 }
 
 export function isTransitStationOutboundAff(

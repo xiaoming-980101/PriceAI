@@ -120,9 +120,11 @@ export default function TransitStationDetail({ station, children }: Props) {
   const commercialOffers = getActiveTransitCommercialOffers(station);
   const verificationEvents = getTransitVerificationEvents(station);
   const outboundOffer = getPrimaryTransitOutboundOffer(station);
-  const outboundUrl = getTransitStationOutboundUrl(outboundOffer);
+  const outboundUrl = getTransitStationOutboundUrl(station, outboundOffer);
   const hasAffRelation = hasTransitAffRelation(station);
   const isAffOutbound = isTransitStationOutboundAff(station, outboundOffer);
+  const outboundLabel = outboundOffer?.url ? "优惠入口" : "官网";
+  const outboundButtonLabel = outboundOffer?.url ? "进入优惠入口" : "访问官网";
 
   const handleBack = useCallback(() => {
     const back = typeof window === "undefined"
@@ -201,19 +203,17 @@ export default function TransitStationDetail({ station, children }: Props) {
                     </StatusChip>
                   ) : null}
                 </div>
-                {outboundUrl ? (
-                  <a
-                    href={outboundUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(event) => requestOutboundVisit(event, { url: outboundUrl, isAff: isAffOutbound })}
-                    aria-label={`访问 ${station.name} 优惠入口`}
-                    className="mt-1 inline-flex max-w-full items-center gap-1 text-sm font-semibold text-[#5a6061] transition-colors hover:text-[#2d3435]"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">优惠入口</span>
-                  </a>
-                ) : null}
+                <a
+                  href={outboundUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(event) => requestOutboundVisit(event, { url: outboundUrl, isAff: isAffOutbound })}
+                  aria-label={`访问 ${station.name} ${outboundLabel}`}
+                  className="mt-1 inline-flex max-w-full items-center gap-1 text-sm font-semibold text-[#5a6061] transition-colors hover:text-[#2d3435]"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{outboundLabel}</span>
+                </a>
               </div>
             </div>
 
@@ -257,18 +257,16 @@ export default function TransitStationDetail({ station, children }: Props) {
               onCopy={copyOfferCode}
             />
             <div className="mt-4 flex flex-wrap gap-2">
-              {outboundUrl ? (
-                <a
-                  href={outboundUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(event) => requestOutboundVisit(event, { url: outboundUrl, isAff: isAffOutbound })}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#2d3435] px-4 text-sm font-bold text-[#f8f8f8] transition-colors hover:bg-[#202829]"
-                >
-                  进入优惠入口
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              ) : null}
+              <a
+                href={outboundUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => requestOutboundVisit(event, { url: outboundUrl, isAff: isAffOutbound })}
+                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#2d3435] px-4 text-sm font-bold text-[#f8f8f8] transition-colors hover:bg-[#202829]"
+              >
+                {outboundButtonLabel}
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
               {hasAffRelation ? (
                 <span
                   className="inline-flex h-10 items-center rounded-full border border-dashed border-[#adb3b4]/70 px-3 text-xs font-extrabold text-[#5a6061]"
