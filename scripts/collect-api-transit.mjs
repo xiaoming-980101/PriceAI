@@ -86,16 +86,26 @@ export async function collectApiTransitPrices(options = {}) {
   const stations = [];
   const offers = [];
   const runs = [];
+  const availabilitySamples = [];
 
   for (const source of selectedSources) {
     const runStartedAt = new Date().toISOString();
     try {
       const payload = await fetchPricingJson(source, options);
       const parsed = parsePricingPayload(source, payload, runStartedAt);
+      let availabilityPayload = null;
+      let availabilityError = null;
+      try {
+        availabilityPayload = await fetchAvailabilityPayload(source, options);
+        applyAvailabilityPayloadToParsedRows(source, parsed, availabilityPayload, runStartedAt);
+      } catch (error) {
+        availabilityError = errorMessage(error);
+      }
+      const runId = stableId("api-transit-run", source.id, runStartedAt);
       stations.push(parsed.station);
       offers.push(...parsed.offers);
       runs.push({
-        id: stableId("api-transit-run", source.id, runStartedAt),
+        id: runId,
         station_id: source.id,
         run_type: "public_pricing",
         status: parsed.offers.length ? "success" : "partial",
@@ -105,12 +115,24 @@ export async function collectApiTransitPrices(options = {}) {
         source_url: source.pricingEndpointUrl,
         started_at: runStartedAt,
         finished_at: new Date().toISOString(),
-        raw_snapshot: compactSnapshot(payload),
+        raw_snapshot: compactSnapshot(availabilityPayload ? {
+          pricing: payload,
+          availability: availabilityPayload,
+        } : payload),
         logs: {
           collectorKind: source.collectorKind,
           selectedModels: parsed.offers.map((offer) => offer.raw_model_name),
+          availabilitySourceUrl: source.monitorEndpointUrl || null,
+          availabilitySamples: parsed.availabilitySamples?.length || 0,
+          availabilityError,
         },
       });
+      availabilitySamples.push(
+        ...(parsed.availabilitySamples || []).map((sample) => ({
+          ...sample,
+          run_id: runId,
+        })),
+      );
     } catch (error) {
       if (error?.code === SOURCE_SKIPPED) {
         runs.push({
@@ -164,14 +186,16 @@ export async function collectApiTransitPrices(options = {}) {
       stations: stations.length,
       offers: offers.length,
       runs: runs.length,
+      availabilitySamples: availabilitySamples.length,
     },
     stations,
     offers,
     runs,
+    availabilitySamples,
   };
 
   if (options.post || options.db) {
-    result.database = await postRows({ stations, offers, runs }, options);
+    result.database = await postRows({ stations, offers, runs, availabilitySamples }, options);
   }
 
   return result;
@@ -233,6 +257,38 @@ async function fetchCallaiPartnerStatus(source, options) {
     }
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function fetchAvailabilityPayload(source, options) {
+  if (!source.monitorEndpointUrl) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number(options.timeoutMs || DEFAULT_TIMEOUT_MS));
+  try {
+    const response = await safeFetch(source.monitorEndpointUrl, {
+      signal: controller.signal,
+      headers: {
+        "accept": "application/json,text/plain;q=0.9,*/*;q=0.8",
+        "user-agent": userAgent,
+      },
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error("公开监测接口没有返回 JSON。");
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function applyAvailabilityPayloadToParsedRows(source, parsed, payload, collectedAt) {
+  if (!payload) return;
+  if (isZivvModelHubSource(source)) {
+    applyZivvStatusAvailability(source, parsed, payload, collectedAt);
   }
 }
 
@@ -615,6 +671,209 @@ function compactZivvModelPayload(item) {
     context_window: stringOrNull(item.context_window),
     capabilities: Array.isArray(item.capabilities) ? item.capabilities.map(stringOrNull).filter(Boolean) : [],
     features: Array.isArray(item.features) ? item.features.map(stringOrNull).filter(Boolean) : [],
+  };
+}
+
+function applyZivvStatusAvailability(source, parsed, payload, collectedAt) {
+  const services = normalizeZivvStatusServices(payload)
+    .map((service) => normalizeZivvStatusService(service))
+    .filter(Boolean);
+  if (!services.length) return;
+
+  const samples = [];
+  const offerAvailabilityByKey = new Map();
+  const activeOfferKeys = new Set((parsed.offers || []).map((offer) => offerKey(offer)));
+  for (const service of services) {
+    for (const point of service.history) {
+      samples.push(buildAvailabilitySampleRow({
+        stationId: source.id,
+        scope: "station",
+        standardModel: service.standardModel,
+        groupName: service.groupName,
+        ok: point.ok,
+        checkedAt: point.checkedAt,
+        index: point.index,
+      }));
+    }
+
+    if (!service.standardModel || !service.groupName) continue;
+    const key = offerKey({
+      station_id: source.id,
+      standard_model: service.standardModel,
+      group_name: service.groupName,
+    });
+    if (!activeOfferKeys.has(key)) continue;
+    const availability = availabilityFromZivvStatusService(service, collectedAt);
+    offerAvailabilityByKey.set(key, availability);
+    for (const point of service.history) {
+      samples.push(buildAvailabilitySampleRow({
+        stationId: source.id,
+        scope: "offer",
+        standardModel: service.standardModel,
+        groupName: service.groupName,
+        ok: point.ok,
+        checkedAt: point.checkedAt,
+        index: point.index,
+      }));
+    }
+  }
+
+  parsed.availabilitySamples = samples;
+
+  for (const offer of parsed.offers || []) {
+    const availability = offerAvailabilityByKey.get(offerKey(offer));
+    if (!availability) continue;
+    applyAvailabilityToOffer(offer, availability);
+  }
+
+  const stationAvailability = summarizeZivvStatusAvailability(services, collectedAt);
+  if (parsed.station && stationAvailability.samples) {
+    Object.assign(parsed.station, {
+      availability_seven_day_rate: stationAvailability.rate,
+      availability_seven_day_samples: stationAvailability.samples,
+      availability_first_checked_at: stationAvailability.firstCheckedAt,
+      availability_last_checked_at: stationAvailability.lastCheckedAt,
+      availability_note: stationAvailability.note,
+    });
+  }
+}
+
+function normalizeZivvStatusServices(payload) {
+  if (Array.isArray(payload?.services)) return payload.services;
+  if (Array.isArray(payload?.data?.services)) return payload.data.services;
+  return [];
+}
+
+function normalizeZivvStatusService(service) {
+  if (!service || typeof service !== "object") return null;
+  const standardModel = standardizeZivvStatusModel(service?.model);
+  const groupName = zivvStatusGroupName(service);
+  const history = normalizeZivvStatusHistory(service);
+  if (!history.length) return null;
+  return {
+    name: stringOrNull(service.name),
+    model: stringOrNull(service.model),
+    type: stringOrNull(service.type),
+    standardModel,
+    groupName,
+    uptimePercent: numberValue(service.uptime_percent),
+    checkedAt: stringOrNull(service?.current?.timestamp),
+    currentOk: typeof service?.current?.ok === "boolean" ? service.current.ok : null,
+    history,
+  };
+}
+
+function standardizeZivvStatusModel(model) {
+  const standard = standardizeModelName(model);
+  if (standard) return standard;
+  const value = String(model || "").toLowerCase();
+  if (value.includes("gemini-3-flash")) return "Gemini 3.5 Flash";
+  return null;
+}
+
+function zivvStatusGroupName(service) {
+  const name = String(service?.name || "").toLowerCase();
+  if (name.includes("gemini anti")) return "Gemini Anti";
+  if (name.includes("gemini cli")) return "Gemini CLI";
+  if (name.includes("antigravity") || name.includes("anti")) return "Claude Anti【目前不稳定】";
+  if (name.includes("claude max")) return "Claude MAX";
+  if (name.includes("codex plus")) return "Codex Plus【目前不稳定】";
+  if (name.includes("codex pro")) return "Codex Pro";
+  return stringOrNull(service?.name);
+}
+
+function normalizeZivvStatusHistory(service) {
+  const history = Array.isArray(service?.history) ? service.history : [];
+  return history
+    .map((point, index) => ({
+      ok: typeof point?.ok === "boolean" ? point.ok : null,
+      checkedAt: stringOrNull(point?.timestamp),
+      latencyMs: numberValue(point?.latency_ms),
+      error: stringOrNull(point?.error),
+      statusCode: numberValue(point?.status_code),
+      index,
+    }))
+    .filter((point) => typeof point.ok === "boolean" && point.checkedAt);
+}
+
+function availabilityFromZivvStatusService(service, collectedAt) {
+  const window = sampleWindowFromPoints(service.history);
+  const success = service.history.filter((point) => point.ok).length;
+  const rateFromHistory = service.history.length ? success / service.history.length : null;
+  const displayRate = numberValue(service.uptimePercent);
+  const rate = displayRate === null ? rateFromHistory : displayRate / 100;
+  const currentText = service.currentOk === null ? "" : `；当前${service.currentOk ? "正常" : "异常"}`;
+  return {
+    rate: rate === null ? null : round(rate, 6),
+    samples: service.history.length,
+    success,
+    firstCheckedAt: window.first,
+    lastCheckedAt: window.last || service.checkedAt || collectedAt,
+    note: `Zivv 公开状态页 7 日服务监测：${service.name || service.groupName || "未命名服务"}，页面 uptime ${displayRate === null ? "未公开" : `${round(displayRate, 2)}%`}，历史点 ${service.history.length} 个${currentText}。`,
+  };
+}
+
+function summarizeZivvStatusAvailability(services, collectedAt) {
+  const valid = services.filter((service) => service.history.length);
+  const samples = valid.reduce((total, service) => total + service.history.length, 0);
+  const success = valid.reduce((total, service) => total + service.history.filter((point) => point.ok).length, 0);
+  const weightedRate = samples
+    ? valid.reduce((total, service) => {
+        const availability = availabilityFromZivvStatusService(service, collectedAt);
+        return total + (availability.rate ?? 0) * availability.samples;
+      }, 0) / samples
+    : null;
+  const window = sampleWindowFromPoints(valid.flatMap((service) => service.history));
+  return {
+    rate: weightedRate === null ? null : round(weightedRate, 6),
+    samples,
+    success,
+    firstCheckedAt: window.first,
+    lastCheckedAt: window.last || collectedAt,
+    note: `Zivv 公开状态页 7 日汇总：${valid.length} 个服务、${samples} 个历史点，按服务页面 uptime 加权汇总；非 PriceAI API Key 实测。`,
+  };
+}
+
+function sampleWindowFromPoints(points) {
+  const times = (points || []).map((point) => stringOrNull(point?.checkedAt)).filter(Boolean).sort();
+  return {
+    first: times[0] || null,
+    last: times.at(-1) || null,
+  };
+}
+
+function applyAvailabilityToOffer(offer, availability) {
+  offer.availability_seven_day_rate = availability.rate;
+  offer.availability_seven_day_samples = availability.samples;
+  offer.availability_first_checked_at = availability.firstCheckedAt;
+  offer.availability_last_checked_at = availability.lastCheckedAt;
+  offer.availability_note = availability.note;
+  offer.last_verified_at = availability.lastCheckedAt || offer.last_verified_at;
+}
+
+function buildAvailabilitySampleRow(input) {
+  const stationId = stringOrNull(input.stationId);
+  const checkedAt = stringOrNull(input.checkedAt) || new Date().toISOString();
+  const standardModel = stringOrNull(input.standardModel) || null;
+  const groupName = stringOrNull(input.groupName) || null;
+  const scope = input.scope === "offer" ? "offer" : "station";
+
+  return {
+    id: stableId(
+      "api-transit-availability-sample",
+      stationId,
+      scope,
+      standardModel || "station",
+      groupName || "default",
+      String(input.index || 0),
+    ),
+    run_id: null,
+    station_id: stationId,
+    scope,
+    standard_model: standardModel,
+    group_name: groupName,
+    ok: Boolean(input.ok),
+    checked_at: checkedAt,
   };
 }
 
@@ -1523,6 +1782,7 @@ async function postRows(rows, options) {
     stations: rows.stations.length,
     offers: rows.offers.length,
     runs: rows.runs.length,
+    availabilitySamples: rows.availabilitySamples?.length || 0,
     publish: Boolean(options.publish),
   };
 
@@ -1552,6 +1812,7 @@ async function postRows(rows, options) {
   const offerWriteResult = await upsertOfferRows(supabase, offers);
   await deactivateOffersById(supabase, staleOfferIds);
   await upsertRows(supabase, "api_transit_detection_runs", rows.runs, { onConflict: "id" });
+  await upsertRows(supabase, "api_transit_availability_samples", rows.availabilitySamples || [], { onConflict: "id" });
 
   return {
     ...plan,
@@ -2145,6 +2406,7 @@ export const __test = {
   filterSourcesByPublishedStationIds,
   findStaleRefreshedOfferIds,
   mergeStationForRefresh,
+  applyZivvStatusAvailability,
   mergeOfferForRefresh,
   parseApinodePublicSiteInfoPayload,
   parseZivvModelHubPayload,
