@@ -603,10 +603,9 @@ export function hasTransitAffRelation(station: TransitStation): boolean {
 }
 
 export function getTransitStationOutboundUrl(
-  station: TransitStation,
   offer: TransitCommercialOffer | null | undefined
-): string {
-  return offer?.url || station.websiteUrl;
+): string | null {
+  return offer?.url || null;
 }
 
 export function isTransitStationOutboundAff(
@@ -622,6 +621,13 @@ export function getPrimaryTransitCommercialOffer(
 ): TransitCommercialOffer | null {
   const offers = getActiveTransitCommercialOffers(station);
   return offers.find((offer) => offer.type === "coupon") ?? offers[0] ?? null;
+}
+
+export function getPrimaryTransitOutboundOffer(
+  station: TransitStation
+): TransitCommercialOffer | null {
+  const offers = getActiveTransitCommercialOffers(station).filter((offer) => Boolean(offer.url));
+  return offers.find((offer) => offer.type === "affiliate") ?? offers[0] ?? null;
 }
 
 export function getTransitVerificationEvents(

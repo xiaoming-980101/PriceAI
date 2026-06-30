@@ -53,6 +53,7 @@ import {
   getFamilyPrices,
   getFamilyRateSummary,
   getPrimaryTransitCommercialOffer,
+  getPrimaryTransitOutboundOffer,
   getRechargeCoefficientFromRatio,
   getTransitStationOutboundUrl,
   getNormalizedSourceTags,
@@ -118,9 +119,10 @@ export default function TransitStationDetail({ station, children }: Props) {
   const primaryOffer = getPrimaryTransitCommercialOffer(station);
   const commercialOffers = getActiveTransitCommercialOffers(station);
   const verificationEvents = getTransitVerificationEvents(station);
-  const outboundUrl = getTransitStationOutboundUrl(station, primaryOffer);
+  const outboundOffer = getPrimaryTransitOutboundOffer(station);
+  const outboundUrl = getTransitStationOutboundUrl(outboundOffer);
   const hasAffRelation = hasTransitAffRelation(station);
-  const isAffOutbound = isTransitStationOutboundAff(station, primaryOffer);
+  const isAffOutbound = isTransitStationOutboundAff(station, outboundOffer);
 
   const handleBack = useCallback(() => {
     const back = typeof window === "undefined"
@@ -199,17 +201,19 @@ export default function TransitStationDetail({ station, children }: Props) {
                     </StatusChip>
                   ) : null}
                 </div>
-                <a
-                  href={outboundUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(event) => requestOutboundVisit(event, { url: outboundUrl, isAff: isAffOutbound })}
-                  aria-label={`访问 ${station.name} 官网`}
-                  className="mt-1 inline-flex max-w-full items-center gap-1 text-sm font-semibold text-[#5a6061] transition-colors hover:text-[#2d3435]"
-                >
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">官网</span>
-                </a>
+                {outboundUrl ? (
+                  <a
+                    href={outboundUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(event) => requestOutboundVisit(event, { url: outboundUrl, isAff: isAffOutbound })}
+                    aria-label={`访问 ${station.name} 优惠入口`}
+                    className="mt-1 inline-flex max-w-full items-center gap-1 text-sm font-semibold text-[#5a6061] transition-colors hover:text-[#2d3435]"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">优惠入口</span>
+                  </a>
+                ) : null}
               </div>
             </div>
 
@@ -253,16 +257,18 @@ export default function TransitStationDetail({ station, children }: Props) {
               onCopy={copyOfferCode}
             />
             <div className="mt-4 flex flex-wrap gap-2">
-              <a
-                href={outboundUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(event) => requestOutboundVisit(event, { url: outboundUrl, isAff: isAffOutbound })}
-                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#2d3435] px-4 text-sm font-bold text-[#f8f8f8] transition-colors hover:bg-[#202829]"
-              >
-                访问官网
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+              {outboundUrl ? (
+                <a
+                  href={outboundUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(event) => requestOutboundVisit(event, { url: outboundUrl, isAff: isAffOutbound })}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#2d3435] px-4 text-sm font-bold text-[#f8f8f8] transition-colors hover:bg-[#202829]"
+                >
+                  进入优惠入口
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              ) : null}
               {hasAffRelation ? (
                 <span
                   className="inline-flex h-10 items-center rounded-full border border-dashed border-[#adb3b4]/70 px-3 text-xs font-extrabold text-[#5a6061]"
@@ -338,7 +344,7 @@ export default function TransitStationDetail({ station, children }: Props) {
           messagePrefix={[
             "【API 中转站数据反馈】",
             `站点：${station.name}`,
-            `官网：${station.websiteUrl}`,
+            `前台入口：${outboundUrl || "未配置优惠/AFF 链接"}`,
             `系统：${getTransitStationSystemLabel(station)}`,
           ].join("\n")}
         />
