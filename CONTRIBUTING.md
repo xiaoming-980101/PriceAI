@@ -16,7 +16,7 @@ npm run lint
 npm run build
 ```
 
-如果需要真实数据，请参考 [配置说明](./docs/configuration.md) 初始化 Supabase 和环境变量。
+如果需要真实数据，请参考 [配置说明](./public-docs/configuration.md) 初始化 Supabase 和环境变量。
 
 ## 分支与 Pull Request
 
@@ -57,8 +57,9 @@ npm run collect:prices -- --source source-id --post
 
 新增规则前请先阅读：
 
-- [数据策略](./docs/data-policy.md)
-- [分类重构草案](./docs/planning/data-classification-redesign.md)
+- [数据策略](./public-docs/data-policy.md)
+
+内部规划、分类重构草案和采集复盘不随公开仓库发布。需要讨论未公开规则时，请先在 Issue 或 PR 中描述具体样例、预期归类和风险边界。
 
 ## 安全与隐私
 

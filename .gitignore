@@ -39,6 +39,12 @@ yarn-error.log*
 /.codex/
 /.impeccable/
 /.trellis/
+/.omo/
+/AGENTS.md
+/CLAUDE.md
+/PRODUCT.md
+/DESIGN.md
+/lark-auth-priceai-sponsor.png
 
 # local/manual workflow drafts
 /scripts/refine-ldxp-probe-relevance.mjs
