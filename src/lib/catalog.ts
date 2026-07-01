@@ -1602,7 +1602,7 @@ function isChatGptPeripheralService(value: string): boolean {
 }
 
 function isChatGptPaymentLinkExtractionService(value: string): boolean {
-  const hasPaymentMethodSignal = matches(value, ["upi", "ideal", "i deal", "ide al", "paypal"]);
+  const hasPaymentMethodSignal = matches(value, ["upi", "ideal", "i deal", "ide al", "paypal", "荷兰渠道"]);
   const hasChatGptSubscriptionSignal = matches(value, ["chatgpt", "gpt", "openai", "plus"]);
   if (!hasPaymentMethodSignal && !hasChatGptSubscriptionSignal) return false;
 
