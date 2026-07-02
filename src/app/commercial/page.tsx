@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BadgeCheck, FileText, Megaphone, ShieldCheck } from "lucide-react";
+import { ArrowRight, BadgeCheck, FileText, ImageIcon, Megaphone, ShieldCheck } from "lucide-react";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteHeader } from "@/components/SiteHeader";
 
@@ -67,10 +67,18 @@ const sponsorUseCases = [
 
 const requirements = [
   "一句话说明你的服务解决什么问题，并提供官网或落地页。",
-  "准备短标题、30 到 80 字说明、Logo、品牌图或横幅图。",
+  "准备短标题、30 到 80 字说明、Logo、品牌图或赞助横幅图。",
   "说明希望出现的位置、展示周期、是否需要合同或发票。",
   "中转 API 相关服务建议附公开价格页、模型分组、充值倍率、监测页和支持入口。",
   "如果带优惠码，说明优惠规则和落地页即可，不需要在前台展示分佣比例。",
+];
+
+const materialSpecs = [
+  ["主横幅图", "16:5，推荐 1600 x 500 px，最低 1200 x 375 px。"],
+  ["文件格式", "PNG、JPG 或 WebP，建议小于 500 KB，背景不要透明。"],
+  ["安全区", "关键 Logo 和文字放在中间 80% 区域，四周至少留 48 px。"],
+  ["图片文字", "只放品牌名、短口号或活动关键词，详细说明放卡片标题和说明字段。"],
+  ["落地页", "提供可公开访问的官网、活动页或文档页，不接受跳转链路不清晰的短链。"],
 ];
 
 const boundaries = [
@@ -175,6 +183,31 @@ export default function CommercialPage() {
                       </div>
                     </dl>
                     <p className="mt-4 border-t border-[var(--color-border-subtle)] pt-4 text-sm leading-7 text-[var(--color-text-muted)]">{slot.note}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="materials" className="border-b border-[var(--color-border)]">
+          <div className="mx-auto max-w-[1500px] border-x border-[var(--color-border-soft)] px-5 py-12 sm:px-8 md:py-14">
+            <div className="mx-auto max-w-6xl">
+              <p className="text-sm font-semibold text-[var(--color-success-text)]">素材交付标准</p>
+              <h2 className="mt-3 max-w-3xl text-balance font-serif text-3xl font-semibold tracking-normal text-[var(--color-text-primary)] sm:text-4xl">
+                一张横幅图，加一组清晰文案。
+              </h2>
+              <p className="mt-4 max-w-[72ch] text-sm leading-7 text-[var(--color-text-muted)]">
+                PriceAI 的赞助卡会统一裁切为横向图片位。为了让不同赞助商放在一起时仍然整齐，建议所有投放素材按同一规格提交。
+              </p>
+              <div className="mt-8 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                {materialSpecs.map(([title, body]) => (
+                  <article key={title} className="rounded-lg bg-[var(--color-panel)] p-5 ring-1 ring-[var(--color-border-soft)]">
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-surface)] text-[var(--color-text-primary)] ring-1 ring-[var(--color-border-soft)]">
+                      <ImageIcon size={17} />
+                    </span>
+                    <h3 className="mt-4 text-base font-semibold text-[var(--color-text-primary)]">{title}</h3>
+                    <p className="mt-2 text-sm leading-7 text-[var(--color-text-muted)]">{body}</p>
                   </article>
                 ))}
               </div>

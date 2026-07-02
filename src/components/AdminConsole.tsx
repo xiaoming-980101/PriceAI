@@ -5005,6 +5005,7 @@ function SponsorSettingsPanel({
                               placeholder="可留空，前台显示占位图形"
                               className={adminInputClassName}
                             />
+                            <span className="mt-1 block text-[11px] leading-5 text-[#8a9293]">推荐 16:5 横幅图，1600x500 px 或 1200x375 px；Logo 和文字放中间 80%，避免边缘被裁切。</span>
                           </label>
                           <label className="block">
                             <span className="mb-1 block text-xs font-medium text-[#5a6061]">图片主标题</span>
