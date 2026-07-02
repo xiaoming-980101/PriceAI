@@ -899,6 +899,14 @@ function buildUnprobedOfferRow(source, group, collectedAt) {
 
 function representativeModelForGroup(group) {
   const text = `${group.name} ${group.platform}`.toLowerCase();
+  if (/image|draw|生图|绘图|flux/.test(text)) {
+    return {
+      family: "image",
+      standardModel: "GPT Image 2",
+      rawModelName: "gpt-image-2",
+    };
+  }
+
   if (/anthropic|claude|cc|max|kiro/.test(text)) {
     const isSonnet = text.includes("sonnet");
     const isSonnetFive = isSonnet && /(?:sonnet[^0-9]*5|5[^a-z0-9]*sonnet)/.test(text);
@@ -1055,6 +1063,8 @@ async function postRows(rows, options) {
   const stations = rows.stations.map((station) => mergeStationForRefresh(station, existingStations.get(station.id), options));
   const existingOffers = await readExistingOffers(supabase, rows.offers);
   const offers = rows.offers.map((offer) => mergeOfferForRefresh(offer, existingOffers.get(offerKey(offer)), options));
+  const refreshedOfferKeys = new Set(offers.map((offer) => offerKey(offer)));
+  const staleOfferIds = findStaleOfferIds(existingOffers, refreshedOfferKeys);
 
   await upsertRows(supabase, "api_transit_stations", stations, { onConflict: "id" });
   if (rows.credentialSubmissions?.length) {
@@ -1064,13 +1074,35 @@ async function postRows(rows, options) {
     await upsertRows(supabase, "api_transit_credentials", rows.credentials, { onConflict: "id" });
   }
   await upsertRows(supabase, "api_transit_offers", offers, { onConflict: "station_id,standard_model,group_name" });
+  await deactivateOffersById(supabase, staleOfferIds);
   await upsertRows(supabase, "api_transit_detection_runs", rows.runs, { onConflict: "id" });
 
   return {
     ...plan,
+    deactivatedOffers: staleOfferIds.length,
     skipped: false,
     message: options.publish ? "Sub2API 中转数据已写入并发布。" : "Sub2API 中转数据已写入待审核队列。",
   };
+}
+
+function findStaleOfferIds(existingOffers, refreshedOfferKeys) {
+  const ids = [];
+  for (const [key, offer] of existingOffers.entries()) {
+    if (offer.status !== "active") continue;
+    if (!refreshedOfferKeys.has(key)) ids.push(offer.id);
+  }
+  return ids;
+}
+
+async function deactivateOffersById(supabase, offerIds) {
+  for (const chunk of chunks(offerIds, 300)) {
+    if (!chunk.length) continue;
+    const { error } = await supabase.from("api_transit_offers").update({ status: "inactive" }).in("id", chunk);
+    if (error) {
+      error.table = "api_transit_offers";
+      throw error;
+    }
+  }
 }
 
 async function readExistingOffers(supabase, offers) {

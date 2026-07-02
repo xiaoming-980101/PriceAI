@@ -90,6 +90,14 @@ assert.deepEqual(
     .map((model) => model.standardModel),
   ["Claude Opus 4.6", "Claude Opus 4.7", "Claude Opus 4.8", "Claude Sonnet 5"],
 );
+assert.deepEqual(
+  sub2ApiTest.representativeModelForGroup({ name: "gpt-image-2", platform: "openai" }),
+  {
+    family: "image",
+    standardModel: "GPT Image 2",
+    rawModelName: "gpt-image-2",
+  },
+);
 
 const geminiTargets = __test.selectProbeTargets({
   profileFamily: "gemini",
