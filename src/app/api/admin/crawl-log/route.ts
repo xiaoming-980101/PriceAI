@@ -50,6 +50,33 @@ const batchSchema = z.object({
   batch: z.record(z.string(), z.unknown()).optional(),
 });
 
+const CRAWL_LOG_INGEST_PROCESSING_TTL_MS = 2 * 60 * 1000;
+const CRAWL_LOG_INGEST_COMPLETED_RETENTION_MS = 24 * 60 * 60 * 1000;
+const CRAWL_LOG_INGEST_FAILED_RETRY_MS = 60 * 1000;
+const CRAWL_LOG_INGEST_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
+
+let lastCrawlLogIngestPrunedAt = 0;
+
+type SaveCrawlLogRunResult = {
+  sourceId: string;
+  sourceName: string;
+  status: string;
+  successCount: number;
+  writtenCount: number;
+  unchangedCount: number;
+  refreshedCount: number;
+  affectedProductIds: string[];
+  affectedOfferIds: string[];
+  affectedSourceIds: string[];
+  shouldClearCache: boolean;
+  duplicate?: boolean;
+  duplicateReason?: "completed" | "processing";
+};
+
+type CrawlLogIngestClaim =
+  | { shouldProcess: true }
+  | { shouldProcess: false; reason: "completed" | "processing" };
+
 export async function POST(request: Request) {
   try {
     await requireAdminOrCronRequest(request);
@@ -77,6 +104,7 @@ export async function POST(request: Request) {
     }
 
     await pruneOperationalLogs(supabase);
+    await pruneCrawlLogIngestRuns(supabase);
 
     if (shouldClearCache) {
       clearPublicDataCache();
@@ -114,85 +142,111 @@ export async function POST(request: Request) {
 async function saveCrawlLogRun(
   supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
   payload: z.infer<typeof crawlLogPayloadSchema>,
-) {
+): Promise<SaveCrawlLogRunResult> {
   const receivedAt = new Date().toISOString();
   const collectedAt = dateFromDetails(payload.details, "collectedAt") || receivedAt;
   const startedAt = dateFromDetails(payload.details, "collectionStartedAt") || receivedAt;
-  const source = await upsertSource({
-    id: payload.sourceId,
-    name: payload.sourceName,
-    entryUrl: payload.sourceEntryUrl || payload.sourceUrl,
-    collectionMethod: payload.mode,
-    collectorKind: collectorKindFromDetails(payload.details),
-    shopCreatedAt: payload.sourceShopCreatedAt || shopCreatedAtFromDetails(payload.details),
-    notes: "由采集日志自动维护。",
+  const runId = stableId(payload.sourceName, payload.sourceUrl, startedAt, crawlLogRunIdSuffix(payload.details, payload.status));
+  const ingestClaim = await claimCrawlLogIngest(supabase, {
+    id: runId,
+    startedAt,
+    payload,
   });
-  const offers = payload.offers.map((offer) => ({
-    ...offer,
-    sourceId: offer.sourceId || payload.sourceId || source.id,
-    sourceShopCreatedAt: offer.sourceShopCreatedAt || payload.sourceShopCreatedAt || shopCreatedAtFromDetails(payload.details),
-  }));
-  const upsertResult = await upsertRawOffers(offers, { collectionMethod: payload.mode, checkedAt: collectedAt });
-  const successCount = upsertResult.receivedCount;
-  const savedAt = new Date().toISOString();
-  const seenOfferIds = seenOfferIdsFromDetails(payload.details) || offers.map(rawOfferInputId);
-  const fullSnapshot = fullSnapshotFromDetails(payload.details, payload.status);
-  const changedByPayload = upsertResult.writtenCount > 0 || upsertResult.refreshedCount > 0;
-  const affectedOfferIds = changedByPayload ? offers.map(rawOfferInputId) : [];
-  const affectedProductIds = changedByPayload ? offers.map(productIdFromCrawlOffer) : [];
+  if (!ingestClaim.shouldProcess) return duplicateCrawlLogResult(payload, ingestClaim.reason);
 
-  const sourceCollectionResult = await recordSourceCollectionResult({
-    sourceId: source.id,
-    status: payload.status,
-    checkedAt: collectedAt,
-    message: payload.message || null,
-    seenOfferIds,
-    fullSnapshot,
-  });
+  try {
+    const source = await upsertSource({
+      id: payload.sourceId,
+      name: payload.sourceName,
+      entryUrl: payload.sourceEntryUrl || payload.sourceUrl,
+      collectionMethod: payload.mode,
+      collectorKind: collectorKindFromDetails(payload.details),
+      shopCreatedAt: payload.sourceShopCreatedAt || shopCreatedAtFromDetails(payload.details),
+      notes: "由采集日志自动维护。",
+    });
+    const offers = payload.offers.map((offer) => ({
+      ...offer,
+      sourceId: offer.sourceId || payload.sourceId || source.id,
+      sourceShopCreatedAt: offer.sourceShopCreatedAt || payload.sourceShopCreatedAt || shopCreatedAtFromDetails(payload.details),
+    }));
+    const upsertResult = await upsertRawOffers(offers, { collectionMethod: payload.mode, checkedAt: collectedAt });
+    const successCount = upsertResult.receivedCount;
+    const savedAt = new Date().toISOString();
+    const seenOfferIds = seenOfferIdsFromDetails(payload.details) || offers.map(rawOfferInputId);
+    const fullSnapshot = fullSnapshotFromDetails(payload.details, payload.status);
+    const changedByPayload = upsertResult.writtenCount > 0 || upsertResult.refreshedCount > 0;
+    const affectedOfferIds = changedByPayload ? offers.map(rawOfferInputId) : [];
+    const affectedProductIds = changedByPayload ? offers.map(productIdFromCrawlOffer) : [];
 
-  const { error } = await supabase.from("crawl_runs").insert({
-    id: stableId(payload.sourceName, payload.sourceUrl, startedAt, crawlLogRunIdSuffix(payload.details, payload.status)),
-    source_id: source.id,
-    source_name: payload.sourceName,
-    mode: payload.mode,
-    status: payload.status,
-    started_at: startedAt,
-    finished_at: collectedAt,
-    success_count: successCount,
-    failure_count: Math.max(0, payload.offers.length - successCount),
-    message: payload.message || `采集到 ${successCount} 条报价，写入 ${upsertResult.writtenCount} 条，刷新 ${upsertResult.refreshedCount} 条。`,
-    details: {
-      ...(payload.details || {}),
-      receivedAt,
-      savedAt,
-      collectedAt,
-      writeStats: {
-        receivedCount: upsertResult.receivedCount,
-        writtenCount: upsertResult.writtenCount,
-        unchangedCount: upsertResult.unchangedCount,
-        refreshedCount: upsertResult.refreshedCount,
+    const sourceCollectionResult = await recordSourceCollectionResult({
+      sourceId: source.id,
+      status: payload.status,
+      checkedAt: collectedAt,
+      message: payload.message || null,
+      seenOfferIds,
+      fullSnapshot,
+    });
+
+    const crawlRunRow = {
+      id: runId,
+      source_id: source.id,
+      source_name: payload.sourceName,
+      mode: payload.mode,
+      status: payload.status,
+      started_at: startedAt,
+      finished_at: collectedAt,
+      success_count: successCount,
+      failure_count: Math.max(0, payload.offers.length - successCount),
+      message:
+        payload.message ||
+        `采集到 ${successCount} 条报价，写入 ${upsertResult.writtenCount} 条，刷新 ${upsertResult.refreshedCount} 条。`,
+      details: {
+        ...(payload.details || {}),
+        receivedAt,
+        savedAt,
+        collectedAt,
+        writeStats: {
+          receivedCount: upsertResult.receivedCount,
+          writtenCount: upsertResult.writtenCount,
+          unchangedCount: upsertResult.unchangedCount,
+          refreshedCount: upsertResult.refreshedCount,
+        },
       },
-    },
-  });
+    };
 
-  if (error) throw error;
+    const { error } = await supabase.from("crawl_runs").insert(crawlRunRow);
 
-  return {
-    sourceId: source.id,
-    sourceName: source.name,
-    status: payload.status,
-    successCount,
-    writtenCount: upsertResult.writtenCount,
-    unchangedCount: upsertResult.unchangedCount,
-    refreshedCount: upsertResult.refreshedCount,
-    affectedProductIds,
-    affectedOfferIds,
-    affectedSourceIds: sourceCollectionResult.changedOfferCount > 0 ? [source.id] : [],
-    shouldClearCache:
-      upsertResult.writtenCount > 0 ||
-      upsertResult.refreshedCount > 0 ||
-      sourceCollectionResult.changedOfferCount > 0,
-  };
+    if (error) {
+      if (isDuplicateKeyError(error)) {
+        const duplicateResult = duplicateCrawlLogResult(payload, "completed");
+        await completeCrawlLogIngest(supabase, runId, source.id, compactResult(duplicateResult));
+        return duplicateResult;
+      }
+      throw error;
+    }
+
+    const result = {
+      sourceId: source.id,
+      sourceName: source.name,
+      status: payload.status,
+      successCount,
+      writtenCount: upsertResult.writtenCount,
+      unchangedCount: upsertResult.unchangedCount,
+      refreshedCount: upsertResult.refreshedCount,
+      affectedProductIds,
+      affectedOfferIds,
+      affectedSourceIds: sourceCollectionResult.changedOfferCount > 0 ? [source.id] : [],
+      shouldClearCache:
+        upsertResult.writtenCount > 0 ||
+        upsertResult.refreshedCount > 0 ||
+        sourceCollectionResult.changedOfferCount > 0,
+    };
+    await completeCrawlLogIngest(supabase, runId, source.id, compactResult(result));
+    return result;
+  } catch (error) {
+    await failCrawlLogIngest(supabase, runId, safeApiErrorMessage(error, "采集结果写入失败。"));
+    throw error;
+  }
 }
 
 function aggregateResults(results: Array<{ successCount: number; writtenCount: number; unchangedCount: number; refreshedCount: number }>) {
@@ -215,6 +269,8 @@ function compactResult(result: {
   writtenCount: number;
   unchangedCount: number;
   refreshedCount?: number;
+  duplicate?: boolean;
+  duplicateReason?: string;
 }) {
   return {
     sourceId: result.sourceId,
@@ -224,7 +280,167 @@ function compactResult(result: {
     writtenCount: result.writtenCount,
     unchangedCount: result.unchangedCount,
     refreshedCount: result.refreshedCount || 0,
+    duplicate: result.duplicate || undefined,
+    duplicateReason: result.duplicateReason || undefined,
   };
+}
+
+async function pruneCrawlLogIngestRuns(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+): Promise<void> {
+  const now = Date.now();
+  if (now - lastCrawlLogIngestPrunedAt < CRAWL_LOG_INGEST_PRUNE_INTERVAL_MS) return;
+  lastCrawlLogIngestPrunedAt = now;
+
+  const { error } = await supabase
+    .from("crawl_log_ingest_runs")
+    .delete()
+    .lt("expires_at", new Date(now).toISOString());
+  if (error && !isMissingCrawlLogIngestTableError(error)) {
+    console.warn("Failed to prune crawl log ingest locks:", error.message);
+  }
+}
+
+async function claimCrawlLogIngest(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  input: {
+    id: string;
+    startedAt: string;
+    payload: z.infer<typeof crawlLogPayloadSchema>;
+  },
+): Promise<CrawlLogIngestClaim> {
+  const now = new Date();
+  const row = {
+    id: input.id,
+    source_id: null,
+    source_name: input.payload.sourceName,
+    started_at: input.startedAt,
+    batch_index: positiveIntegerFromDetails(input.payload.details, "batchIndex"),
+    batch_count: positiveIntegerFromDetails(input.payload.details, "batchCount"),
+    status: "processing",
+    result: null,
+    expires_at: new Date(now.getTime() + CRAWL_LOG_INGEST_PROCESSING_TTL_MS).toISOString(),
+    updated_at: now.toISOString(),
+  };
+
+  const { error: insertError } = await supabase.from("crawl_log_ingest_runs").insert(row);
+  if (!insertError) return { shouldProcess: true };
+  if (isMissingCrawlLogIngestTableError(insertError)) return { shouldProcess: true };
+  if (!isDuplicateKeyError(insertError)) throw insertError;
+
+  const { data, error: readError } = await supabase
+    .from("crawl_log_ingest_runs")
+    .select("status,expires_at")
+    .eq("id", input.id)
+    .maybeSingle();
+  if (readError) {
+    if (isMissingCrawlLogIngestTableError(readError)) return { shouldProcess: true };
+    throw readError;
+  }
+
+  const existingStatus = String(data?.status || "");
+  const expiresAt = new Date(String(data?.expires_at || "")).getTime();
+  if (existingStatus === "completed") return { shouldProcess: false, reason: "completed" };
+  if (existingStatus === "processing" && Number.isFinite(expiresAt) && expiresAt > now.getTime()) {
+    return { shouldProcess: false, reason: "processing" };
+  }
+
+  const { error: updateError } = await supabase
+    .from("crawl_log_ingest_runs")
+    .update(row)
+    .eq("id", input.id);
+  if (updateError) {
+    if (isMissingCrawlLogIngestTableError(updateError)) return { shouldProcess: true };
+    throw updateError;
+  }
+
+  return { shouldProcess: true };
+}
+
+async function completeCrawlLogIngest(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  id: string,
+  sourceId: string,
+  result: Record<string, unknown>,
+): Promise<void> {
+  const now = Date.now();
+  const { error } = await supabase
+    .from("crawl_log_ingest_runs")
+    .update({
+      source_id: sourceId,
+      status: "completed",
+      result,
+      expires_at: new Date(now + CRAWL_LOG_INGEST_COMPLETED_RETENTION_MS).toISOString(),
+      updated_at: new Date(now).toISOString(),
+    })
+    .eq("id", id);
+  if (error && !isMissingCrawlLogIngestTableError(error)) {
+    console.warn("Failed to complete crawl log ingest lock:", error.message);
+  }
+}
+
+async function failCrawlLogIngest(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  id: string,
+  message: string,
+): Promise<void> {
+  const now = Date.now();
+  const { error } = await supabase
+    .from("crawl_log_ingest_runs")
+    .update({
+      status: "failed",
+      result: { message },
+      expires_at: new Date(now + CRAWL_LOG_INGEST_FAILED_RETRY_MS).toISOString(),
+      updated_at: new Date(now).toISOString(),
+    })
+    .eq("id", id);
+  if (error && !isMissingCrawlLogIngestTableError(error)) {
+    console.warn("Failed to mark crawl log ingest lock failed:", error.message);
+  }
+}
+
+function duplicateCrawlLogResult(
+  payload: z.infer<typeof crawlLogPayloadSchema>,
+  reason: "completed" | "processing",
+): SaveCrawlLogRunResult {
+  return {
+    sourceId: payload.sourceId || stableId("source", payload.sourceName, payload.sourceUrl),
+    sourceName: payload.sourceName,
+    status: payload.status,
+    successCount: 0,
+    writtenCount: 0,
+    unchangedCount: 0,
+    refreshedCount: 0,
+    affectedProductIds: [],
+    affectedOfferIds: [],
+    affectedSourceIds: [],
+    shouldClearCache: false,
+    duplicate: true,
+    duplicateReason: reason,
+  };
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return supabaseErrorCode(error) === "23505";
+}
+
+function isMissingCrawlLogIngestTableError(error: unknown): boolean {
+  const code = supabaseErrorCode(error);
+  const message = supabaseErrorMessage(error);
+  return (
+    code === "42P01" ||
+    code === "PGRST205" ||
+    (code === "PGRST204" && message.includes("crawl_log_ingest_runs")) ||
+    message.includes("crawl_log_ingest_runs")
+  );
+}
+
+function supabaseErrorCode(error: unknown): string {
+  return error && typeof error === "object" && "code" in error ? String(error.code || "") : "";
+}
+
+function supabaseErrorMessage(error: unknown): string {
+  return error && typeof error === "object" && "message" in error ? String(error.message || "") : "";
 }
 
 function productIdFromCrawlOffer(offer: z.infer<typeof offerSchema>): string {

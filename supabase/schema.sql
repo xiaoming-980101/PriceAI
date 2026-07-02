@@ -153,6 +153,20 @@ create table if not exists crawl_runs (
   details jsonb not null default '{}'::jsonb
 );
 
+create table if not exists crawl_log_ingest_runs (
+  id text primary key,
+  source_id text references sources(id) on delete set null,
+  source_name text,
+  started_at timestamptz not null,
+  batch_index integer,
+  batch_count integer,
+  status text not null default 'processing' check (status in ('processing', 'completed', 'failed')),
+  result jsonb,
+  expires_at timestamptz not null default (now() + interval '2 minutes'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists collection_jobs (
   id text primary key,
   job_type text not null check (job_type in ('all', 'source', 'official_prices', 'api_models')),
@@ -220,6 +234,10 @@ create index if not exists sources_collector_kind_idx on sources(collector_kind)
 create index if not exists sources_collector_lock_until_idx on sources(collector_lock_until);
 create index if not exists sources_shop_created_at_idx on sources(shop_created_at desc);
 create index if not exists crawl_runs_started_at_idx on crawl_runs(started_at desc);
+create index if not exists crawl_log_ingest_runs_status_expires_at_idx
+  on crawl_log_ingest_runs(status, expires_at);
+create index if not exists crawl_log_ingest_runs_source_started_at_idx
+  on crawl_log_ingest_runs(source_id, started_at desc);
 create index if not exists collection_jobs_status_created_at_idx on collection_jobs(status, created_at desc);
 create index if not exists collection_jobs_source_status_idx on collection_jobs(source_id, status);
 create index if not exists collection_jobs_locked_until_idx on collection_jobs(locked_until);
@@ -772,6 +790,11 @@ create trigger raw_offers_set_updated_at
 before update on raw_offers
 for each row execute function set_updated_at();
 
+drop trigger if exists crawl_log_ingest_runs_set_updated_at on crawl_log_ingest_runs;
+create trigger crawl_log_ingest_runs_set_updated_at
+before update on crawl_log_ingest_runs
+for each row execute function set_updated_at();
+
 drop trigger if exists collection_jobs_set_updated_at on collection_jobs;
 create trigger collection_jobs_set_updated_at
 before update on collection_jobs
@@ -789,6 +812,7 @@ alter table sources enable row level security;
 alter table raw_offers enable row level security;
 alter table offer_matches enable row level security;
 alter table crawl_runs enable row level security;
+alter table crawl_log_ingest_runs enable row level security;
 alter table collection_jobs enable row level security;
 alter table collector_heartbeats enable row level security;
 

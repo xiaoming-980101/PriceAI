@@ -2,7 +2,7 @@
 
 import os from "node:os";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 const DEFAULT_ENDPOINT = "https://priceai.cc";
 const DEFAULT_KIND = "shopApi";
 const DEFAULT_FAMILY = "shopApi";
@@ -13,6 +13,7 @@ const DEFAULT_MAX_ROUND_TASKS = 200;
 const DEFAULT_WIND_CONTROL_COOLDOWN_SECONDS = 300;
 const DEFAULT_WIND_CONTROL_THRESHOLD = 3;
 const DEFAULT_POST_BATCH_SIZE = 100;
+const MIN_POST_BATCH_SIZE = 100;
 const DEFAULT_FULL_SNAPSHOT_OFFER_LIMIT = 200;
 const DEFAULT_UPLOAD_TIMEOUT_MS = 90_000;
 const DEFAULT_DIRECT_TIMEOUT_MS = 15_000;
@@ -52,7 +53,12 @@ const config = {
   maxRoundTasks: integerInRange(args.maxRoundTasks || args["max-round-tasks"] || process.env.PRICEAI_AGENT_MAX_ROUND_TASKS, 1, 1000, DEFAULT_MAX_ROUND_TASKS),
   windControlCooldownSeconds: integerInRange(args.windControlCooldownSeconds || args["wind-control-cooldown-seconds"] || process.env.PRICEAI_AGENT_WIND_CONTROL_COOLDOWN_SECONDS, 30, 3600, DEFAULT_WIND_CONTROL_COOLDOWN_SECONDS),
   windControlThreshold: integerInRange(args.windControlThreshold || args["wind-control-threshold"] || process.env.PRICEAI_AGENT_WIND_CONTROL_THRESHOLD, 1, 20, DEFAULT_WIND_CONTROL_THRESHOLD),
-  postBatchSize: integerInRange(args.postBatchSize || args["post-batch-size"] || process.env.PRICEAI_AGENT_POST_BATCH_SIZE, 10, 500, DEFAULT_POST_BATCH_SIZE),
+  postBatchSize: integerInRange(
+    args.postBatchSize || args["post-batch-size"] || process.env.PRICEAI_AGENT_POST_BATCH_SIZE,
+    MIN_POST_BATCH_SIZE,
+    500,
+    DEFAULT_POST_BATCH_SIZE,
+  ),
   uploadTimeoutMs: integerInRange(args.uploadTimeoutMs || args["upload-timeout-ms"] || process.env.PRICEAI_AGENT_UPLOAD_TIMEOUT_MS, 15_000, 180_000, DEFAULT_UPLOAD_TIMEOUT_MS),
   directTimeoutMs: integerInRange(args.directTimeoutMs || args["direct-timeout-ms"] || process.env.PRICEAI_AGENT_DIRECT_TIMEOUT_MS, 5_000, 60_000, DEFAULT_DIRECT_TIMEOUT_MS),
   directRetryCooldownMs: integerInRange(args.directRetryCooldownMs || args["direct-retry-cooldown-ms"] || process.env.PRICEAI_AGENT_DIRECT_RETRY_COOLDOWN_MS, 0, 3_600_000, DEFAULT_DIRECT_RETRY_COOLDOWN_MS),
@@ -163,6 +169,7 @@ async function runCycle(startedAt = new Date().toISOString()) {
       processed += 1;
       console.log(`\n==> ${target.sourceName} [${target.kind}]`);
       const startedAt = Date.now();
+      const collectionStartedAt = new Date(startedAt).toISOString();
 
       let collection;
       let collectedOffers;
@@ -184,6 +191,8 @@ async function runCycle(startedAt = new Date().toISOString()) {
 
         console.error(`Failed: ${failureMessage}`);
         await postCrawlRun(target, "failed", failureMessage, [], {
+          collectionStartedAt,
+          collectedAt: new Date().toISOString(),
           durationMs: Date.now() - startedAt,
           windControl,
           failurePhase: "collect",
@@ -202,7 +211,10 @@ async function runCycle(startedAt = new Date().toISOString()) {
       }
 
       try {
+        const collectedAt = new Date().toISOString();
         await postCrawlRun(target, status, message, collectedOffers, {
+          collectionStartedAt,
+          collectedAt,
           durationMs: Date.now() - startedAt,
           fullSnapshot: status === "success" && collection.fullSnapshot,
           partialReason: collection.partialReason || null,
