@@ -10,7 +10,7 @@ import ts from "typescript";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
-const { buildProductGroups, classifyOffer, isSharedAccessOffer } = await loadCatalogModule();
+const { buildProductGroups, classifyOffer, isSharedAccessOffer, isTelegramStarsOffer } = await loadCatalogModule();
 const {
   buildOfferFilterFacets,
   deriveOfferFilterTags,
@@ -491,6 +491,27 @@ assert.ok(
 assert.ok(
   !isSharedAccessOffer(sharedAccessGroups.flatMap((group) => group.offers).find((offer) => offer.id === "team-boarding")),
   "Generic 质保上车 wording should not mark a Team seat as shared access.",
+);
+
+const telegramPremiumGroups = buildProductGroups([
+  makeOffer({ id: "telegram-stars-cheap", title: "Telegram 星星兑换码 50颗", price: 8.76, status: "in_stock" }),
+  makeOffer({ id: "telegram-premium-regular", title: "Telegram Premium会员代开（6个月）", price: 105, status: "in_stock" }),
+]);
+const telegramPremiumGroup = telegramPremiumGroups.find((group) => group.id === "telegram-premium");
+assert.ok(telegramPremiumGroup, "Telegram Premium group should exist.");
+assert.equal(
+  telegramPremiumGroup.lowestOffer?.id,
+  "telegram-premium-regular",
+  "Stars/value-added offers must not drive Telegram Premium default lowest price.",
+);
+assert.equal(
+  telegramPremiumGroup.offers.at(-1)?.id,
+  "telegram-stars-cheap",
+  "Stars/value-added offers should sort behind regular Telegram Premium offers.",
+);
+assert.ok(
+  isTelegramStarsOffer(telegramPremiumGroup.offers.find((offer) => offer.id === "telegram-stars-cheap")),
+  "Telegram Stars offers should remain identifiable for the Stars filter.",
 );
 
 const outOnlyGroups = buildProductGroups([

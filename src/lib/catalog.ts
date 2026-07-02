@@ -865,8 +865,9 @@ export function buildProductGroups(
     product.offerCount = product.offers.length;
     product.inStockCount = product.offers.filter(isAvailable).length;
     product.outOfStockCount = Math.max(0, product.offers.length - product.inStockCount);
-    const displayLowestOffer = getDisplayLowestOffer(product.offers, { excludeSharedAccess: true });
-    const warrantyLowestOffer = getDisplayLowestOffer(product.offers.filter(isLongWarrantyOffer), { excludeSharedAccess: true });
+    const excludeTelegramStars = product.id === "telegram-premium";
+    const displayLowestOffer = getDisplayLowestOffer(product.offers, { excludeSharedAccess: true, excludeTelegramStars });
+    const warrantyLowestOffer = getDisplayLowestOffer(product.offers.filter(isLongWarrantyOffer), { excludeSharedAccess: true, excludeTelegramStars });
     const priceMeta = getOfferPriceMeta(displayLowestOffer);
 
     product.lowestOffer = displayLowestOffer;
@@ -907,6 +908,9 @@ export function compareOffers(a: RawOffer, b: RawOffer): number {
   const sharedAccessDelta = Number(isSharedAccessOffer(a)) - Number(isSharedAccessOffer(b));
   if (isAvailable(a) && isAvailable(b) && sharedAccessDelta !== 0) return sharedAccessDelta;
 
+  const telegramStarsDelta = Number(isTelegramStarsOffer(a)) - Number(isTelegramStarsOffer(b));
+  if (isAvailable(a) && isAvailable(b) && telegramStarsDelta !== 0) return telegramStarsDelta;
+
   const priceDelta =
     (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER);
   if (priceDelta !== 0) return priceDelta;
@@ -941,11 +945,13 @@ export function getOfferPriceMeta(
 
 function getDisplayLowestOffer(
   offers: RawOffer[],
-  options: { excludeSharedAccess?: boolean } = {},
+  options: { excludeSharedAccess?: boolean; excludeTelegramStars?: boolean } = {},
 ): RawOffer | null {
   const displayPool = offers.filter((offer) => {
     if (!hasUsablePrice(offer) || !isAvailable(offer)) return false;
-    return !options.excludeSharedAccess || !isSharedAccessOffer(offer);
+    if (options.excludeSharedAccess && isSharedAccessOffer(offer)) return false;
+    if (options.excludeTelegramStars && isTelegramStarsOffer(offer)) return false;
+    return true;
   });
   if (!displayPool.length) return null;
 
@@ -963,6 +969,10 @@ function isLongWarrantyOffer(offer: RawOffer): boolean {
 
 export function isSharedAccessOffer(offer: RawOffer): boolean {
   return offerMatchesFilterTags(offer, ["shared_access"]);
+}
+
+export function isTelegramStarsOffer(offer: RawOffer): boolean {
+  return offerMatchesFilterTags(offer, ["telegram_stars"]);
 }
 
 function hasUsablePrice(offer: RawOffer): offer is RawOffer & { price: number } {

@@ -4,7 +4,7 @@ import { ADMIN_MANUAL_HIDE_REASON_PREFIX, listOfferFeedback, listSiteFeedback, l
 import { getAdminPasswordStatus } from "./admin-auth";
 import { notifyOperationalIssue } from "./alerts";
 import { getApiTransitAdminData, getEmptyApiTransitAdminData } from "./api-transit-admin";
-import { allPlatformOptions, buildProductGroups, canonicalCatalog, classifyOffer, comparePlatformOrder, isSharedAccessOffer, publicCatalogProducts, resolveOfferProduct } from "./catalog";
+import { allPlatformOptions, buildProductGroups, canonicalCatalog, classifyOffer, comparePlatformOrder, isSharedAccessOffer, isTelegramStarsOffer, publicCatalogProducts, resolveOfferProduct } from "./catalog";
 import { isSupabaseConfigured } from "./env";
 import { getApiModelAdminData } from "./api-models-db";
 import { normalizeCollectorKind } from "./collector-registry";
@@ -2635,7 +2635,7 @@ export async function listPublicProductOffers(id: string, filters: ProductOfferL
   const filterTags = parseOfferFilterTagsForProduct(filterProductId, filters.filterTags || []);
   const query = normalizeProductOfferQuery(filters.query);
   const excludeQuery = normalizeProductOfferQuery(filters.excludeQuery, 160);
-  const cacheKey = `${id}:${limit}:${offset}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}:offer-filter-v3`;
+  const cacheKey = `${id}:${limit}:${offset}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}:offer-filter-v4`;
   const now = Date.now();
   const cached = productOffersCache.get(cacheKey);
 
@@ -2723,7 +2723,10 @@ async function loadPublicProductOffers(
   const productOffers = dedupePublicOffers(publicData.offers
     .filter((offer) => resolveOfferProduct(offer, products).id === product.id)
     .sort(comparePublicOffers));
-  const offers = productOffers
+  const offerPool = shouldExcludeDefaultTelegramStars(product.id, filterTags)
+    ? productOffers.filter((offer) => !isTelegramStarsOffer(offer))
+    : productOffers;
+  const offers = offerPool
     .filter((offer) => offerMatchesFilterTags(offer, filterTags))
     .filter((offer) => offerMatchesProductOfferQuery(offer, query))
     .filter((offer) => offerMatchesProductOfferExcludeQuery(offer, excludeTerms));
@@ -4095,6 +4098,9 @@ function comparePublicOffers(a: RawOffer, b: RawOffer): number {
   const sharedAccessDelta = Number(isSharedAccessOffer(a)) - Number(isSharedAccessOffer(b));
   if (isOfferAvailableForPublicList(a) && isOfferAvailableForPublicList(b) && sharedAccessDelta !== 0) return sharedAccessDelta;
 
+  const telegramStarsDelta = Number(isTelegramStarsOffer(a)) - Number(isTelegramStarsOffer(b));
+  if (isOfferAvailableForPublicList(a) && isOfferAvailableForPublicList(b) && telegramStarsDelta !== 0) return telegramStarsDelta;
+
   const priceDelta = (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER);
   if (priceDelta !== 0) return priceDelta;
 
@@ -4111,6 +4117,10 @@ function comparePublicOffers(a: RawOffer, b: RawOffer): number {
   if (urlDelta !== 0) return urlDelta;
 
   return compareText(a.id, b.id);
+}
+
+function shouldExcludeDefaultTelegramStars(productId: string, filterTags: OfferFilterTagId[]): boolean {
+  return productId === "telegram-premium" && !filterTags.includes("telegram_stars");
 }
 
 function comparePublicOfferFallback(a: RawOffer, b: RawOffer): number {
