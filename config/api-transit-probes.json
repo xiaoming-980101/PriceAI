@@ -110,6 +110,12 @@
       },
       {
         "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
+      },
+      {
+        "family": "claude",
         "standardModel": "Claude Opus 4.8",
         "candidates": ["claude-opus-4-8", "claude-opus-4.8"],
         "keywords": ["claude", "opus", "4.8"]
@@ -179,6 +185,12 @@
         "standardModel": "Claude Sonnet 5",
         "candidates": ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
         "keywords": ["claude", "sonnet", "5"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
       }
     ]
   },
@@ -253,6 +265,12 @@
         "standardModel": "Claude Sonnet 5",
         "candidates": ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
         "keywords": ["claude", "sonnet", "5"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
       }
     ]
   },
@@ -329,6 +347,12 @@
         "standardModel": "Claude Sonnet 5",
         "candidates": ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
         "keywords": ["claude", "sonnet", "5"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
       }
     ]
   },
@@ -436,6 +460,12 @@
         "standardModel": "Claude Sonnet 5",
         "candidates": ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
         "keywords": ["claude", "sonnet", "5"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
       }
     ]
   },
@@ -481,6 +511,12 @@
         "standardModel": "Claude Sonnet 5",
         "candidates": ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
         "keywords": ["claude", "sonnet", "5"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
       }
     ]
   },
@@ -526,6 +562,12 @@
         "standardModel": "Claude Sonnet 5",
         "candidates": ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
         "keywords": ["claude", "sonnet", "5"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
       }
     ]
   },
@@ -602,6 +644,12 @@
         "standardModel": "Claude Sonnet 5",
         "candidates": ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
         "keywords": ["claude", "sonnet", "5"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
       }
     ]
   },
@@ -647,6 +695,12 @@
         "standardModel": "Claude Sonnet 5",
         "candidates": ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
         "keywords": ["claude", "sonnet", "5"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
       }
     ]
   },
@@ -692,6 +746,12 @@
         "standardModel": "Claude Sonnet 5",
         "candidates": ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
         "keywords": ["claude", "sonnet", "5"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
       }
     ]
   },
@@ -768,6 +828,12 @@
         "standardModel": "Claude Sonnet 5",
         "candidates": ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
         "keywords": ["claude", "sonnet", "5"]
+      },
+      {
+        "family": "claude",
+        "standardModel": "Claude Fable 5",
+        "candidates": ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+        "keywords": ["claude", "fable", "5"]
       }
     ]
   }

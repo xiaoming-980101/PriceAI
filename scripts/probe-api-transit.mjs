@@ -26,6 +26,17 @@ let cachedFileEnv = null;
 const defaultTargets = [
   {
     family: "claude",
+    standardModel: "Claude Fable 5",
+    candidates: [
+      "claude-fable-5",
+      "claude-fable-5-0",
+      "claude-5-fable",
+      "anthropic/claude-fable-5",
+    ],
+    keywords: ["claude", "fable", "5"],
+  },
+  {
+    family: "claude",
     standardModel: "Claude Sonnet 5",
     candidates: [
       "claude-sonnet-5",
@@ -1364,6 +1375,7 @@ function keywordsForStandardModel(value) {
   const version = text.match(/\d+(?:\.\d+)?/)?.[0];
   const keywords = [];
   if (text.includes("claude")) keywords.push("claude");
+  if (text.includes("fable")) keywords.push("fable");
   if (text.includes("sonnet")) keywords.push("sonnet");
   if (text.includes("opus")) keywords.push("opus");
   if (text.includes("gpt")) keywords.push("gpt");

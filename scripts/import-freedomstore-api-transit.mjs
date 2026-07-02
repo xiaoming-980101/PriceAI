@@ -117,6 +117,7 @@ export async function importFreedomStoreTransit(options = {}) {
 
 function claudeVerifiedModels() {
   return [
+    { family: "claude", standardModel: "Claude Fable 5", rawModelName: "claude-fable-5" },
     { family: "claude", standardModel: "Claude Sonnet 4.6", rawModelName: "claude-sonnet-4-6" },
     { family: "claude", standardModel: "Claude Opus 4.6", rawModelName: "claude-opus-4-6" },
     { family: "claude", standardModel: "Claude Opus 4.7", rawModelName: "claude-opus-4-7" },

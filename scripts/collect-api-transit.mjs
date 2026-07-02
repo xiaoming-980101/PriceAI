@@ -45,6 +45,7 @@ const AVAILABILITY_SOURCES = {
   },
 };
 const officialTransitPrices = {
+  "Claude Fable 5": { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5, imageOutput: null },
   "Claude Sonnet 5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5, imageOutput: null },
   "Claude Sonnet 4.6": { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, imageOutput: null },
   "Claude Opus 4.6": { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25, imageOutput: null },
@@ -61,6 +62,7 @@ const officialTransitPrices = {
   "GPT Image 2": { input: 5, output: null, cacheRead: 1.25, cacheWrite: null, imageOutput: 30 },
 };
 const modelFamilyByStandard = {
+  "Claude Fable 5": "claude",
   "Claude Sonnet 5": "claude",
   "Claude Sonnet 4.6": "claude",
   "Claude Opus 4.6": "claude",
@@ -1780,6 +1782,11 @@ function standardizeModelName(name) {
 
   if (value.includes("gpt-image-2") || value.includes("gpt image 2") || value.includes("gpt_image_2")) {
     return "GPT Image 2";
+  }
+
+  if (value.includes("claude") && value.includes("fable")) {
+    if (matchesVersion(value, "5") || /fable[-._ ]?5\b/.test(value)) return "Claude Fable 5";
+    return null;
   }
 
   if (value.includes("claude") && value.includes("sonnet")) {

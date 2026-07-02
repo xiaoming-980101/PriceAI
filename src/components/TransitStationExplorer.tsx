@@ -21,6 +21,7 @@ import type {
   TransitAccountPool,
   TransitChannelType,
   TransitModelFamily,
+  TransitStandardModel,
   TransitOperatorType,
   TransitStation,
 } from "@/data/api-transit/types";
@@ -32,6 +33,9 @@ import {
   TRANSIT_MODEL_FAMILY_LABELS,
   TRANSIT_MODEL_FAMILY_ORDER,
   TRANSIT_OPERATOR_TYPE_LABELS,
+  TRANSIT_STANDARD_MODELS,
+  TRANSIT_STANDARD_MODEL_FAMILY,
+  isTransitModelFamily,
 } from "@/data/api-transit/types";
 import {
   compareStations,
@@ -44,6 +48,8 @@ import {
   getAvailabilitySourceMeta,
   getFamilyAvailabilitySourceMeta,
   getFamilyRateSummary,
+  getStandardModelAvailabilitySourceMeta,
+  getStandardModelRateSummary,
   getNormalizedSourceTags,
   getTransitOperatorType,
   getPrimaryTransitCommercialOffer,
@@ -100,11 +106,19 @@ export default function TransitStationExplorer({ stations }: Props) {
   const [urlReady, setUrlReady] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [search, setSearch] = useState(searchParams.get("q") || "");
+  const rawModelParam = searchParams.get("model");
+  const modelFilter = coerceParam(
+    rawModelParam,
+    ["all", ...TRANSIT_STANDARD_MODELS] as const,
+    "all"
+  );
   const familyFilter = coerceParam(
-    searchParams.get("family") ?? searchParams.get("model"),
+    searchParams.get("family") ?? (isTransitModelFamily(rawModelParam) ? rawModelParam : null),
     ["all", ...TRANSIT_MODEL_FAMILY_ORDER] as const,
     "all"
   );
+  const effectiveFamilyFilter: "all" | TransitModelFamily =
+    modelFilter === "all" ? familyFilter : TRANSIT_STANDARD_MODEL_FAMILY[modelFilter];
   const [channelFilter, setChannelFilter] = useState<TransitChannelType | "all">(
     coerceParam(searchParams.get("channel"), CHANNEL_OPTIONS.map((item) => item.value), "all")
   );
@@ -125,6 +139,7 @@ export default function TransitStationExplorer({ stations }: Props) {
 
     const params = new URLSearchParams();
     if (search) params.set("q", search);
+    if (modelFilter !== "all") params.set("model", modelFilter);
     if (familyFilter !== "all") params.set("family", familyFilter);
     if (channelFilter !== "all") params.set("channel", channelFilter);
     if (poolFilter !== "all") params.set("pool", poolFilter);
@@ -132,7 +147,7 @@ export default function TransitStationExplorer({ stations }: Props) {
 
     const query = params.toString();
     router.replace(query ? `/api-transit?${query}` : "/api-transit", { scroll: false });
-  }, [channelFilter, familyFilter, poolFilter, router, search, sortBy, urlReady]);
+  }, [channelFilter, familyFilter, modelFilter, poolFilter, router, search, sortBy, urlReady]);
 
   const filtered = useMemo(() => {
     let result = [...stations];
@@ -147,7 +162,11 @@ export default function TransitStationExplorer({ stations }: Props) {
       );
     }
 
-    if (familyFilter !== "all") {
+    if (modelFilter !== "all") {
+      result = result.filter((station) =>
+        station.prices.some((price) => price.standardModel === modelFilter)
+      );
+    } else if (familyFilter !== "all") {
       result = result.filter((station) =>
         station.prices.some((price) => price.family === familyFilter)
       );
@@ -161,8 +180,11 @@ export default function TransitStationExplorer({ stations }: Props) {
       result = result.filter((station) => station.accountPools.includes(poolFilter));
     }
 
-    return compareStations(result, sortBy, { activeFamily: familyFilter });
-  }, [channelFilter, familyFilter, poolFilter, search, sortBy, stations]);
+    return compareStations(result, sortBy, {
+      activeFamily: familyFilter,
+      activeStandardModel: modelFilter,
+    });
+  }, [channelFilter, familyFilter, modelFilter, poolFilter, search, sortBy, stations]);
 
   const activeFilterCount =
     [channelFilter, poolFilter].filter((value) => value !== "all").length +
@@ -172,12 +194,24 @@ export default function TransitStationExplorer({ stations }: Props) {
   const returnQuery = useMemo(() => {
     const params = new URLSearchParams();
     if (search) params.set("q", search);
+    if (modelFilter !== "all") params.set("model", modelFilter);
     if (familyFilter !== "all") params.set("family", familyFilter);
     if (channelFilter !== "all") params.set("channel", channelFilter);
     if (poolFilter !== "all") params.set("pool", poolFilter);
     if (sortBy !== "overall") params.set("sort", sortBy);
     return params.toString();
-  }, [channelFilter, familyFilter, poolFilter, search, sortBy]);
+  }, [channelFilter, familyFilter, modelFilter, poolFilter, search, sortBy]);
+
+  const rateColumnLabel = modelFilter !== "all"
+    ? `${modelFilter} 综合`
+    : effectiveFamilyFilter === "all"
+      ? "最低综合"
+      : `${TRANSIT_MODEL_FAMILY_LABELS[effectiveFamilyFilter]} 综合`;
+  const availabilityColumnExplanation = modelFilter !== "all"
+    ? `${modelFilter} 近 7 日可用性样本汇总；样本不足时不会借用站点整体稳定性。`
+    : effectiveFamilyFilter === "all"
+      ? "近 7 日站点整体可用性样本汇总；标签会标明来自 PriceAI 实测、公开监测页、公开模型页或站长接口。"
+      : `${TRANSIT_MODEL_FAMILY_LABELS[effectiveFamilyFilter]} 近 7 日可用性样本汇总；样本不足时不会借用站点整体稳定性。`;
 
   const stationDetailHref = useCallback(
     (slug: string) => listDetailNavigationHref(`/api-transit/${slug}`, returnQuery),
@@ -304,10 +338,10 @@ export default function TransitStationExplorer({ stations }: Props) {
                   <tr role="row">
                     <DataTableHead>站点</DataTableHead>
                     <DataTableHead explanation="综合倍率 = 充值折算系数 × 模型分组倍率；越低表示按官方价折算后越便宜。">
-                      {familyFilter === "all" ? "最低综合" : `${TRANSIT_MODEL_FAMILY_LABELS[familyFilter]} 综合`}
+                      {rateColumnLabel}
                     </DataTableHead>
                     <DataTableHead explanation="站内充值额度与人民币的折算关系，会影响实际扣费倍率。">充值倍率</DataTableHead>
-                    <DataTableHead explanation={familyFilter === "all" ? "近 7 日站点整体可用性样本汇总；标签会标明来自 PriceAI 实测、公开监测页、公开模型页或站长接口。" : `${TRANSIT_MODEL_FAMILY_LABELS[familyFilter]} 近 7 日可用性样本汇总；样本不足时不会借用站点整体稳定性。`}>稳定性</DataTableHead>
+                    <DataTableHead explanation={availabilityColumnExplanation}>稳定性</DataTableHead>
                     <DataTableHead explanation="公开披露或 PriceAI 推断的上游来源与号池类型，用于判断风险边界。">来源渠道</DataTableHead>
                     <DataTableHead>更新时间</DataTableHead>
                     <DataTableHead className="w-[120px] text-center">操作</DataTableHead>
@@ -319,7 +353,8 @@ export default function TransitStationExplorer({ stations }: Props) {
                       key={station.id}
                       station={station}
                       href={stationDetailHref(station.slug)}
-                      activeFamily={familyFilter}
+                      activeFamily={effectiveFamilyFilter}
+                      activeStandardModel={modelFilter}
                       onClick={navigateToStation}
                       onWarm={() => prefetchStation(station.slug)}
                     />
@@ -334,7 +369,8 @@ export default function TransitStationExplorer({ stations }: Props) {
                 key={station.id}
                 station={station}
                 href={stationDetailHref(station.slug)}
-                activeFamily={familyFilter}
+                activeFamily={effectiveFamilyFilter}
+                activeStandardModel={modelFilter}
                 onClick={navigateToStation}
                 onWarm={() => prefetchStation(station.slug)}
               />
@@ -390,14 +426,20 @@ function rechargeRatioTitle(originalText: string | null, displayRatio: string): 
 function CombinedRateCell({
   station,
   family,
+  standardModel = "all",
   compact = false,
 }: {
   station: TransitStation;
   family: "all" | TransitModelFamily;
+  standardModel?: "all" | TransitStandardModel;
   compact?: boolean;
 }) {
   const comparison = getStationComparisonSummary(station);
-  const summary = family === "all" ? null : comparison.families[family];
+  const summary = standardModel !== "all"
+    ? getStandardModelRateSummary(station, standardModel)
+    : family === "all"
+      ? null
+      : comparison.families[family];
   const rate = summary ? summary.combinedRateMin : comparison.bestCombinedRate;
 
   if (summary && summary.priceCount === 0) {
@@ -414,7 +456,7 @@ function CombinedRateCell({
         {formatRate(rate)}
       </span>
       <div className="mt-1 text-[10px] font-semibold text-[#7f8889]">
-        {summary ? formatMultiplierRange(summary) : bestFamilyLabel(comparison)}
+        {standardModel !== "all" ? standardModel : summary ? formatMultiplierRange(summary) : bestFamilyLabel(comparison)}
       </div>
     </div>
   );
@@ -423,17 +465,21 @@ function CombinedRateCell({
 function PriceBreakdownCell({
   station,
   activeFamily,
+  activeStandardModel = "all",
   compact = false,
 }: {
   station: TransitStation;
   activeFamily: "all" | TransitModelFamily;
+  activeStandardModel?: "all" | TransitStandardModel;
   compact?: boolean;
 }) {
   const summary = getStationComparisonSummary(station);
-  const visibleSummaries = TRANSIT_MODEL_FAMILY_ORDER
-    .map((family) => summary.families[family])
-    .filter((item) => item.priceCount > 0 && (activeFamily === "all" || item.family === activeFamily))
-    .slice(0, compact ? 3 : 4);
+  const visibleSummaries = activeStandardModel !== "all"
+    ? [getStandardModelRateSummary(station, activeStandardModel)].filter((item) => item.priceCount > 0)
+    : TRANSIT_MODEL_FAMILY_ORDER
+      .map((family) => summary.families[family])
+      .filter((item) => item.priceCount > 0 && (activeFamily === "all" || item.family === activeFamily))
+      .slice(0, compact ? 3 : 4);
 
   return (
     <div className={compact ? "space-y-1" : "min-w-[166px] space-y-1"}>
@@ -445,8 +491,8 @@ function PriceBreakdownCell({
         {visibleSummaries.length ? (
           visibleSummaries.map((item) => (
             <CompactRateTag
-              key={item.family}
-              label={TRANSIT_MODEL_FAMILY_LABELS[item.family]}
+              key={activeStandardModel !== "all" ? activeStandardModel : item.family}
+              label={activeStandardModel !== "all" ? "模型" : TRANSIT_MODEL_FAMILY_LABELS[item.family]}
               value={formatMultiplierRange(item)}
               missing={false}
             />
@@ -479,12 +525,14 @@ function StationRow({
   station,
   href,
   activeFamily,
+  activeStandardModel,
   onClick,
   onWarm,
 }: {
   station: TransitStation;
   href: string;
   activeFamily: "all" | TransitModelFamily;
+  activeStandardModel: "all" | TransitStandardModel;
   onClick: (href: string) => void;
   onWarm: () => void;
 }) {
@@ -510,13 +558,17 @@ function StationRow({
         <StationIdentity station={station} />
       </td>
       <td className="px-5 py-4">
-        <CombinedRateCell station={station} family={activeFamily} />
+        <CombinedRateCell station={station} family={activeFamily} standardModel={activeStandardModel} />
       </td>
       <td className="px-5 py-4">
-        <PriceBreakdownCell station={station} activeFamily={activeFamily} />
+        <PriceBreakdownCell
+          station={station}
+          activeFamily={activeFamily}
+          activeStandardModel={activeStandardModel}
+        />
       </td>
       <td className="px-5 py-4">
-        <AvailabilityCell station={station} activeFamily={activeFamily} />
+        <AvailabilityCell station={station} activeFamily={activeFamily} activeStandardModel={activeStandardModel} />
       </td>
       <td className="max-w-[220px] px-5 py-4">
         <SourceChannelCell station={station} />
@@ -544,12 +596,14 @@ function StationCard({
   station,
   href,
   activeFamily,
+  activeStandardModel,
   onClick,
   onWarm,
 }: {
   station: TransitStation;
   href: string;
   activeFamily: "all" | TransitModelFamily;
+  activeStandardModel: "all" | TransitStandardModel;
   onClick: (href: string) => void;
   onWarm: () => void;
 }) {
@@ -577,16 +631,30 @@ function StationCard({
 
       <div className="mb-3 flex items-center justify-between gap-3 border-t border-[#edf0f1] pt-3 text-xs">
         <span className="text-[10px] font-bold text-[#5a6061]">
-          {activeFamily === "all" ? "最低综合" : `${TRANSIT_MODEL_FAMILY_LABELS[activeFamily]} 综合`}
+          {activeStandardModel !== "all"
+            ? `${activeStandardModel} 综合`
+            : activeFamily === "all"
+              ? "最低综合"
+              : `${TRANSIT_MODEL_FAMILY_LABELS[activeFamily]} 综合`}
         </span>
-        <CombinedRateCell station={station} family={activeFamily} compact />
+        <CombinedRateCell station={station} family={activeFamily} standardModel={activeStandardModel} compact />
       </div>
       <div className="mb-3">
-        <PriceBreakdownCell station={station} activeFamily={activeFamily} compact />
+        <PriceBreakdownCell
+          station={station}
+          activeFamily={activeFamily}
+          activeStandardModel={activeStandardModel}
+          compact
+        />
       </div>
 
       <div className="mb-3">
-        <AvailabilityCell station={station} activeFamily={activeFamily} compact />
+        <AvailabilityCell
+          station={station}
+          activeFamily={activeFamily}
+          activeStandardModel={activeStandardModel}
+          compact
+        />
       </div>
       <SourceChannelCell station={station} />
       <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[#5a6061]">
@@ -602,20 +670,34 @@ function StationCard({
 function AvailabilityCell({
   station,
   activeFamily,
+  activeStandardModel = "all",
   compact = false,
 }: {
   station: TransitStation;
   activeFamily: "all" | TransitModelFamily;
+  activeStandardModel?: "all" | TransitStandardModel;
   compact?: boolean;
 }) {
-  const familySummary = activeFamily === "all" ? null : getFamilyRateSummary(station, activeFamily);
-  const availability = familySummary ?? station.availability;
-  const source = familySummary
-    ? getFamilyAvailabilitySourceMeta(station, familySummary.family)
+  const scopedSummary = activeStandardModel !== "all"
+    ? getStandardModelRateSummary(station, activeStandardModel)
+    : activeFamily === "all"
+      ? null
+      : getFamilyRateSummary(station, activeFamily);
+  const availability = scopedSummary ?? station.availability;
+  const source = activeStandardModel !== "all"
+    ? getStandardModelAvailabilitySourceMeta(station, activeStandardModel)
+    : scopedSummary
+      ? getFamilyAvailabilitySourceMeta(station, scopedSummary.family)
     : getAvailabilitySourceMeta(station.availability);
-  const scopeLabel = familySummary ? `${familySummary.familyLabel} 稳定性` : "站点整体稳定性";
-  const sourceTitle = familySummary
-    ? `${familySummary.familyLabel} 分组近 7 日可用性样本；样本不足时不回退展示站点整体。`
+  const scopeLabel = activeStandardModel !== "all"
+    ? `${activeStandardModel} 稳定性`
+    : scopedSummary
+      ? `${scopedSummary.familyLabel} 稳定性`
+      : "站点整体稳定性";
+  const sourceTitle = activeStandardModel !== "all"
+    ? `${activeStandardModel} 近 7 日可用性样本；样本不足时不回退展示站点整体。`
+    : scopedSummary
+      ? `${scopedSummary.familyLabel} 分组近 7 日可用性样本；样本不足时不回退展示站点整体。`
     : "站点整体近 7 日可用性样本。";
 
   return (

@@ -1257,6 +1257,8 @@ function normalizeCandidateLane(offer: ApiTransitAdminOffer): string {
 
 function isPrimaryStandardModel(value: string): boolean {
   return (
+    value === "Claude Fable 5" ||
+    value === "Claude Sonnet 5" ||
     value === "Claude Sonnet 4.6" ||
     value === "Claude Opus 4.6" ||
     value === "Claude Opus 4.7" ||
@@ -1286,6 +1288,8 @@ function offerText(offer: ApiTransitAdminOffer): string {
 
 function modelSortValue(value: string): number {
   const order = [
+    "Claude Fable 5",
+    "Claude Sonnet 5",
     "Claude Sonnet 4.6",
     "Claude Opus 4.6",
     "Claude Opus 4.7",

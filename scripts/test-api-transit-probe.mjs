@@ -9,6 +9,7 @@ assert.equal(__test.normalizeFamily("zhipu/glm-5.2"), "glm");
 assert.equal(__test.normalizeFamily("deepseek-v4-pro"), "deepseek");
 
 assert.deepEqual(__test.keywordsForStandardModel("Claude Sonnet 5"), ["claude", "sonnet", "5"]);
+assert.deepEqual(__test.keywordsForStandardModel("Claude Fable 5"), ["claude", "fable", "5"]);
 assert.deepEqual(__test.keywordsForStandardModel("Gemini 3.1 Pro"), ["gemini", "pro", "3.1"]);
 assert.deepEqual(__test.keywordsForStandardModel("DeepSeek V4 Flash"), ["deepseek", "flash", "4"]);
 
@@ -43,16 +44,30 @@ const latestPriorityClaudeTargets = __test.selectProbeTargets({
       candidates: ["claude-sonnet-5"],
       keywords: ["claude", "sonnet", "5"],
     },
+    {
+      family: "claude",
+      standardModel: "Claude Fable 5",
+      candidates: ["claude-fable-5"],
+      keywords: ["claude", "fable", "5"],
+    },
   ],
   offerModels: [],
-  availableModels: ["claude-sonnet-5", "claude-sonnet-4-6"],
+  availableModels: ["claude-fable-5", "claude-sonnet-5", "claude-sonnet-4-6"],
   targetLimit: 1,
 });
 assert.deepEqual(
   latestPriorityClaudeTargets.map((target) => [target.standardModel, target.modelId]),
-  [["Claude Sonnet 5", "claude-sonnet-5"]],
+  [["Claude Fable 5", "claude-fable-5"]],
 );
 
+assert.deepEqual(
+  sub2ApiTest.representativeModelForGroup({ name: "Claude Fable 5 池", platform: "anthropic" }),
+  {
+    family: "claude",
+    standardModel: "Claude Fable 5",
+    rawModelName: "claude-fable-5",
+  },
+);
 assert.deepEqual(
   sub2ApiTest.representativeModelForGroup({ name: "Claude Sonnet 5 池", platform: "anthropic" }),
   {
@@ -71,11 +86,12 @@ assert.deepEqual(
 );
 assert.deepEqual(
   sub2ApiTest
-    .standardModelsFromAvailableModels(["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "claude-opus-4-8"])
+    .standardModelsFromAvailableModels(["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "claude-fable-5", "claude-opus-4-8"])
     .map((model) => [model.family, model.standardModel, model.rawModelName]),
   [
     ["gpt", "GPT 5.5", "gpt-5.5"],
     ["gpt", "GPT 5.4", "gpt-5.4"],
+    ["claude", "Claude Fable 5", "claude-fable-5"],
     ["claude", "Claude Opus 4.8", "claude-opus-4-8"],
   ],
 );
@@ -85,10 +101,50 @@ assert.deepEqual(
       family: "claude",
       standardModel: "Claude Opus 4.8",
       rawModelName: "claude-opus-4-8",
-      sampleModels: ["claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-5"],
+      sampleModels: ["claude-fable-5", "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-5"],
     })
     .map((model) => model.standardModel),
-  ["Claude Opus 4.6", "Claude Opus 4.7", "Claude Opus 4.8", "Claude Sonnet 5"],
+  ["Claude Fable 5", "Claude Opus 4.6", "Claude Opus 4.7", "Claude Opus 4.8", "Claude Sonnet 5"],
+);
+const duplicateSub2ApiOffers = sub2ApiTest.buildOfferRows(
+  { id: "neko", dashboardUrl: "https://example.test/dashboard" },
+  [{ id: 6, name: "CC MAX官转", platform: "anthropic", multiplier: 1.5 }],
+  [
+    {
+      targetId: "claude_fable_5",
+      family: "claude",
+      standardModel: "Claude Fable 5",
+      rawModelName: "claude-fable-5",
+      groupId: 6,
+      groupName: "CC MAX官转",
+      multiplier: 1.5,
+      ok: true,
+      modelListed: true,
+      modelListStatus: 200,
+      sampleModels: ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5"],
+      attempts: [],
+    },
+    {
+      targetId: "claude",
+      family: "claude",
+      standardModel: "Claude Opus 4.8",
+      rawModelName: "claude-opus-4-8",
+      groupId: 6,
+      groupName: "CC MAX官转",
+      multiplier: 1.5,
+      ok: true,
+      modelListed: true,
+      modelListStatus: 200,
+      sampleModels: ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5"],
+      attempts: [],
+    },
+  ],
+  "2026-07-02T00:00:00.000Z",
+);
+assert.equal(
+  new Set(duplicateSub2ApiOffers.map((offer) => `${offer.station_id}|${offer.standard_model}|${offer.group_name}`)).size,
+  duplicateSub2ApiOffers.length,
+  "Sub2API import must not emit duplicate offer upsert keys.",
 );
 assert.deepEqual(
   sub2ApiTest.representativeModelForGroup({ name: "gpt-image-2", platform: "openai" }),

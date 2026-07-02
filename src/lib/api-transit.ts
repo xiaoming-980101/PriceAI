@@ -117,6 +117,16 @@ const TRANSIT_OFFICIAL_MODEL_PRICES: Record<
   TransitModelPrice["standardModel"],
   TransitOfficialModelPrice
 > = {
+  "Claude Fable 5": {
+    input: 10,
+    output: 50,
+    cacheWrite: 12.5,
+    cacheRead: 1,
+    imageOutput: null,
+    currency: "USD",
+    sourceLabel: "Anthropic API",
+    sourceUrl: anthropicPricingUrl,
+  },
   "Claude Sonnet 5": {
     input: 2,
     output: 10,
@@ -336,11 +346,32 @@ export function getFamilyPrices(
   return station.prices.filter((price) => price.family === family);
 }
 
+export function getStandardModelPrices(
+  station: TransitStation,
+  standardModel: TransitModelPrice["standardModel"]
+): TransitModelPrice[] {
+  return station.prices.filter((price) => price.standardModel === standardModel);
+}
+
 export function getFamilyAvailabilitySourceMeta(
   station: TransitStation,
   family: TransitModelFamily
 ): ReturnType<typeof getAvailabilitySourceMeta> {
   const prices = getFamilyPrices(station, family);
+  const sorted = [...prices].sort(
+    (left, right) =>
+      availabilitySourcePriority(right.availability.sourceType) -
+      availabilitySourcePriority(left.availability.sourceType)
+  );
+  const price = sorted.find((item) => item.availability.sourceType !== "unknown") || sorted[0];
+  return price ? getAvailabilitySourceMeta(price.availability) : getAvailabilitySourceMeta(station.availability);
+}
+
+export function getStandardModelAvailabilitySourceMeta(
+  station: TransitStation,
+  standardModel: TransitModelPrice["standardModel"]
+): ReturnType<typeof getAvailabilitySourceMeta> {
+  const prices = getStandardModelPrices(station, standardModel);
   const sorted = [...prices].sort(
     (left, right) =>
       availabilitySourcePriority(right.availability.sourceType) -
@@ -383,11 +414,11 @@ export type TransitFamilyRateSummary = {
   lastCheckedAt: string | null;
 };
 
-export function getFamilyRateSummary(
+function summarizeRateScope(
   station: TransitStation,
-  family: TransitModelFamily
+  family: TransitModelFamily,
+  prices: TransitModelPrice[]
 ): TransitFamilyRateSummary {
-  const prices = getFamilyPrices(station, family);
   const multipliers = prices
     .map((price) => price.modelMultiplier)
     .filter((value): value is number => value !== null && Number.isFinite(value));
@@ -431,6 +462,24 @@ export function getFamilyRateSummary(
     firstCheckedAt,
     lastCheckedAt,
   };
+}
+
+export function getFamilyRateSummary(
+  station: TransitStation,
+  family: TransitModelFamily
+): TransitFamilyRateSummary {
+  return summarizeRateScope(station, family, getFamilyPrices(station, family));
+}
+
+export function getStandardModelRateSummary(
+  station: TransitStation,
+  standardModel: TransitModelPrice["standardModel"]
+): TransitFamilyRateSummary {
+  return summarizeRateScope(
+    station,
+    TRANSIT_STANDARD_MODEL_FAMILY[standardModel],
+    getStandardModelPrices(station, standardModel)
+  );
 }
 
 export type TransitStationComparisonSummary = {
@@ -693,20 +742,24 @@ function dedupeValues<T extends string>(items: T[]): T[] {
 export function compareStations(
   stations: TransitStation[],
   sortBy: TransitSortKey,
-  options: { activeFamily?: TransitModelFamily | "all" } = {}
+  options: {
+    activeFamily?: TransitModelFamily | "all";
+    activeStandardModel?: TransitModelPrice["standardModel"] | "all";
+  } = {}
 ): TransitStation[] {
   return [...stations].sort((left, right) => {
     const a = getStationComparisonSummary(left);
     const b = getStationComparisonSummary(right);
-    const activeFamily = options.activeFamily && options.activeFamily !== "all"
-      ? options.activeFamily
-      : null;
-    const aStability = activeFamily ? a.families[activeFamily] : null;
-    const bStability = activeFamily ? b.families[activeFamily] : null;
-    const aStabilityRate = activeFamily && aStability ? aStability.sevenDayRate : a.stabilityRate;
-    const bStabilityRate = activeFamily && bStability ? bStability.sevenDayRate : b.stabilityRate;
-    const aStabilitySamples = activeFamily && aStability ? aStability.sevenDaySamples : a.stabilitySamples;
-    const bStabilitySamples = activeFamily && bStability ? bStability.sevenDaySamples : b.stabilitySamples;
+    const aScope = getActiveSortScope(left, a, options);
+    const bScope = getActiveSortScope(right, b, options);
+    const aRate = aScope ? aScope.combinedRateMin : a.bestCombinedRate;
+    const bRate = bScope ? bScope.combinedRateMin : b.bestCombinedRate;
+    const aStabilityRate = aScope ? aScope.sevenDayRate : a.stabilityRate;
+    const bStabilityRate = bScope ? bScope.sevenDayRate : b.stabilityRate;
+    const aStabilitySamples = aScope ? aScope.sevenDaySamples : a.stabilitySamples;
+    const bStabilitySamples = bScope ? bScope.sevenDaySamples : b.stabilitySamples;
+    const aOverallScore = aScope ? getScopedOverallScore(left, a, aScope) : a.overallScore;
+    const bOverallScore = bScope ? getScopedOverallScore(right, b, bScope) : b.overallScore;
 
     if (sortBy === "stability") {
       return (
@@ -718,7 +771,7 @@ export function compareStations(
 
     if (sortBy === "rate") {
       return (
-        compareNullableNumber(a.bestCombinedRate, b.bestCombinedRate, "asc") ||
+        compareNullableNumber(aRate, bRate, "asc") ||
         compareNullableNumber(aStabilityRate, bStabilityRate, "desc") ||
         bStabilitySamples - aStabilitySamples ||
         new Date(right.lastUpdatedAt).getTime() - new Date(left.lastUpdatedAt).getTime()
@@ -728,7 +781,7 @@ export function compareStations(
     if (sortBy === "claude_rate") {
       return (
         compareNullableNumber(a.claude.combinedRateMin, b.claude.combinedRateMin, "asc") ||
-        compareNullableNumber(a.bestCombinedRate, b.bestCombinedRate, "asc") ||
+        compareNullableNumber(aRate, bRate, "asc") ||
         compareNullableNumber(aStabilityRate, bStabilityRate, "desc") ||
         bStabilitySamples - aStabilitySamples ||
         new Date(right.lastUpdatedAt).getTime() - new Date(left.lastUpdatedAt).getTime()
@@ -738,7 +791,7 @@ export function compareStations(
     if (sortBy === "gpt_rate") {
       return (
         compareNullableNumber(a.gpt.combinedRateMin, b.gpt.combinedRateMin, "asc") ||
-        compareNullableNumber(a.bestCombinedRate, b.bestCombinedRate, "asc") ||
+        compareNullableNumber(aRate, bRate, "asc") ||
         compareNullableNumber(aStabilityRate, bStabilityRate, "desc") ||
         bStabilitySamples - aStabilitySamples ||
         new Date(right.lastUpdatedAt).getTime() - new Date(left.lastUpdatedAt).getTime()
@@ -746,13 +799,65 @@ export function compareStations(
     }
 
     return (
-      b.overallScore - a.overallScore ||
-      compareNullableNumber(a.bestCombinedRate, b.bestCombinedRate, "asc") ||
+      bOverallScore - aOverallScore ||
+      compareNullableNumber(aRate, bRate, "asc") ||
       compareNullableNumber(aStabilityRate, bStabilityRate, "desc") ||
       bStabilitySamples - aStabilitySamples ||
       new Date(right.lastUpdatedAt).getTime() - new Date(left.lastUpdatedAt).getTime()
     );
   });
+}
+
+function getActiveSortScope(
+  station: TransitStation,
+  summary: TransitStationComparisonSummary,
+  options: {
+    activeFamily?: TransitModelFamily | "all";
+    activeStandardModel?: TransitModelPrice["standardModel"] | "all";
+  }
+): TransitFamilyRateSummary | null {
+  if (options.activeStandardModel && options.activeStandardModel !== "all") {
+    return getStandardModelRateSummary(station, options.activeStandardModel);
+  }
+
+  if (options.activeFamily && options.activeFamily !== "all") {
+    return summary.families[options.activeFamily];
+  }
+
+  return null;
+}
+
+function getScopedOverallScore(
+  station: TransitStation,
+  summary: TransitStationComparisonSummary,
+  scope: TransitFamilyRateSummary
+): number {
+  const rateScore = scope.combinedRateMin === null ? 0 : Math.max(0, 40 - scope.combinedRateMin * 900);
+  const stabilityScore = (scope.sevenDayRate ?? 0) * 35;
+  const sampleScore = Math.min(scope.sevenDaySamples / 12, 12);
+  const completenessScore = Math.min(summary.sourceCompleteness * 1.5, 9);
+  const commercialScore =
+    station.commercialRelation === "sponsored" ? 6 :
+      station.commercialRelation === "partner" ? 4 :
+        station.commercialRelation === "listed" ? 2 :
+          station.commercialRelation === "affiliate" ? 1 :
+            0;
+  const stationSystem = getTransitStationSystem(station);
+  const systemScore =
+    stationSystem === "sub_to_api" ? 5 :
+      stationSystem === "new_api" ? -10 :
+        0;
+  const riskPenalty = station.riskLabels.reduce((total, risk) => {
+    if (risk === "sample_data") return total + 1;
+    if (risk === "insufficient_samples") return total + 3;
+    if (risk === "mixed_pool") return total + 2;
+    if (risk === "reseller") return total + 3;
+    if (risk === "undisclosed_upstream") return total + 5;
+    if (risk === "third_party_aggregate") return total + 6;
+    return total + 2;
+  }, 0);
+
+  return rateScore + stabilityScore + sampleScore + completenessScore + commercialScore + systemScore - riskPenalty;
 }
 
 function compareNullableNumber(

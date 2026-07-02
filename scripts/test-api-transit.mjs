@@ -102,6 +102,9 @@ assert.equal(__test.shouldRestrictToPublishedStations({ post: true, dryRun: true
 assert.equal(__test.standardizeModelName("anthropic/claude-sonnet-5"), "Claude Sonnet 5");
 assert.equal(__test.standardizeModelName("Claude Sonnet 5"), "Claude Sonnet 5");
 assert.equal(__test.standardizeModelName("claude-sonnet-5-0"), "Claude Sonnet 5");
+assert.equal(__test.standardizeModelName("anthropic/claude-fable-5"), "Claude Fable 5");
+assert.equal(__test.standardizeModelName("Claude Fable 5"), "Claude Fable 5");
+assert.equal(__test.standardizeModelName("claude-fable-5-0"), "Claude Fable 5");
 
 const apinodePayload = {
   code: 0,

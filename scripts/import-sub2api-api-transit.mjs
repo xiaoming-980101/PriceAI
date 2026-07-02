@@ -19,6 +19,14 @@ const DEFAULT_RECHARGE_RATIO = "1:1";
 
 const targetPlans = [
   {
+    id: "claude_fable_5",
+    family: "claude",
+    standardModel: "Claude Fable 5",
+    rawModelName: "claude-fable-5",
+    candidates: ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+    groupSelector: "claude_general",
+  },
+  {
     id: "claude_sonnet_5",
     family: "claude",
     standardModel: "Claude Sonnet 5",
@@ -53,6 +61,11 @@ const targetPlans = [
 ];
 
 const standardModelMatchers = [
+  {
+    family: "claude",
+    standardModel: "Claude Fable 5",
+    candidates: ["claude-fable-5", "claude-fable-5-0", "claude-5-fable"],
+  },
   {
     family: "claude",
     standardModel: "Claude Sonnet 5",
@@ -810,7 +823,26 @@ function buildOfferRows(source, groups, probeResults, collectedAt) {
     seen.add(fallback.id);
   }
 
-  return rows;
+  return dedupeOfferRows(rows);
+}
+
+function dedupeOfferRows(rows) {
+  const byKey = new Map();
+  for (const row of rows) {
+    const key = offerKey(row);
+    const existing = byKey.get(key);
+    if (!existing || offerRowPriority(row) > offerRowPriority(existing)) {
+      byKey.set(key, row);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
+function offerRowPriority(row) {
+  const sourceScore = row.availability_source_type === "priceai_probe" ? 10 : 0;
+  const sampleScore = Number(row.availability_seven_day_samples || 0);
+  const statusScore = row.status === "active" ? 1 : 0;
+  return sourceScore + sampleScore + statusScore;
 }
 
 function modelsForProbeResult(result) {
@@ -908,10 +940,13 @@ function representativeModelForGroup(group) {
   }
 
   if (/anthropic|claude|cc|max|kiro/.test(text)) {
+    const isFable = text.includes("fable");
     const isSonnet = text.includes("sonnet");
     const isSonnetFive = isSonnet && /(?:sonnet[^0-9]*5|5[^a-z0-9]*sonnet)/.test(text);
-    const standardModel = isSonnetFive ? "Claude Sonnet 5" : isSonnet ? "Claude Sonnet 4.6" : "Claude Opus 4.8";
-    const rawModelName = isSonnetFive
+    const standardModel = isFable ? "Claude Fable 5" : isSonnetFive ? "Claude Sonnet 5" : isSonnet ? "Claude Sonnet 4.6" : "Claude Opus 4.8";
+    const rawModelName = isFable
+      ? "claude-fable-5"
+      : isSonnetFive
       ? "claude-sonnet-5"
       : isSonnet
         ? "claude-sonnet-4-6"
@@ -1407,7 +1442,7 @@ function normalizeModelId(value) {
 }
 
 function sampleModelMatcher(model) {
-  return /gpt-5|claude.*opus|opus.*4|sonnet/i.test(String(model));
+  return /gpt-5|claude.*opus|opus.*4|sonnet|fable/i.test(String(model));
 }
 
 function inferAccountPool(text) {
@@ -1659,6 +1694,7 @@ function errorMessage(error) {
 }
 
 export const __test = {
+  buildOfferRows,
   modelsForProbeResult,
   representativeModelForGroup,
   selectGroupForPlan,
