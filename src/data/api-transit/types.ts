@@ -76,7 +76,17 @@ export type TransitStandardModel =
   | "GLM-5.1"
   | "DeepSeek V4 Flash"
   | "DeepSeek V4 Pro"
-  | "GPT Image 2";
+  | "GPT Image 2"
+  | "Nano Banana Pro"
+  | "Nano Banana 2"
+  | "Nano Banana Lite"
+  | "Sora 2"
+  | "Sora 2 Pro"
+  | "Veo 3.1"
+  | "Veo 3.1 Lite"
+  | "Gemini Omni Flash"
+  | "Seedance 2.0"
+  | "Kling 2.5 Turbo";
 
 export interface TransitModelPrice {
   family: TransitModelFamily;
@@ -233,6 +243,16 @@ export const TRANSIT_STANDARD_MODELS = [
   "DeepSeek V4 Flash",
   "DeepSeek V4 Pro",
   "GPT Image 2",
+  "Nano Banana Pro",
+  "Nano Banana 2",
+  "Nano Banana Lite",
+  "Sora 2",
+  "Sora 2 Pro",
+  "Veo 3.1",
+  "Veo 3.1 Lite",
+  "Gemini Omni Flash",
+  "Seedance 2.0",
+  "Kling 2.5 Turbo",
 ] as const satisfies readonly TransitStandardModel[];
 
 export const TRANSIT_STANDARD_MODEL_FAMILY: Record<TransitStandardModel, TransitModelFamily> = {
@@ -251,6 +271,16 @@ export const TRANSIT_STANDARD_MODEL_FAMILY: Record<TransitStandardModel, Transit
   "DeepSeek V4 Flash": "deepseek",
   "DeepSeek V4 Pro": "deepseek",
   "GPT Image 2": "image",
+  "Nano Banana Pro": "image",
+  "Nano Banana 2": "image",
+  "Nano Banana Lite": "image",
+  "Sora 2": "video",
+  "Sora 2 Pro": "video",
+  "Veo 3.1": "video",
+  "Veo 3.1 Lite": "video",
+  "Gemini Omni Flash": "video",
+  "Seedance 2.0": "video",
+  "Kling 2.5 Turbo": "video",
 };
 
 export function isTransitModelFamily(value: unknown): value is TransitModelFamily {

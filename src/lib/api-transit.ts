@@ -110,9 +110,31 @@ export type TransitOfficialModelPrice = Record<TransitPriceMetric, number | null
 
 const anthropicPricingUrl = "https://platform.claude.com/docs/en/about-claude/pricing";
 const openAiPricingUrl = "https://platform.openai.com/docs/pricing";
+const openAiVideoGenerationUrl = "https://platform.openai.com/docs/guides/video-generation";
 const geminiPricingUrl = "https://ai.google.dev/gemini-api/docs/pricing";
+const geminiImageGenerationUrl = "https://ai.google.dev/gemini-api/docs/image-generation";
+const geminiModelDocsUrl = "https://ai.google.dev/gemini-api/docs/models";
 const glmPricingUrl = "https://bigmodel.cn/pricing";
 const deepseekPricingUrl = "https://api-docs.deepseek.com/zh-cn/quick_start/pricing";
+const seedanceDocsUrl = "https://docs.byteplus.com/en/docs/ModelArk/1520757";
+const klingDocsUrl = "https://app.klingai.com/global/dev/document-api/apiReference/model/video";
+
+function unpricedOfficialModel(
+  sourceLabel: string,
+  sourceUrl: string,
+  currency: TransitPriceCurrency = "USD"
+): TransitOfficialModelPrice {
+  return {
+    input: null,
+    output: null,
+    cacheWrite: null,
+    cacheRead: null,
+    imageOutput: null,
+    currency,
+    sourceLabel,
+    sourceUrl,
+  };
+}
 
 const TRANSIT_OFFICIAL_MODEL_PRICES: Record<
   TransitModelPrice["standardModel"],
@@ -268,6 +290,16 @@ const TRANSIT_OFFICIAL_MODEL_PRICES: Record<
     sourceLabel: "OpenAI API",
     sourceUrl: openAiPricingUrl,
   },
+  "Nano Banana Pro": unpricedOfficialModel("Google Gemini API", geminiImageGenerationUrl),
+  "Nano Banana 2": unpricedOfficialModel("Google Gemini API", geminiImageGenerationUrl),
+  "Nano Banana Lite": unpricedOfficialModel("Google Gemini API", geminiImageGenerationUrl),
+  "Sora 2": unpricedOfficialModel("OpenAI Video API", openAiVideoGenerationUrl),
+  "Sora 2 Pro": unpricedOfficialModel("OpenAI Video API", openAiVideoGenerationUrl),
+  "Veo 3.1": unpricedOfficialModel("Google Gemini API", geminiModelDocsUrl),
+  "Veo 3.1 Lite": unpricedOfficialModel("Google Gemini API", geminiModelDocsUrl),
+  "Gemini Omni Flash": unpricedOfficialModel("Google Gemini API", geminiModelDocsUrl),
+  "Seedance 2.0": unpricedOfficialModel("BytePlus ModelArk", seedanceDocsUrl),
+  "Kling 2.5 Turbo": unpricedOfficialModel("Kling API", klingDocsUrl),
 };
 
 export function getOfficialTransitModelPrice(

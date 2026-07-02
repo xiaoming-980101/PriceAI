@@ -105,6 +105,17 @@ assert.equal(__test.standardizeModelName("claude-sonnet-5-0"), "Claude Sonnet 5"
 assert.equal(__test.standardizeModelName("anthropic/claude-fable-5"), "Claude Fable 5");
 assert.equal(__test.standardizeModelName("Claude Fable 5"), "Claude Fable 5");
 assert.equal(__test.standardizeModelName("claude-fable-5-0"), "Claude Fable 5");
+assert.equal(__test.standardizeModelName("openai/gpt-image-2"), "GPT Image 2");
+assert.equal(__test.standardizeModelName("google/nano-banana-pro"), "Nano Banana Pro");
+assert.equal(__test.standardizeModelName("google/nano-banana-2"), "Nano Banana 2");
+assert.equal(__test.standardizeModelName("google/nano-banana-lite"), "Nano Banana Lite");
+assert.equal(__test.standardizeModelName("openai/sora-2-pro"), "Sora 2 Pro");
+assert.equal(__test.standardizeModelName("openai/sora-2"), "Sora 2");
+assert.equal(__test.standardizeModelName("google/veo-3.1-lite"), "Veo 3.1 Lite");
+assert.equal(__test.standardizeModelName("google/veo-3.1"), "Veo 3.1");
+assert.equal(__test.standardizeModelName("google/gemini-omni-flash"), "Gemini Omni Flash");
+assert.equal(__test.standardizeModelName("bytedance/seedance-2.0"), "Seedance 2.0");
+assert.equal(__test.standardizeModelName("kling/kling-2.5-turbo"), "Kling 2.5 Turbo");
 
 const apinodePayload = {
   code: 0,

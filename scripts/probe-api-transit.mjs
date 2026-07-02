@@ -1382,14 +1382,42 @@ function keywordsForStandardModel(value) {
   if (text.includes("gemini")) keywords.push("gemini");
   if (text.includes("glm")) keywords.push("glm");
   if (text.includes("deepseek")) keywords.push("deepseek");
+  if (text.includes("nano")) keywords.push("nano");
+  if (text.includes("banana")) keywords.push("banana");
+  if (text.includes("image")) keywords.push("image");
+  if (text.includes("sora")) keywords.push("sora");
+  if (text.includes("veo")) keywords.push("veo");
+  if (text.includes("omni")) keywords.push("omni");
+  if (text.includes("seedance")) keywords.push("seedance");
+  if (text.includes("kling")) keywords.push("kling");
+  if (text.includes("video")) keywords.push("video");
   if (text.includes("flash")) keywords.push("flash");
   if (text.includes("pro")) keywords.push("pro");
+  if (text.includes("lite")) keywords.push("lite");
   if (version) keywords.push(version);
   return keywords;
 }
 
 function normalizeFamily(value) {
   const text = String(value || "").toLowerCase();
+  if (
+    text.includes("sora") ||
+    text.includes("veo") ||
+    text.includes("omni") ||
+    text.includes("seedance") ||
+    text.includes("kling") ||
+    text.includes("video") ||
+    text.includes("视频")
+  ) return "video";
+  if (
+    text.includes("gpt-image") ||
+    text.includes("gpt image") ||
+    text.includes("nano-banana") ||
+    text.includes("nano banana") ||
+    text.includes("image") ||
+    text.includes("生图") ||
+    text.includes("绘图")
+  ) return "image";
   if (text.includes("claude")) return "claude";
   if (text.includes("gpt")) return "gpt";
   if (text.includes("gemini") || text.includes("google")) return "gemini";

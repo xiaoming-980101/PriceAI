@@ -33,6 +33,10 @@ import type {
   ApiTransitUsageAdvice,
   ApiTransitVerificationEvent,
 } from "@/lib/api-transit-admin-types";
+import {
+  TRANSIT_STANDARD_MODELS,
+  type TransitStandardModel,
+} from "@/data/api-transit/types";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { normalizeTransitSubmissionUrl } from "@/lib/api-transit-normalization";
@@ -1257,23 +1261,7 @@ function normalizeCandidateLane(offer: ApiTransitAdminOffer): string {
 }
 
 function isPrimaryStandardModel(value: string): boolean {
-  return (
-    value === "Claude Fable 5" ||
-    value === "Claude Sonnet 5" ||
-    value === "Claude Sonnet 4.6" ||
-    value === "Claude Opus 4.6" ||
-    value === "Claude Opus 4.7" ||
-    value === "Claude Opus 4.8" ||
-    value === "GPT 5.5" ||
-    value === "GPT 5.4" ||
-    value === "Gemini 3.5 Flash" ||
-    value === "Gemini 3.1 Pro" ||
-    value === "GLM-5.2" ||
-    value === "GLM-5.1" ||
-    value === "DeepSeek V4 Flash" ||
-    value === "DeepSeek V4 Pro" ||
-    value === "GPT Image 2"
-  );
+  return TRANSIT_STANDARD_MODELS.includes(value as TransitStandardModel);
 }
 
 function offerText(offer: ApiTransitAdminOffer): string {
@@ -1304,6 +1292,16 @@ function modelSortValue(value: string): number {
     "DeepSeek V4 Flash",
     "DeepSeek V4 Pro",
     "GPT Image 2",
+    "Nano Banana Pro",
+    "Nano Banana 2",
+    "Nano Banana Lite",
+    "Sora 2",
+    "Sora 2 Pro",
+    "Veo 3.1",
+    "Veo 3.1 Lite",
+    "Gemini Omni Flash",
+    "Seedance 2.0",
+    "Kling 2.5 Turbo",
   ];
   const index = order.indexOf(value);
   return index === -1 ? order.length : index;

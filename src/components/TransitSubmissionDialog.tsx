@@ -221,7 +221,7 @@ function SubmitFields() {
           </select>
         </Field>
         <Field label="看到的价格或倍率">
-          <input className={fieldClassName} name="priceHint" placeholder="例如 Gemini 3.5 Flash 0.5x / GPT Image 2 0.3x" />
+          <input className={fieldClassName} name="priceHint" placeholder="例如 GPT Image 2 0.3x / Sora 2 Pro 1.2x" />
         </Field>
       </div>
       <OptionGroup label="支持模型" name="models" options={modelOptions} />
@@ -421,7 +421,7 @@ function TestKeyFields() {
           <input className={fieldClassName} name="credentialExpiresAt" type="date" />
         </Field>
         <Field label="允许测试的模型">
-          <input className={fieldClassName} name="credentialAllowedModelsText" placeholder="例如 GPT 5.5, Gemini 3.5 Flash, GPT Image 2" />
+          <input className={fieldClassName} name="credentialAllowedModelsText" placeholder="例如 GPT 5.5, Nano Banana Pro, Sora 2" />
         </Field>
       </div>
       <CredentialScopeFields />

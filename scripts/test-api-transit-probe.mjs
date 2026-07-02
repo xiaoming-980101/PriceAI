@@ -7,11 +7,16 @@ import { __test as sub2ApiTest } from "./import-sub2api-api-transit.mjs";
 assert.equal(__test.normalizeFamily("google/gemini-3.5-flash"), "gemini");
 assert.equal(__test.normalizeFamily("zhipu/glm-5.2"), "glm");
 assert.equal(__test.normalizeFamily("deepseek-v4-pro"), "deepseek");
+assert.equal(__test.normalizeFamily("nano-banana-pro"), "image");
+assert.equal(__test.normalizeFamily("sora-2-pro"), "video");
+assert.equal(__test.normalizeFamily("kling-2.5-turbo"), "video");
 
 assert.deepEqual(__test.keywordsForStandardModel("Claude Sonnet 5"), ["claude", "sonnet", "5"]);
 assert.deepEqual(__test.keywordsForStandardModel("Claude Fable 5"), ["claude", "fable", "5"]);
 assert.deepEqual(__test.keywordsForStandardModel("Gemini 3.1 Pro"), ["gemini", "pro", "3.1"]);
 assert.deepEqual(__test.keywordsForStandardModel("DeepSeek V4 Flash"), ["deepseek", "flash", "4"]);
+assert.deepEqual(__test.keywordsForStandardModel("Nano Banana Lite"), ["nano", "banana", "lite"]);
+assert.deepEqual(__test.keywordsForStandardModel("Sora 2 Pro"), ["sora", "pro", "2"]);
 
 const claudeTargets = __test.selectProbeTargets({
   profileFamily: "claude",
@@ -153,6 +158,52 @@ assert.deepEqual(
     standardModel: "GPT Image 2",
     rawModelName: "gpt-image-2",
   },
+);
+assert.deepEqual(
+  sub2ApiTest.representativeModelForGroup({ name: "Nano Banana Lite 生图池", platform: "google" }),
+  {
+    family: "image",
+    standardModel: "Nano Banana Lite",
+    rawModelName: "nano-banana-lite",
+  },
+);
+assert.deepEqual(
+  sub2ApiTest.representativeModelForGroup({ name: "Sora 2 Pro 视频池", platform: "openai" }),
+  {
+    family: "video",
+    standardModel: "Sora 2 Pro",
+    rawModelName: "sora-2-pro",
+  },
+);
+assert.deepEqual(
+  sub2ApiTest.representativeModelForGroup({ name: "Kling 2.5 Turbo 视频池", platform: "kling" }),
+  {
+    family: "video",
+    standardModel: "Kling 2.5 Turbo",
+    rawModelName: "kling-2.5-turbo",
+  },
+);
+assert.deepEqual(
+  sub2ApiTest
+    .standardModelsFromAvailableModels([
+      "nano-banana-pro",
+      "nano-banana-2",
+      "sora-2-pro",
+      "veo-3.1-lite",
+      "gemini-omni-flash",
+      "seedance-2.0",
+      "kling-2.5-turbo",
+    ])
+    .map((model) => [model.family, model.standardModel, model.rawModelName]),
+  [
+    ["image", "Nano Banana Pro", "nano-banana-pro"],
+    ["image", "Nano Banana 2", "nano-banana-2"],
+    ["video", "Sora 2 Pro", "sora-2-pro"],
+    ["video", "Veo 3.1 Lite", "veo-3.1-lite"],
+    ["video", "Gemini Omni Flash", "gemini-omni-flash"],
+    ["video", "Seedance 2.0", "seedance-2.0"],
+    ["video", "Kling 2.5 Turbo", "kling-2.5-turbo"],
+  ],
 );
 
 const geminiTargets = __test.selectProbeTargets({

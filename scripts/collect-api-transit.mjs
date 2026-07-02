@@ -60,6 +60,16 @@ const officialTransitPrices = {
   "DeepSeek V4 Flash": { input: 1, output: 2, cacheRead: 0.02, cacheWrite: null, imageOutput: null, currency: "CNY" },
   "DeepSeek V4 Pro": { input: 3, output: 6, cacheRead: 0.025, cacheWrite: null, imageOutput: null, currency: "CNY" },
   "GPT Image 2": { input: 5, output: null, cacheRead: 1.25, cacheWrite: null, imageOutput: 30, currency: "USD" },
+  "Nano Banana Pro": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
+  "Nano Banana 2": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
+  "Nano Banana Lite": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
+  "Sora 2": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
+  "Sora 2 Pro": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
+  "Veo 3.1": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
+  "Veo 3.1 Lite": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
+  "Gemini Omni Flash": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
+  "Seedance 2.0": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
+  "Kling 2.5 Turbo": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
 };
 const modelFamilyByStandard = {
   "Claude Fable 5": "claude",
@@ -77,6 +87,16 @@ const modelFamilyByStandard = {
   "DeepSeek V4 Flash": "deepseek",
   "DeepSeek V4 Pro": "deepseek",
   "GPT Image 2": "image",
+  "Nano Banana Pro": "image",
+  "Nano Banana 2": "image",
+  "Nano Banana Lite": "image",
+  "Sora 2": "video",
+  "Sora 2 Pro": "video",
+  "Veo 3.1": "video",
+  "Veo 3.1 Lite": "video",
+  "Gemini Omni Flash": "video",
+  "Seedance 2.0": "video",
+  "Kling 2.5 Turbo": "video",
 };
 
 if (isCli()) {
@@ -1802,6 +1822,16 @@ function standardizeModelName(name) {
   if (value.includes("gpt-image-2") || value.includes("gpt image 2") || value.includes("gpt_image_2")) {
     return "GPT Image 2";
   }
+  if (value.includes("nano-banana-pro") || value.includes("nano banana pro")) return "Nano Banana Pro";
+  if (value.includes("nano-banana-lite") || value.includes("nano banana lite")) return "Nano Banana Lite";
+  if (value.includes("nano-banana-2") || value.includes("nano banana 2")) return "Nano Banana 2";
+  if (value.includes("sora-2-pro") || value.includes("sora 2 pro")) return "Sora 2 Pro";
+  if (value.includes("sora-2") || value.includes("sora 2")) return "Sora 2";
+  if (value.includes("veo-3.1-lite") || value.includes("veo 3.1 lite") || value.includes("veo-3-1-lite")) return "Veo 3.1 Lite";
+  if (value.includes("veo-3.1") || value.includes("veo 3.1") || value.includes("veo-3-1")) return "Veo 3.1";
+  if (value.includes("gemini-omni-flash") || value.includes("gemini omni flash")) return "Gemini Omni Flash";
+  if (value.includes("seedance-2.0") || value.includes("seedance 2.0") || value.includes("seedance-2")) return "Seedance 2.0";
+  if (value.includes("kling-2.5-turbo") || value.includes("kling 2.5 turbo") || value.includes("kling-2-5-turbo")) return "Kling 2.5 Turbo";
 
   if (value.includes("claude") && value.includes("fable")) {
     if (matchesVersion(value, "5") || /fable[-._ ]?5\b/.test(value)) return "Claude Fable 5";

@@ -191,7 +191,7 @@ function ModelSummaryRow({
       <td className="max-w-[330px] px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] ring-1 ring-[#adb3b4]/15">
-            <TransitModelIcon family={summary.family} className="h-7 w-7" />
+            <TransitModelIcon family={summary.family} standardModel={summary.standardModel} className="h-7 w-7" />
           </span>
           <span className="min-w-0">
             <span className="block truncate font-semibold text-[#202829]">
@@ -257,7 +257,7 @@ function ModelSummaryCard({ summary }: { summary: TransitModelSummary }) {
     >
       <div className="mb-3 flex min-w-0 items-center gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f4f4] ring-1 ring-[#adb3b4]/15">
-          <TransitModelIcon family={summary.family} className="h-7 w-7" />
+          <TransitModelIcon family={summary.family} standardModel={summary.standardModel} className="h-7 w-7" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-[#202829]">{summary.standardModel}</span>

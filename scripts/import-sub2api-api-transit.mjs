@@ -106,6 +106,56 @@ const standardModelMatchers = [
     standardModel: "GPT Image 2",
     candidates: ["gpt-image-2", "gpt-image2"],
   },
+  {
+    family: "image",
+    standardModel: "Nano Banana Pro",
+    candidates: ["nano-banana-pro", "nano banana pro"],
+  },
+  {
+    family: "image",
+    standardModel: "Nano Banana 2",
+    candidates: ["nano-banana-2", "nano banana 2"],
+  },
+  {
+    family: "image",
+    standardModel: "Nano Banana Lite",
+    candidates: ["nano-banana-lite", "nano banana lite"],
+  },
+  {
+    family: "video",
+    standardModel: "Sora 2 Pro",
+    candidates: ["sora-2-pro", "sora 2 pro"],
+  },
+  {
+    family: "video",
+    standardModel: "Sora 2",
+    candidates: ["sora-2", "sora 2"],
+  },
+  {
+    family: "video",
+    standardModel: "Veo 3.1 Lite",
+    candidates: ["veo-3.1-lite", "veo-3-1-lite", "veo 3.1 lite"],
+  },
+  {
+    family: "video",
+    standardModel: "Veo 3.1",
+    candidates: ["veo-3.1", "veo-3-1", "veo 3.1"],
+  },
+  {
+    family: "video",
+    standardModel: "Gemini Omni Flash",
+    candidates: ["gemini-omni-flash", "gemini omni flash"],
+  },
+  {
+    family: "video",
+    standardModel: "Seedance 2.0",
+    candidates: ["seedance-2.0", "seedance-2", "seedance 2.0"],
+  },
+  {
+    family: "video",
+    standardModel: "Kling 2.5 Turbo",
+    candidates: ["kling-2.5-turbo", "kling-2-5-turbo", "kling 2.5 turbo"],
+  },
 ];
 
 if (isCli()) {
@@ -931,11 +981,88 @@ function buildUnprobedOfferRow(source, group, collectedAt) {
 
 function representativeModelForGroup(group) {
   const text = `${group.name} ${group.platform}`.toLowerCase();
+  if (/sora[-_\s]?2[-_\s]?pro/.test(text)) {
+    return {
+      family: "video",
+      standardModel: "Sora 2 Pro",
+      rawModelName: "sora-2-pro",
+    };
+  }
+  if (/sora[-_\s]?2/.test(text)) {
+    return {
+      family: "video",
+      standardModel: "Sora 2",
+      rawModelName: "sora-2",
+    };
+  }
+  if (/veo[-_\s]?3[.\-_\s]?1[-_\s]?lite/.test(text)) {
+    return {
+      family: "video",
+      standardModel: "Veo 3.1 Lite",
+      rawModelName: "veo-3.1-lite",
+    };
+  }
+  if (/veo[-_\s]?3[.\-_\s]?1/.test(text)) {
+    return {
+      family: "video",
+      standardModel: "Veo 3.1",
+      rawModelName: "veo-3.1",
+    };
+  }
+  if (/gemini[-_\s]?omni[-_\s]?flash/.test(text)) {
+    return {
+      family: "video",
+      standardModel: "Gemini Omni Flash",
+      rawModelName: "gemini-omni-flash",
+    };
+  }
+  if (/seedance[-_\s]?2(?:[.\-_\s]?0)?/.test(text)) {
+    return {
+      family: "video",
+      standardModel: "Seedance 2.0",
+      rawModelName: "seedance-2.0",
+    };
+  }
+  if (/kling[-_\s]?2[.\-_\s]?5[-_\s]?turbo/.test(text)) {
+    return {
+      family: "video",
+      standardModel: "Kling 2.5 Turbo",
+      rawModelName: "kling-2.5-turbo",
+    };
+  }
+  if (/nano[-_\s]?banana[-_\s]?pro/.test(text)) {
+    return {
+      family: "image",
+      standardModel: "Nano Banana Pro",
+      rawModelName: "nano-banana-pro",
+    };
+  }
+  if (/nano[-_\s]?banana[-_\s]?lite/.test(text)) {
+    return {
+      family: "image",
+      standardModel: "Nano Banana Lite",
+      rawModelName: "nano-banana-lite",
+    };
+  }
+  if (/nano[-_\s]?banana[-_\s]?2/.test(text)) {
+    return {
+      family: "image",
+      standardModel: "Nano Banana 2",
+      rawModelName: "nano-banana-2",
+    };
+  }
   if (/image|draw|生图|绘图|flux/.test(text)) {
     return {
       family: "image",
       standardModel: "GPT Image 2",
       rawModelName: "gpt-image-2",
+    };
+  }
+  if (/video|视频|生视频|文生视频|图生视频/.test(text)) {
+    return {
+      family: "video",
+      standardModel: "Sora 2",
+      rawModelName: "sora-2",
     };
   }
 

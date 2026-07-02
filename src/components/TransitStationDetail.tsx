@@ -1589,6 +1589,16 @@ function comparePricePriority(left: TransitModelPrice, right: TransitModelPrice)
 
 function modelPriority(model: TransitModelPrice["standardModel"]): number {
   if (model === "GPT Image 2") return 602;
+  if (model === "Nano Banana Pro") return 595;
+  if (model === "Nano Banana 2") return 594;
+  if (model === "Nano Banana Lite") return 593;
+  if (model === "Sora 2 Pro") return 590;
+  if (model === "Sora 2") return 589;
+  if (model === "Veo 3.1") return 588;
+  if (model === "Veo 3.1 Lite") return 587;
+  if (model === "Gemini Omni Flash") return 586;
+  if (model === "Seedance 2.0") return 585;
+  if (model === "Kling 2.5 Turbo") return 584;
   if (model === "GPT 5.5") return 505;
   if (model === "GPT 5.4") return 504;
   if (model === "Claude Fable 5") return 510;
@@ -1607,6 +1617,10 @@ function modelPriority(model: TransitModelPrice["standardModel"]): number {
 }
 
 function shortModelLabel(model: TransitModelPrice["standardModel"]): string {
+  if (model === "Nano Banana Pro") return "Banana Pro";
+  if (model === "Nano Banana 2") return "Banana 2";
+  if (model === "Nano Banana Lite") return "Banana Lite";
+  if (model === "Gemini Omni Flash") return "Omni Flash";
   return model
     .replace("Claude ", "")
     .replace("Gemini ", "")
