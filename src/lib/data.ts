@@ -35,7 +35,7 @@ import {
 import { PRICE_DATA_CACHE_TTL_MS } from "./public-cache-policy";
 import { seedRawOffers, seedSources } from "./sample-data";
 import { getSupabaseServerClient } from "./supabase";
-import { API_CDK_PLATFORM, apiCdkPublicVisible, getPublicRiskPrecheck, isPublicCatalogProduct } from "./trust-risk";
+import { API_CDK_PLATFORM, API_CDK_PRODUCT_ID, apiCdkPublicVisible, getPublicRiskPrecheck, isPublicCatalogProduct } from "./trust-risk";
 import type {
   AdminSummary,
   CanonicalProduct,
@@ -1171,20 +1171,21 @@ async function buildExplorerData(options: { skipSnapshot?: boolean } = {}): Prom
   if (!options.skipSnapshot) {
     const snapshot = await readPublicApiSnapshot<ExplorerData>("explorer", PUBLIC_EXPLORER_SNAPSHOT_KEY);
     if (snapshot && isExplorerDataSnapshot(snapshot.value)) {
-      const value = hydrateGeneratedAt(snapshot);
+      const value = sanitizeExplorerDataForPublicCatalog(hydrateGeneratedAt(snapshot));
       if (isPublicApiSnapshotFresh(snapshot)) return value;
       staleSnapshotValue = value;
     }
   }
 
   const value = await buildExplorerDataFromSource();
-  const nextValue = staleSnapshotValue ? preferStaleExplorerData(staleSnapshotValue, value) : value;
+  const publicValue = sanitizeExplorerDataForPublicCatalog(value);
+  const nextValue = staleSnapshotValue ? preferStaleExplorerData(staleSnapshotValue, publicValue) : publicValue;
   if (!options.skipSnapshot && !value.degraded) {
     await writePublicApiSnapshot({
       kind: "explorer",
       key: PUBLIC_EXPLORER_SNAPSHOT_KEY,
-      payload: value,
-      generatedAt: value.generatedAt,
+      payload: publicValue,
+      generatedAt: publicValue.generatedAt,
     });
   }
 
@@ -1210,8 +1211,6 @@ async function buildExplorerDataFromSource(): Promise<ExplorerData> {
 }
 
 async function getExplorerDataFromDatabase(): Promise<ExplorerData | null> {
-  if (!apiCdkPublicVisible()) return null;
-
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
@@ -1223,15 +1222,17 @@ async function getExplorerDataFromDatabase(): Promise<ExplorerData | null> {
     return null;
   }
 
-  const rows = ((data || []) as unknown as Record<string, unknown>[]);
+  const products = ((data || []) as unknown as Record<string, unknown>[])
+    .map(mapPublicProductSummaryRow)
+    .filter((product) => isPublicCatalogProduct(product));
   return {
     generatedAt: new Date().toISOString(),
     configured: true,
     degraded: false,
     message: null,
-    products: rows.map(mapPublicProductSummaryRow),
+    products,
     sources: [],
-    offerTotal: rows.reduce((sum, row) => sum + Number(row.offer_count || 0), 0),
+    offerTotal: products.reduce((sum, product) => sum + product.offerCount, 0),
   };
 }
 
@@ -1871,6 +1872,46 @@ function publicProductOffersSnapshotKeyForRequest(
   }
 
   return null;
+}
+
+function isPublicProductKeyVisible(id: string | null | undefined): boolean {
+  const productKey = String(id || "").trim();
+  if (!productKey) return true;
+
+  const catalogProduct = canonicalCatalog.find((product) => product.id === productKey || product.slug === productKey);
+  if (catalogProduct) return isPublicCatalogProduct(catalogProduct);
+
+  return productKey !== API_CDK_PRODUCT_ID || apiCdkPublicVisible();
+}
+
+function isPublicOfferPageRowProductVisible(row: PublicOfferPageRow): boolean {
+  return isPublicCatalogProduct({
+    id: row.product_id || row.canonical_product_id ? String(row.product_id || row.canonical_product_id) : null,
+    platform: row.product_platform ? String(row.product_platform) : null,
+  });
+}
+
+function sanitizeExplorerDataForPublicCatalog(value: ExplorerData): ExplorerData {
+  const products = value.products.filter((product) => isPublicCatalogProduct(product));
+  if (products.length === value.products.length) return value;
+
+  return {
+    ...value,
+    products,
+    offerTotal: products.reduce((sum, product) => sum + product.offerCount, 0),
+  };
+}
+
+function sanitizePublicOffersResultForPublicCatalog(value: PublicOffersResult): PublicOffersResult {
+  const rows = value.rows.filter((row) => isPublicCatalogProduct(row.product));
+  if (rows.length === value.rows.length) return value;
+
+  return {
+    ...value,
+    rows,
+    total: rows.length,
+    limited: false,
+  };
 }
 
 function isAllowedOfferListSnapshotView({
@@ -2610,8 +2651,6 @@ export async function getPublicProductSummary(id: string) {
 }
 
 async function getPublicProductSummaryFromDatabase(id: string): Promise<ExplorerProductSummary | null> {
-  if (!apiCdkPublicVisible()) return null;
-
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
@@ -2629,7 +2668,8 @@ async function getPublicProductSummaryFromDatabase(id: string): Promise<Explorer
   const row = Array.isArray(data) ? data[0] as Record<string, unknown> | undefined : null;
   if (!row) return null;
 
-  return mapPublicProductSummaryRow(row);
+  const product = mapPublicProductSummaryRow(row);
+  return isPublicCatalogProduct(product) ? product : null;
 }
 
 export async function listPublicProductOffers(id: string, filters: ProductOfferListFilters = {}) {
@@ -2768,8 +2808,19 @@ async function getPublicProductOffersFromDatabase(
     query: string;
     excludeQuery: string;
   },
-) {
-  if (!apiCdkPublicVisible()) return null;
+): Promise<PublicProductOffersResult | null> {
+  if (!isPublicProductKeyVisible(id) || !isPublicProductKeyVisible(filters.filterProductId)) {
+    return {
+      offers: [],
+      total: 0,
+      filterFacets: [],
+      activeFilterTags: filters.filterTags,
+      limited: false,
+      generatedAt: new Date().toISOString(),
+      degraded: false,
+      message: null,
+    };
+  }
 
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
@@ -2823,7 +2874,7 @@ async function getPublicProductOffersFromDatabase(
 }
 
 async function getPublicProductOfferFilterFacetsFromDatabase(id: string, filterProductId = resolvePublicProductFilterId(id)): Promise<OfferFilterTagFacet[] | null> {
-  if (!apiCdkPublicVisible()) return null;
+  if (!isPublicProductKeyVisible(id) || !isPublicProductKeyVisible(filterProductId)) return [];
 
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
@@ -2872,6 +2923,17 @@ function sanitizePublicProductOffersResultForProduct(
   productId: string,
   result: PublicProductOffersResult,
 ): PublicProductOffersResult {
+  if (!isPublicProductKeyVisible(productId)) {
+    return {
+      ...result,
+      offers: [],
+      total: 0,
+      limited: false,
+      filterFacets: [],
+      activeFilterTags: [],
+    };
+  }
+
   const filterFacets = filterOfferFilterFacetsForProduct(productId, result.filterFacets);
   const activeFilterTags = parseOfferFilterTagsForProduct(productId, result.activeFilterTags);
 
@@ -2950,14 +3012,14 @@ export async function listPublicOffers(filters: OfferListFilters = {}) {
     cachedEntry.expiresAt > now &&
     isReusableGeneratedValue(cachedEntry.value)
   ) {
-    return cachedEntry.value;
+    return sanitizePublicOffersResultForPublicCatalog(cachedEntry.value);
   }
 
   let staleSnapshotValue = snapshotEligible ? cachedEntry?.value || null : null;
   if (snapshotKey && !normalizedFilters.skipSnapshot) {
     const snapshot = await readPublicApiSnapshot<PublicOffersResult>("offers", snapshotKey);
     if (snapshot && isPublicOffersSnapshot(snapshot.value)) {
-      const value = hydrateGeneratedAt(snapshot);
+      const value = sanitizePublicOffersResultForPublicCatalog(hydrateGeneratedAt(snapshot));
       if (!isPublicApiSnapshotFresh(snapshot)) {
         staleSnapshotValue = value;
       } else {
@@ -2976,13 +3038,16 @@ export async function listPublicOffers(filters: OfferListFilters = {}) {
   }
 
   const value = await loadPublicOffers(normalizedFilters);
-  const nextValue = snapshotEligible ? preferStalePublicOffers(staleSnapshotValue, value) : value;
+  const publicValue = sanitizePublicOffersResultForPublicCatalog(value);
+  const nextValue = snapshotEligible
+    ? sanitizePublicOffersResultForPublicCatalog(preferStalePublicOffers(staleSnapshotValue, publicValue))
+    : publicValue;
   if (snapshotKey && !normalizedFilters.skipSnapshot && !value.degraded) {
     await writePublicApiSnapshot({
       kind: "offers",
       key: snapshotKey,
-      payload: value,
-      generatedAt: value.generatedAt,
+      payload: publicValue,
+      generatedAt: publicValue.generatedAt,
     });
   }
 
@@ -3366,8 +3431,6 @@ async function loadPublicOffers(filters: OfferListFilters & { skipSnapshot?: boo
 }
 
 async function listPublicOffersFromDatabase(filters: OfferListFilters = {}) {
-  if (!apiCdkPublicVisible()) return null;
-
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
@@ -3392,8 +3455,11 @@ async function listPublicOffersFromDatabase(filters: OfferListFilters = {}) {
     return null;
   }
 
-  const rows = ((data || []) as unknown as PublicOfferPageRow[]);
-  const total = rows.length ? Number(rows[0].total_count || rows.length) : 0;
+  const allRows = ((data || []) as unknown as PublicOfferPageRow[]);
+  const rows = allRows.filter(isPublicOfferPageRowProductVisible);
+  const total = rows.length === allRows.length
+    ? rows.length ? Number(rows[0].total_count || rows.length) : 0
+    : rows.length;
   const offers = await attachSourceCollectorKinds(rows.map((row) => mapRawOffer(row)));
   const products = publicCatalogProducts(canonicalCatalog)
     .map(makeEmptyProductGroup)
