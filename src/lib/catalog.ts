@@ -640,6 +640,18 @@ function classifyOfferByTitle(
     return getCanonicalProduct("dreamina-account");
   }
 
+  if (isXTwitterEngagementService(value)) {
+    return getCanonicalProduct("other-product");
+  }
+
+  if (isXTwitterPremiumProduct(value)) {
+    return getCanonicalProduct("x-twitter-premium");
+  }
+
+  if (isXTwitterAccount(value)) {
+    return getCanonicalProduct("x-twitter-account");
+  }
+
   if (isTelegramPremiumProduct(value, contextValue)) {
     return getCanonicalProduct("telegram-premium");
   }
@@ -1404,11 +1416,11 @@ function isOtherTool(value: string): boolean {
 
 function classifyOtherTool(value: string): string {
   if (isDreaminaProduct(value)) return "dreamina-account";
-  if (isTelegramPremiumProduct(value)) return "telegram-premium";
-  if (isTelegramProduct(value)) return "telegram-account";
   if (isXTwitterEngagementService(value)) return "other-product";
   if (isXTwitterPremiumProduct(value)) return "x-twitter-premium";
   if (isXTwitterAccount(value)) return "x-twitter-account";
+  if (isTelegramPremiumProduct(value)) return "telegram-premium";
+  if (isTelegramProduct(value)) return "telegram-account";
   if (matches(value, ["cursor"])) return "cursor-account";
   if (isKiroProProduct(value)) return "kiro-pro-account";
   if (matches(value, ["kiro"])) return "kiro-account";
@@ -1578,7 +1590,7 @@ function isXTwitterAccount(value: string): boolean {
 }
 
 function hasXTwitterSignal(value: string): boolean {
-  if (matches(value, ["twitter", "推特", "x premium", "x 会员", "x账号", "x 账号", "x 推特", "x/twitter", "x-twitter"])) {
+  if (matches(value, ["twitter", "推特", "x premium", "x账号", "x 账号", "x 推特", "x/twitter", "x-twitter"])) {
     return true;
   }
 
