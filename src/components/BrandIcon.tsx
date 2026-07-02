@@ -30,6 +30,7 @@ const iconByProductId: Record<string, string> = {
   "x-twitter-account": "/brand-icons/x.png",
   "x-twitter-premium": "/brand-icons/x.png",
   "telegram-account": "/brand-icons/telegram.svg",
+  "telegram-premium": "/brand-icons/telegram.svg",
 };
 
 const semanticIconByProductId: Record<string, LucideIcon> = {
