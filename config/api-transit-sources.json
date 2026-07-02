@@ -179,6 +179,47 @@
     "summary": "公开 New API 价格接口可读取，已进入 PriceAI API 中转站自动价格采集池；稳定性和真实扣费仍需测试 Key 或人工样本补充。"
   },
   {
+    "id": "ai-rtoc-cc",
+    "name": "RTOC AI",
+    "websiteUrl": "https://ai.rtoc.cc/",
+    "apiBaseUrl": "https://api.rtoc.cc/v1",
+    "pricingUrl": "https://ai.rtoc.cc/pricing",
+    "pricingEndpointUrl": "https://api.rtoc.cc/api/pricing",
+    "monitorUrl": "https://api.rtoc.cc/api/status",
+    "collectorKind": "new_api_pricing",
+    "stationSystem": "new_api",
+    "channelTypes": ["undisclosed"],
+    "accountPools": ["undisclosed"],
+    "riskLabels": ["insufficient_samples", "pending_feedback"],
+    "summary": "公开前端为 New API，前端包和 /api/status 均指向服务端 https://api.rtoc.cc；公开 /api/pricing 可读取模型与分组倍率。价格可纳入定时采集，稳定性和真实扣费仍需测试 Key 或人工样本补充。",
+    "strengths": [
+      "公开 /api/pricing 返回 New API 价格结构，包含 46 个模型和 GPT、GPT Pro、Kiro、Claude、生图等分组倍率。",
+      "/api/status 公开返回 server_address 与 frontend_address，可确认前后端域名映射。"
+    ],
+    "cautions": [
+      "/api/ratio_config 未启用，分组倍率以 /api/pricing 返回的 group_ratio 为准。",
+      "/v1/models 需要 API Key，当前只能采集公开价格，不能替代 PriceAI API Key 实测可用性。"
+    ],
+    "verificationEvents": [
+      {
+        "id": "ai-rtoc-public-newapi-2026-07-02",
+        "source": "priceai",
+        "status": "success",
+        "title": "公开前端确认为 New API",
+        "description": "2026-07-02 检查 https://ai.rtoc.cc 前端资源，服务端地址为 https://api.rtoc.cc，公开状态接口返回 server_address 与 frontend_address。",
+        "happenedAt": "2026-07-02T08:40:00.000Z"
+      },
+      {
+        "id": "ai-rtoc-public-pricing-2026-07-02",
+        "source": "priceai",
+        "status": "success",
+        "title": "公开价格接口可读取",
+        "description": "2026-07-02 检查 https://api.rtoc.cc/api/pricing 返回 46 个模型和 7 个分组倍率；/api/ratio_config 未启用，/v1/models 需要 API Key。",
+        "happenedAt": "2026-07-02T08:40:00.000Z"
+      }
+    ]
+  },
+  {
     "id": "kksj-org",
     "name": "KK API",
     "websiteUrl": "https://api.kksj.org/",
