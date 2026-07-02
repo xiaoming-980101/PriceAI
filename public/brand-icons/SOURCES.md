@@ -39,6 +39,7 @@ These assets are cached locally for stable rendering and performance. They are s
 | `chinaunicom.png` | `https://www.chinaunicom.cn/favicon.ico` | China Unicom official public favicon. |
 | `huaweicloud.png` | `https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@latest/light/huaweicloud-color.png` | Public cached Huawei Cloud icon used because the official Huawei Cloud site returned an access challenge during local fetch. |
 | `volcengine.png` | `https://portal.volccdn.com/obj/volcfe/misc/favicon.png` | Volcengine official public favicon. |
+| `kling.png` | `https://kling.ai/favicon.ico` | Converted from the official Kling AI public favicon. The homepage also exposes `apple-touch-icon` assets for the same product identity, but the favicon was more reliable to fetch locally. |
 | `tencentcloud.png` | `https://cloudcache.tencent-cloud.com/qcloud/favicon.ico` | Converted from Tencent Cloud official public favicon to PNG. |
 | `ctyun.png` | `https://www.ctyun.cn/favicon.ico` | Converted from CTYun official public favicon to PNG. |
 | `new-api.png` | `https://github.com/QuantumNous/new-api/blob/main/web/default/public/logo.png` | Cached from the QuantumNous/new-api public repository for New API based transit stations. |

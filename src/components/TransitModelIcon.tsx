@@ -9,14 +9,23 @@ const iconByFamily: Record<string, string> = {
   deepseek: "/brand-icons/deepseek.png",
 };
 
-const modelBrandIconByPrefix: { prefix: string; icon: "openai" | "gemini" | "volcengine" }[] = [
+type ModelBrandIcon = "openai" | "gemini" | "volcengine" | "kling";
+
+const modelBrandIconByPrefix: { prefix: string; icon: ModelBrandIcon }[] = [
   { prefix: "gpt image", icon: "openai" },
   { prefix: "sora", icon: "openai" },
   { prefix: "nano banana", icon: "gemini" },
   { prefix: "veo", icon: "gemini" },
   { prefix: "gemini omni", icon: "gemini" },
   { prefix: "seedance", icon: "volcengine" },
+  { prefix: "kling", icon: "kling" },
 ];
+
+const modelBrandImageSrc: Partial<Record<ModelBrandIcon, string>> = {
+  gemini: "/brand-icons/gemini.svg",
+  kling: "/brand-icons/kling.png",
+  volcengine: "/brand-icons/volcengine.png",
+};
 
 export function TransitModelIcon({
   family,
@@ -37,23 +46,12 @@ export function TransitModelIcon({
     return <BrandIcon platform="ChatGPT" className={className} />;
   }
 
-  if (modelBrand === "gemini") {
-    return (
-      <Image
-        src="/brand-icons/gemini.svg"
-        alt=""
-        aria-hidden="true"
-        width={32}
-        height={32}
-        className={`${className} shrink-0 object-contain`}
-      />
-    );
-  }
+  const modelBrandSrc = modelBrand ? modelBrandImageSrc[modelBrand] : undefined;
 
-  if (modelBrand === "volcengine") {
+  if (modelBrandSrc) {
     return (
       <Image
-        src="/brand-icons/volcengine.png"
+        src={modelBrandSrc}
         alt=""
         aria-hidden="true"
         width={32}
@@ -103,13 +101,14 @@ function GeneratedMediaIcon({
       <svg
         viewBox="0 0 24 24"
         aria-hidden="true"
-        className={`${className} shrink-0 text-[#5a6061]`}
+        className={`${className} shrink-0`}
         fill="none"
       >
-        <rect x="3.5" y="5.25" width="17" height="13.5" rx="2.75" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M9.75 9.25v5.5l4.8-2.75-4.8-2.75Z" fill="#45bf78" />
-        <path d="M7 5.5v13M17 5.5v13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.45" />
-        <path d="M17.6 4.1l.35 1.05 1.05.35-1.05.35-.35 1.05-.35-1.05-1.05-.35 1.05-.35.35-1.05Z" fill="#45bf78" />
+        <rect x="3.25" y="5" width="17.5" height="14" rx="3.25" fill="#eef6f7" />
+        <rect x="3.25" y="5" width="17.5" height="14" rx="3.25" stroke="#2f7580" strokeWidth="1.7" />
+        <path d="M9.85 9.1v5.8l5.15-2.9-5.15-2.9Z" fill="#2bb7a8" />
+        <path d="M7.2 5.4v13.2M16.8 5.4v13.2" stroke="#2f7580" strokeLinecap="round" strokeWidth="1.25" opacity="0.55" />
+        <path d="M17.75 3.8l.38 1.1 1.12.38-1.12.38-.38 1.12-.38-1.12-1.12-.38 1.12-.38.38-1.1Z" fill="#2bb7a8" />
       </svg>
     );
   }
@@ -118,13 +117,20 @@ function GeneratedMediaIcon({
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className={`${className} shrink-0 text-[#5a6061]`}
+      className={`${className} shrink-0`}
       fill="none"
     >
-      <rect x="4" y="5" width="16" height="14" rx="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M7.25 15.75 10.3 12.7a1 1 0 0 1 1.42 0l1.23 1.23 1.87-1.87a1 1 0 0 1 1.41 0l2.52 2.52" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="9" cy="9.5" r="1.2" fill="#45bf78" />
-      <path d="M17.6 3.9l.36 1.08 1.08.36-1.08.36-.36 1.08-.36-1.08-1.08-.36 1.08-.36.36-1.08Z" fill="#45bf78" />
+      <rect x="4" y="5" width="16" height="14" rx="3.25" fill="#eaf7ef" />
+      <rect x="4" y="5" width="16" height="14" rx="3.25" stroke="#2f7a4b" strokeWidth="1.7" />
+      <path
+        d="m7.35 15.9 3.03-3.03a1 1 0 0 1 1.42 0l1.2 1.2 1.88-1.88a1 1 0 0 1 1.42 0l2.35 2.35"
+        stroke="#2f7a4b"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.45"
+      />
+      <circle cx="9" cy="9.45" r="1.25" fill="#45bf78" />
+      <path d="M17.75 3.8l.38 1.1 1.12.38-1.12.38-.38 1.12-.38-1.12-1.12-.38 1.12-.38.38-1.1Z" fill="#45bf78" />
     </svg>
   );
 }
