@@ -3348,6 +3348,7 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
                         title="当前可见报价"
                         emptyText="没有匹配的可见报价。"
                         offers={offerMaintenance.visible.offers}
+                        productByKey={productByKey}
                         totalCount={offerMaintenance.visible.total}
                         loading={offerMaintenance.visible.loading}
                         loadingMore={offerMaintenance.visible.loadingMore}
@@ -3363,6 +3364,7 @@ export function AdminConsole({ data }: { data: AdminSummary }) {
                         title="手动下架报价"
                         emptyText="没有匹配的手动下架报价。"
                         offers={offerMaintenance.hidden.offers}
+                        productByKey={productByKey}
                         totalCount={offerMaintenance.hidden.total}
                         loading={offerMaintenance.hidden.loading}
                         loadingMore={offerMaintenance.hidden.loadingMore}
@@ -7737,6 +7739,7 @@ function OfferEmergencyList({
   title,
   emptyText,
   offers,
+  productByKey,
   totalCount,
   loading,
   loadingMore,
@@ -7751,6 +7754,7 @@ function OfferEmergencyList({
   title: string;
   emptyText: string;
   offers: RawOffer[];
+  productByKey: Map<string, AdminProduct>;
   totalCount: number;
   loading: boolean;
   loadingMore: boolean;
@@ -7794,6 +7798,13 @@ function OfferEmergencyList({
           <div className="max-h-[520px] divide-y divide-[#adb3b4]/15 overflow-auto" onScroll={handleScroll}>
             {offers.map((offer) => {
               const actionLoading = loadingAction === `${hiddenAction ? "hide" : "restore"}-offer-${offer.id}`;
+              const storedProduct = resolveAdminOfferProduct(productByKey, offer.storedCanonicalProductId);
+              const ruleProduct = resolveAdminOfferProduct(productByKey, offer.canonicalProductId);
+              const storedProductLabel = adminOfferProductLabel(storedProduct, offer.storedCanonicalProductId, offer.storedCategorySlug);
+              const ruleProductLabel = adminOfferProductLabel(ruleProduct, offer.canonicalProductId, offer.categorySlug);
+              const categoryMismatch =
+                Boolean(offer.storedCanonicalProductId || offer.canonicalProductId) &&
+                (offer.storedCanonicalProductId || "") !== (offer.canonicalProductId || "");
               return (
                 <div key={offer.id} className="grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_92px] sm:items-center">
                   <div className="min-w-0">
@@ -7803,6 +7814,19 @@ function OfferEmergencyList({
                       <span>{formatCurrency(offer.price, offer.currency)}</span>
                       <span>{offer.status === "out_of_stock" ? "缺货" : "有货"}</span>
                       {offer.verifiedAt && <span>{formatRelativeTime(offer.verifiedAt)}</span>}
+                    </div>
+                    <div className="mt-2 space-y-1 rounded-lg bg-[#f7f9f9] px-2.5 py-2 text-xs leading-5 text-[#5a6061]">
+                      <div className="flex flex-wrap gap-x-2 gap-y-1">
+                        <span className="font-semibold text-[#2d3435]">数据库归属</span>
+                        <span>{storedProductLabel}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-2 gap-y-1">
+                        <span className="font-semibold text-[#2d3435]">规则推断</span>
+                        <span>{ruleProductLabel}</span>
+                      </div>
+                      {categoryMismatch ? (
+                        <p className="font-medium text-[#9b3328]">归属不一致：可能需要重建分类或检查规则。</p>
+                      ) : null}
                     </div>
                     <a
                       href={offer.url}
@@ -7856,6 +7880,28 @@ function OfferEmergencyList({
       )}
     </div>
   );
+}
+
+function resolveAdminOfferProduct(
+  productByKey: Map<string, AdminProduct>,
+  productId: string | null | undefined,
+): AdminProduct | null {
+  return productId ? productByKey.get(productId) || null : null;
+}
+
+function adminOfferProductLabel(
+  product: AdminProduct | null,
+  productId: string | null | undefined,
+  categorySlug: string | null | undefined,
+): string {
+  if (!product) {
+    if (productId && categorySlug) return `${productId} · ${categorySlug}`;
+    return productId || categorySlug || "未记录";
+  }
+
+  const detail = [product.platform, product.productType, product.spec].filter(Boolean).join(" / ");
+  const suffix = product.id ? ` · ${product.id}` : "";
+  return detail ? `${product.displayName} · ${detail}${suffix}` : `${product.displayName}${suffix}`;
 }
 
 function TextInput({

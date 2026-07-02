@@ -1381,6 +1381,7 @@ export async function listAdminOfferMaintenancePage(options: {
         `url.ilike.${search}`,
         `failure_reason.ilike.${search}`,
         `source_id.ilike.${search}`,
+        `canonical_product_id.ilike.${search}`,
         `category_slug.ilike.${search}`,
       ].join(","),
     );
@@ -2019,6 +2020,9 @@ function filterAdminOfferMaintenanceRows(offers: RawOffer[], query: string): Raw
       offer.url,
       offer.failureReason || "",
       offer.sourceId || "",
+      offer.storedCanonicalProductId || "",
+      offer.canonicalProductId || "",
+      offer.storedCategorySlug || "",
       offer.categorySlug || "",
       offer.tags.join(" "),
     ]
@@ -4316,9 +4320,11 @@ export function mapRawOffer(row: Record<string, unknown>): RawOffer {
   const sourceTitle = String(row.source_title || "");
   const tags = Array.isArray(row.tags) ? row.tags.map(String) : [];
   const price = row.price === null || row.price === undefined ? null : Number(row.price);
+  const storedCanonicalProductId = row.canonical_product_id ? String(row.canonical_product_id) : null;
+  const storedCategorySlug = row.category_slug ? String(row.category_slug) : null;
   const classified = classifyOffer(sourceTitle, {
     tags,
-    categorySlug: row.category_slug ? String(row.category_slug) : null,
+    categorySlug: storedCategorySlug,
     price,
   });
   const filterTags = deriveOfferFilterTags({ sourceTitle, tags });
@@ -4343,6 +4349,8 @@ export function mapRawOffer(row: Record<string, unknown>): RawOffer {
     hidden: Boolean(row.hidden),
     canonicalProductId: classified.id,
     categorySlug: classified.platform,
+    storedCanonicalProductId,
+    storedCategorySlug,
     capturedAt: row.captured_at ? String(row.captured_at) : null,
     sourceUpdatedAt: row.source_updated_at ? String(row.source_updated_at) : null,
     lastSeenAt: row.last_seen_at ? String(row.last_seen_at) : null,

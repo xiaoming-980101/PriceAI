@@ -77,6 +77,8 @@ export type RawOffer = {
   hidden?: boolean;
   canonicalProductId?: string | null;
   categorySlug?: string | null;
+  storedCanonicalProductId?: string | null;
+  storedCategorySlug?: string | null;
   capturedAt?: string | null;
   sourceUpdatedAt?: string | null;
   lastSeenAt?: string | null;
