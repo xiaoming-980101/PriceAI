@@ -52,6 +52,49 @@ const targetPlans = [
   },
 ];
 
+const standardModelMatchers = [
+  {
+    family: "claude",
+    standardModel: "Claude Sonnet 5",
+    candidates: ["claude-sonnet-5", "claude-sonnet-5-0", "claude-5-sonnet"],
+  },
+  {
+    family: "claude",
+    standardModel: "Claude Sonnet 4.6",
+    candidates: ["claude-sonnet-4.6", "claude-sonnet-4-6", "claude-4.6-sonnet"],
+  },
+  {
+    family: "claude",
+    standardModel: "Claude Opus 4.6",
+    candidates: ["claude-opus-4.6", "claude-opus-4-6", "claude-4.6-opus"],
+  },
+  {
+    family: "claude",
+    standardModel: "Claude Opus 4.7",
+    candidates: ["claude-opus-4.7", "claude-opus-4-7", "claude-4.7-opus"],
+  },
+  {
+    family: "claude",
+    standardModel: "Claude Opus 4.8",
+    candidates: ["claude-opus-4.8", "claude-opus-4-8", "claude-4.8-opus"],
+  },
+  {
+    family: "gpt",
+    standardModel: "GPT 5.5",
+    candidates: ["gpt-5.5", "gpt-5-5"],
+  },
+  {
+    family: "gpt",
+    standardModel: "GPT 5.4",
+    candidates: ["gpt-5.4", "gpt-5-4"],
+  },
+  {
+    family: "image",
+    standardModel: "GPT Image 2",
+    candidates: ["gpt-image-2", "gpt-image2"],
+  },
+];
+
 if (isCli()) {
   const options = normalizeOptions(parseArgs(process.argv.slice(2)));
 
@@ -752,9 +795,11 @@ function buildOfferRows(source, groups, probeResults, collectedAt) {
 
   for (const result of probeResults) {
     if (!result.groupId || typeof result.multiplier !== "number" || !Number.isFinite(result.multiplier)) continue;
-    const row = buildOfferRow(source, result, collectedAt);
-    rows.push(row);
-    seen.add(row.id);
+    for (const model of modelsForProbeResult(result)) {
+      const row = buildOfferRow(source, { ...result, ...model }, collectedAt);
+      rows.push(row);
+      seen.add(row.id);
+    }
   }
 
   for (const group of groupsById.values()) {
@@ -766,6 +811,41 @@ function buildOfferRows(source, groups, probeResults, collectedAt) {
   }
 
   return rows;
+}
+
+function modelsForProbeResult(result) {
+  const matchedModels = standardModelsFromAvailableModels(result.sampleModels || []);
+  if (!matchedModels.length) {
+    return [{ family: result.family, standardModel: result.standardModel, rawModelName: result.rawModelName }];
+  }
+
+  const byModel = new Map();
+  for (const model of matchedModels) {
+    const key = `${model.standardModel}|${model.rawModelName}`;
+    if (!byModel.has(key)) byModel.set(key, model);
+  }
+  if (!byModel.has(`${result.standardModel}|${result.rawModelName}`)) {
+    byModel.set(`${result.standardModel}|${result.rawModelName}`, {
+      family: result.family,
+      standardModel: result.standardModel,
+      rawModelName: result.rawModelName,
+    });
+  }
+  return Array.from(byModel.values());
+}
+
+function standardModelsFromAvailableModels(models) {
+  const output = [];
+  for (const rawModelName of models || []) {
+    const matcher = standardModelMatchers.find((item) => matchAvailableModel([rawModelName], item.candidates));
+    if (!matcher) continue;
+    output.push({
+      family: matcher.family,
+      standardModel: matcher.standardModel,
+      rawModelName: String(rawModelName),
+    });
+  }
+  return output;
 }
 
 function buildUnprobedOfferRow(source, group, collectedAt) {
@@ -973,8 +1053,8 @@ async function postRows(rows, options) {
 
   const existingStations = await readExistingStations(supabase, rows.stations.map((station) => station.id));
   const stations = rows.stations.map((station) => mergeStationForRefresh(station, existingStations.get(station.id), options));
-  const existingOffers = await readExistingOffers(supabase, rows.offers.map((offer) => offer.id));
-  const offers = rows.offers.map((offer) => mergeOfferForRefresh(offer, existingOffers.get(offer.id), options));
+  const existingOffers = await readExistingOffers(supabase, rows.offers);
+  const offers = rows.offers.map((offer) => mergeOfferForRefresh(offer, existingOffers.get(offerKey(offer)), options));
 
   await upsertRows(supabase, "api_transit_stations", stations, { onConflict: "id" });
   if (rows.credentialSubmissions?.length) {
@@ -983,7 +1063,7 @@ async function postRows(rows, options) {
   if (rows.credentials?.length) {
     await upsertRows(supabase, "api_transit_credentials", rows.credentials, { onConflict: "id" });
   }
-  await upsertRows(supabase, "api_transit_offers", offers, { onConflict: "id" });
+  await upsertRows(supabase, "api_transit_offers", offers, { onConflict: "station_id,standard_model,group_name" });
   await upsertRows(supabase, "api_transit_detection_runs", rows.runs, { onConflict: "id" });
 
   return {
@@ -993,37 +1073,37 @@ async function postRows(rows, options) {
   };
 }
 
-async function readExistingOffers(supabase, offerIds) {
-  const ids = uniqueText(offerIds).filter(Boolean);
+async function readExistingOffers(supabase, offers) {
+  const stationIds = uniqueText(offers.map((offer) => offer.station_id)).filter(Boolean);
   const byId = new Map();
-  for (const chunk of chunks(ids, 300)) {
+  for (const chunk of chunks(stationIds, 100)) {
     if (!chunk.length) continue;
     const { data, error } = await supabase
       .from("api_transit_offers")
-      .select("id,status,created_at,availability_first_checked_at")
-      .in("id", chunk);
+      .select("id,station_id,standard_model,group_name,status,created_at,availability_first_checked_at")
+      .in("station_id", chunk);
     if (error) {
       if (isMissingColumnError(error, "availability_first_checked_at")) {
-        return readExistingOffersWithoutFirstCheckedAt(supabase, offerIds);
+        return readExistingOffersWithoutFirstCheckedAt(supabase, offers);
       }
       throw error;
     }
-    for (const row of data || []) byId.set(row.id, row);
+    for (const row of data || []) byId.set(offerKey(row), row);
   }
   return byId;
 }
 
-async function readExistingOffersWithoutFirstCheckedAt(supabase, offerIds) {
-  const ids = uniqueText(offerIds).filter(Boolean);
+async function readExistingOffersWithoutFirstCheckedAt(supabase, offers) {
+  const stationIds = uniqueText(offers.map((offer) => offer.station_id)).filter(Boolean);
   const byId = new Map();
-  for (const chunk of chunks(ids, 300)) {
+  for (const chunk of chunks(stationIds, 100)) {
     if (!chunk.length) continue;
     const { data, error } = await supabase
       .from("api_transit_offers")
-      .select("id,status,created_at")
-      .in("id", chunk);
+      .select("id,station_id,standard_model,group_name,status,created_at")
+      .in("station_id", chunk);
     if (error) throw error;
-    for (const row of data || []) byId.set(row.id, row);
+    for (const row of data || []) byId.set(offerKey(row), row);
   }
   return byId;
 }
@@ -1031,10 +1111,15 @@ async function readExistingOffersWithoutFirstCheckedAt(supabase, offerIds) {
 function mergeOfferForRefresh(offer, existing, options) {
   return {
     ...offer,
+    id: existing?.id || offer.id,
     status: options.publish ? offer.status : existing?.status || offer.status,
     availability_first_checked_at: existing?.availability_first_checked_at || offer.availability_first_checked_at,
     created_at: existing?.created_at || offer.created_at,
   };
+}
+
+function offerKey(offer) {
+  return [offer.station_id, offer.standard_model, offer.group_name].map((part) => String(part || "")).join("|");
 }
 
 async function readExistingStations(supabase, stationIds) {
@@ -1182,6 +1267,12 @@ function removeFieldsFromRows(rows, fieldNames) {
     for (const fieldName of fieldNames) delete next[fieldName];
     return next;
   });
+}
+
+function isMissingColumnError(error, columnName) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || error?.details || "");
+  return (code === "42703" || code === "PGRST204") && message.includes(columnName);
 }
 
 function getSupabaseClient() {
@@ -1536,6 +1627,8 @@ function errorMessage(error) {
 }
 
 export const __test = {
+  modelsForProbeResult,
   representativeModelForGroup,
   selectGroupForPlan,
+  standardModelsFromAvailableModels,
 };

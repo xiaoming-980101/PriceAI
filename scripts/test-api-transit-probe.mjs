@@ -69,6 +69,27 @@ assert.deepEqual(
     rawModelName: "claude-sonnet-4-6",
   },
 );
+assert.deepEqual(
+  sub2ApiTest
+    .standardModelsFromAvailableModels(["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "claude-opus-4-8"])
+    .map((model) => [model.family, model.standardModel, model.rawModelName]),
+  [
+    ["gpt", "GPT 5.5", "gpt-5.5"],
+    ["gpt", "GPT 5.4", "gpt-5.4"],
+    ["claude", "Claude Opus 4.8", "claude-opus-4-8"],
+  ],
+);
+assert.deepEqual(
+  sub2ApiTest
+    .modelsForProbeResult({
+      family: "claude",
+      standardModel: "Claude Opus 4.8",
+      rawModelName: "claude-opus-4-8",
+      sampleModels: ["claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-5"],
+    })
+    .map((model) => model.standardModel),
+  ["Claude Opus 4.6", "Claude Opus 4.7", "Claude Opus 4.8", "Claude Sonnet 5"],
+);
 
 const geminiTargets = __test.selectProbeTargets({
   profileFamily: "gemini",
