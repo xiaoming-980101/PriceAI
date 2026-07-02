@@ -14,18 +14,21 @@ const iconByPlatform: Record<string, string> = {
 const iconByProductId: Record<string, string> = {
   "gmail-account": "/brand-icons/gmail.png",
   "outlook-account": "/brand-icons/outlook.png",
+  "icloud-email": "/brand-icons/apple.png",
   "google-phone-verification": "/brand-icons/google.png",
   "paypal-phone-verification": "/brand-icons/paypal.png",
   "openai-phone-verification": "/brand-icons/chatgpt.svg",
   "virtual-card": "/brand-icons/visa.png",
   "cursor-account": "/brand-icons/cursor.png",
   "kiro-account": "/brand-icons/kiro.png",
+  "kiro-pro-account": "/brand-icons/kiro.png",
   "windsurf-account": "/brand-icons/windsurf.png",
   "perplexity-account": "/brand-icons/perplexity.png",
   "suno-account": "/brand-icons/suno.png",
   "dreamina-account": "/brand-icons/dreamina.png",
   "apple-id-account": "/brand-icons/apple.png",
   "x-twitter-account": "/brand-icons/x.png",
+  "x-twitter-premium": "/brand-icons/x.png",
   "telegram-account": "/brand-icons/telegram.svg",
 };
 

@@ -148,8 +148,12 @@ const productSeoProfiles: Record<string, ProductSeoProfile> = {
     metadataDescription: "查看 Cursor 账号、会员账号、成品号的有货最低价、渠道报价、库存和更新时间。",
   }),
   "kiro-account": profile({
-    metadataTitle: "Kiro 账号价格对比：会员账号、成品号和渠道报价",
-    metadataDescription: "查看 Kiro 账号、会员账号、成品号的有货最低价、渠道报价、库存和更新时间。",
+    metadataTitle: "Kiro 普号价格对比：Free 账号、固定 50 额度和渠道报价",
+    metadataDescription: "查看 Kiro 普号、Free 账号、固定 50 额度、kirors 导入格式账号的有货最低价、渠道报价和库存。",
+  }),
+  "kiro-pro-account": profile({
+    metadataTitle: "Kiro Pro 价格对比：额度号、Pro 账号和渠道报价",
+    metadataDescription: "查看 Kiro Pro、Pro+、Pro Max、Power、额度号、号池和可超额账号的有货最低价、渠道报价和库存。",
   }),
   "windsurf-account": profile({
     metadataTitle: "Windsurf 账号价格对比：AI 编程工具账号和渠道报价",
@@ -168,8 +172,16 @@ const productSeoProfiles: Record<string, ProductSeoProfile> = {
     metadataDescription: "查看 Dreamina / 即梦、Seedance 2.0 视频生成相关成品账号、Basic 权益、积分和渠道报价。",
   }),
   "x-twitter-account": profile({
-    metadataTitle: "X / 推特账号价格对比：Twitter 账号、Premium 和渠道报价",
-    metadataDescription: "查看 X / Twitter / 推特账号、Premium 相关账号的有货最低价、渠道报价、库存和更新时间。",
+    metadataTitle: "X / 推特账号价格对比：Twitter 老号、2FA 和渠道报价",
+    metadataDescription: "查看 X / Twitter / 推特普通账号、老号、三绑、2FA、token 登录账号的有货最低价、渠道报价和库存。",
+  }),
+  "x-twitter-premium": profile({
+    metadataTitle: "X Premium / 推特会员价格对比：蓝标、月卡、年卡和渠道报价",
+    metadataDescription: "查看 X Premium、Twitter Premium、推特蓝标、蓝 V、会员月卡、年卡、CDK、直充和代开报价。",
+  }),
+  "icloud-email": profile({
+    metadataTitle: "iCloud 邮箱价格对比：隐私邮箱、母号和渠道报价",
+    metadataDescription: "查看 iCloud 邮箱、iCloud 隐私邮箱、母号、子号和取码邮箱的有货最低价、渠道报价和库存。",
   }),
 };
 

@@ -310,7 +310,17 @@ export const canonicalCatalog: CanonicalProduct[] = [
     productType: "邮箱/账号",
     spec: "其他邮箱",
     summary: "域名邮箱、自建邮箱、无法进一步确认类型的纯邮箱商品。",
-    aliases: ["邮箱账号", "域名邮箱", "企业邮箱", "icloud 邮箱", "icloud 隐私邮箱", "其他邮箱"],
+    aliases: ["邮箱账号", "域名邮箱", "企业邮箱", "其他邮箱"],
+  },
+  {
+    id: "icloud-email",
+    slug: "icloud-email",
+    displayName: "iCloud 邮箱",
+    platform: "邮箱",
+    productType: "邮箱/账号",
+    spec: "iCloud",
+    summary: "纯 iCloud 邮箱、iCloud 隐私邮箱、iCloud 邮箱母号或取码邮箱商品。",
+    aliases: ["icloud", "icloud 邮箱", "icloud邮箱", "icoud", "icoud 邮箱", "icoud邮箱", "icloud 隐私邮箱", "icloud 母号", "icloud 子号"],
   },
   {
     id: "virtual-card",
@@ -385,12 +395,22 @@ export const canonicalCatalog: CanonicalProduct[] = [
   {
     id: "kiro-account",
     slug: "kiro-account",
-    displayName: "Kiro 账号",
+    displayName: "Kiro 普号 / Free",
     platform: "其他",
     productType: "工具账号",
-    spec: "Kiro",
-    summary: "Kiro Pro、Kiro 积分、Kiro 成品号或相关权益。",
-    aliases: ["kiro", "kiro pro", "kiro 积分", "kiro 成品号"],
+    spec: "Free / 普号",
+    summary: "Kiro 普号、Free 账号、固定 50 额度或 kirors 导入格式的基础账号。",
+    aliases: ["kiro", "kiro 普号", "kiro free", "固定50额度", "kirors", "kiro rs"],
+  },
+  {
+    id: "kiro-pro-account",
+    slug: "kiro-pro-account",
+    displayName: "Kiro Pro / 额度号",
+    platform: "其他",
+    productType: "工具账号",
+    spec: "Pro / 额度",
+    summary: "Kiro Pro、Pro+、Pro Max、Power、额度号、号池或可超额相关权益。",
+    aliases: ["kiro pro", "kiro pro+", "kiro promax", "kiro power", "kiro 积分", "kiro 额度", "kiro 号池"],
   },
   {
     id: "windsurf-account",
@@ -469,8 +489,18 @@ export const canonicalCatalog: CanonicalProduct[] = [
     platform: "其他",
     productType: "工具账号",
     spec: "X / Twitter",
-    summary: "X、Twitter、推特账号、X Premium 或相关会员权益。",
-    aliases: ["x premium", "twitter premium", "twitter", "推特", "x 推特", "x/twitter", "x-twitter"],
+    summary: "X、Twitter、推特普通账号、老号、三绑、2FA 或 token 登录账号。",
+    aliases: ["twitter", "推特", "推特账号", "x 账号", "x账号", "推特老号", "x/twitter", "x-twitter"],
+  },
+  {
+    id: "x-twitter-premium",
+    slug: "x-twitter-premium",
+    displayName: "X Premium / 推特会员",
+    platform: "其他",
+    productType: "订阅/会员",
+    spec: "Premium / Premium+",
+    summary: "X Premium、Twitter Premium、推特蓝标、蓝 V、会员月卡、年卡、CDK、直充或代开。",
+    aliases: ["x premium", "twitter premium", "推特 premium", "推特会员", "推特蓝标", "推特蓝v", "蓝 v", "蓝标", "premium+"],
   },
   {
     id: "telegram-account",
@@ -1236,9 +1266,11 @@ function hasAccountBundleSignal(value: string): boolean {
 function hasEmailSignal(value: string): boolean {
   return matches(value, [
     "gmail",
-    "icloud",
     "icloud邮箱",
     "icloud 邮箱",
+    "icoud",
+    "icoud邮箱",
+    "icoud 邮箱",
     "mail邮箱",
     "邮箱",
     "谷歌邮箱",
@@ -1302,7 +1334,9 @@ function classifyVerificationService(value: string): string {
 function isOtherTool(value: string): boolean {
   if (isDreaminaProduct(value)) return true;
   if (isTelegramProduct(value)) return true;
+  if (isXTwitterEngagementService(value)) return true;
   if (isXTwitterAccount(value)) return true;
+  if (isAppleIdAccount(value)) return true;
 
   return matches(value, [
     "suno",
@@ -1346,8 +1380,11 @@ function isOtherTool(value: string): boolean {
 function classifyOtherTool(value: string): string {
   if (isDreaminaProduct(value)) return "dreamina-account";
   if (isTelegramProduct(value)) return "telegram-account";
+  if (isXTwitterEngagementService(value)) return "other-product";
+  if (isXTwitterPremiumProduct(value)) return "x-twitter-premium";
   if (isXTwitterAccount(value)) return "x-twitter-account";
   if (matches(value, ["cursor"])) return "cursor-account";
+  if (isKiroProProduct(value)) return "kiro-pro-account";
   if (matches(value, ["kiro"])) return "kiro-account";
   if (matches(value, ["windsurf", "wind surf"])) return "windsurf-account";
   if (matches(value, ["perplexity"])) return "perplexity-account";
@@ -1385,12 +1422,57 @@ function isTelegramContactOnly(value: string): boolean {
 }
 
 function isXTwitterAccount(value: string): boolean {
-  if (matches(value, ["twitter", "推特"])) return true;
+  if (!hasXTwitterSignal(value)) return false;
+  if (matches(value, ["twitter", "推特", "x 推特", "x/twitter", "x-twitter"])) return true;
   if (isClaudeProduct(value) || isGeminiProduct(value) || isGrokProduct(value) || isChatGptProduct(value)) return false;
-  if (matches(value, ["x premium", "x 会员", "x账号", "x 账号", "x 推特"])) return true;
-  if (/\bx\s*(premium|account|账号|会员|推特)\b/.test(value)) return true;
 
-  return false;
+  return true;
+}
+
+function hasXTwitterSignal(value: string): boolean {
+  if (matches(value, ["twitter", "推特", "x premium", "x 会员", "x账号", "x 账号", "x 推特", "x/twitter", "x-twitter"])) {
+    return true;
+  }
+
+  return /\bx\s*(premium|account|账号|会员|推特)\b/.test(value);
+}
+
+function isXTwitterPremiumProduct(value: string): boolean {
+  if (!hasXTwitterSignal(value)) return false;
+
+  return matches(value, [
+    "x premium",
+    "twitter premium",
+    "推特 premium",
+    "premium+",
+    "premium plus",
+    "推特会员",
+    "x 会员",
+    "蓝标",
+    "蓝v",
+    "蓝 v",
+    "会员直充",
+    "会员代开",
+    "会员卡密",
+    "月卡",
+    "年卡",
+    "年度会员",
+    "自助卡密",
+    "激活码",
+    "cdk",
+    "ios充值",
+    "ios 充值",
+  ]);
+}
+
+function isXTwitterEngagementService(value: string): boolean {
+  if (!hasXTwitterSignal(value)) return false;
+  if (isXTwitterPremiumProduct(value)) return false;
+  if (matches(value, ["账号", "账户", "老号", "新号", "三绑", "双绑", "2fa", "token", "登录", "登陆", "邮箱绑定", "手机验证"])) {
+    return false;
+  }
+
+  return matches(value, ["涨粉", "粉丝", "关注", "转发", "点赞", "评论", "浏览", "互动"]);
 }
 
 function isXTwitterAccountWithLoginBundle(value: string): boolean {
@@ -1402,6 +1484,12 @@ function isXTwitterAccountWithLoginBundle(value: string): boolean {
 function isAppleIdAccount(value: string): boolean {
   if (matches(value, ["apple id", "appleid", "苹果 id", "苹果id", "苹果账号", "apple 账号"])) return true;
   if (matches(value, ["美区id", "美区 id", "土区id", "土区 id", "日区id", "日区 id", "港区id", "港区 id", "外区id", "外区 id"])) return true;
+  if (
+    /(?:台湾|香港|菲律宾|美国|日本|韩国|土耳其|土区|美区|日区|港区|台区|菲区|外区)\s*id/.test(value) &&
+    matches(value, ["icloud", "icoud", "app", "账号", "账户", "独享", "老号", "成品", "可转区"])
+  ) {
+    return true;
+  }
 
   return matches(value, ["id"]) && matches(value, ["苹果", "apple"]) && matches(value, ["账号", "账户", "成品号", "地区"]);
 }
@@ -1544,11 +1632,12 @@ function isZeroOrOneDollarCard(value: string): boolean {
 }
 
 function isPureEmail(value: string): boolean {
-  const explicitEmail = matches(value, [
+  const explicitEmail = isICloudPureEmailProduct(value) || matches(value, [
     "gmail",
-    "icloud",
     "icloud邮箱",
     "icloud 邮箱",
+    "icoud邮箱",
+    "icoud 邮箱",
     "谷歌邮箱",
     "google 邮箱",
     "google邮箱",
@@ -1569,6 +1658,7 @@ function isPureEmail(value: string): boolean {
     ".edu",
   ]);
   if (!explicitEmail) return false;
+  if (isICloudBackedAiAccountProduct(value)) return false;
   if (matches(value, ["跑gemini", "跑 gemini", "失败的号", "包gcp", "带gcp"])) return true;
   if (
     matches(value, [
@@ -1615,14 +1705,65 @@ function classifyPureEmail(value: string): string {
   if (matches(value, ["教育邮箱", "edu 邮箱", "学校邮箱", ".edu"])) return "education-email";
   if (matches(value, ["outlook", "hotmail", "微软邮箱", "microsoft 邮箱", "oauth2", "graph"])) return "outlook-account";
   if (matches(value, ["gmail", "谷歌邮箱", "google 邮箱", "google邮箱", "google个人邮箱", "google 个人邮箱", "谷歌账号", "google 账号"])) return "gmail-account";
+  if (isICloudPureEmailProduct(value)) return "icloud-email";
 
   return "email-account";
 }
 
 function isICloudStandaloneEmailProduct(value: string): boolean {
-  if (!matches(value, ["icloud", "icloud邮箱", "icloud 邮箱"])) return false;
+  if (!matches(value, ["icloud", "icloud邮箱", "icloud 邮箱", "icoud", "icoud邮箱", "icoud 邮箱"])) return false;
 
   return matches(value, ["隐私邮箱", "发货形式为邮箱", "开plus", "开 plus", "绑定专用", "取码url", "取码 url", "plus源头", "plus 源头"]);
+}
+
+function isICloudPureEmailProduct(value: string): boolean {
+  if (!matches(value, ["icloud", "icoud", "icloud邮箱", "icloud 邮箱", "icoud邮箱", "icoud 邮箱"])) return false;
+  if (isAppleIdAccount(value)) return false;
+  if (isICloudBackedAiAccountProduct(value)) return false;
+
+  return matches(value, [
+    "icloud邮箱",
+    "icloud 邮箱",
+    "icoud邮箱",
+    "icoud 邮箱",
+    "icloud隐私邮箱",
+    "icloud 隐私邮箱",
+    "icoud隐私邮箱",
+    "icoud 隐私邮箱",
+    "隐私邮箱",
+    "母号",
+    "子号",
+    "子邮箱",
+    "取码url",
+    "取码 url",
+    "取码链接",
+    "发货形式为邮箱",
+    "绑定专用",
+  ]);
+}
+
+function isICloudBackedAiAccountProduct(value: string): boolean {
+  if (!matches(value, ["icloud", "icoud", "icloud邮箱", "icloud 邮箱", "icoud邮箱", "icoud 邮箱"])) return false;
+  if (isICloudStandaloneEmailProduct(value)) return false;
+  if (!matches(value, ["chatgpt", "gpt", "openai", "codex", "gptplus", "gpt plus", "plus"])) return false;
+
+  return matches(value, [
+    "成品号",
+    "成品账号",
+    "成品",
+    "账号",
+    "账户",
+    "月卡",
+    "会员",
+    "rt",
+    "凭证",
+    "质保首登",
+    "未接码",
+    "已接码",
+    "2fa",
+    "稳定成品",
+    "发货格式",
+  ]);
 }
 
 function isChatGptPeripheralService(value: string): boolean {
@@ -1855,9 +1996,46 @@ function isGrokProduct(value: string): boolean {
 
 function isGrokFitForSuperInfrastructure(value: string): boolean {
   if (!isGrokProduct(value)) return false;
+  if (matches(value, ["super grok", "supergrok", "3天", "三天", "7天", "七天", "月卡", "月会员", "会员号"])) return false;
   if (!matches(value, ["适合super", "适合 super", "取邮件api", "取邮件 api", "长效微软邮箱", "账号 sso"])) return false;
 
   return matches(value, ["普号", "free", "sso", "邮箱", "取邮件"]);
+}
+
+function isKiroProProduct(value: string): boolean {
+  if (!matches(value, ["kiro"])) return false;
+  if (
+    matches(value, ["普号", "free", "固定50", "50额度", "kirors", "kiro rs"]) &&
+    !matches(value, ["kiro pro", "kiro pro+", "power", "promax", "1000", "2000", "5000", "1w", "10000", "100刀", "200刀", "500刀", "100$", "200$", "500$"])
+  ) {
+    return false;
+  }
+
+  return matches(value, [
+    "kiro pro",
+    "kiro pro+",
+    "kiro pro max",
+    "kiro promax",
+    "pro+",
+    "promax",
+    "power",
+    "积分",
+    "额度号",
+    "额度",
+    "号池",
+    "可超额",
+    "1000",
+    "2000",
+    "5000",
+    "1w",
+    "10000",
+    "100刀",
+    "200刀",
+    "500刀",
+    "100$",
+    "200$",
+    "500$",
+  ]);
 }
 
 function isChatGptProduct(value: string): boolean {

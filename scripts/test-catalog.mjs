@@ -105,8 +105,11 @@ const cases = [
   ["Outlook OAuth2 微软邮箱", "outlook-account"],
   ["教育邮箱 .edu", "education-email"],
   ["域名邮箱 企业邮箱", "email-account"],
-  ["iCloud邮箱---iCloud隐私邮箱，发货形式为邮箱----取码url---plus源头", "email-account"],
+  ["iCloud邮箱---iCloud隐私邮箱，发货形式为邮箱----取码url---plus源头", "icloud-email"],
+  ["icoud 邮箱 Free 已开通2fa", "icloud-email"],
   ["iCloud邮箱plus成品号，质保首登，支持登录网页，支持登录codex", "chatgpt-plus"],
+  ["icloud邮箱plus，RT凭证，质保首登", "chatgpt-plus"],
+  ["Plus月卡★成品号【质保3天】（荷兰货 + icloud邮箱 + 2FA）", "chatgpt-plus"],
   ["长效【微软邮箱交付】GPT账号（白号）FREE普通号含access_token", "chatgpt-free-account"],
   ["OpenAI ChatGPT 手机接码", "openai-phone-verification"],
   ["ChatGPT Codex-日本 接码自助卡密", "openai-phone-verification"],
@@ -189,13 +192,19 @@ const cases = [
   ["C档2.0 视频生成 Basic 成品号", "dreamina-account"],
   ["Kiro注册机源码", "other-product"],
   ["Kiro 注册机生成器", "other-product"],
-  ["Kiro Power 200$成品号一万积分 - 使用 Claude Opus4.6", "kiro-account"],
-  ["Kiro 积分 成品号", "kiro-account"],
+  ["【KIRO】 KIRO 普号 -固定50额度 -kirors导入格式", "kiro-account"],
+  ["Kiro Power 200$成品号一万积分 - 使用 Claude Opus4.6", "kiro-pro-account"],
+  ["Kiro Pro 1000额度 可超额", "kiro-pro-account"],
+  ["Kiro 积分 成品号", "kiro-pro-account"],
   ["Apple ID 美区成品账号 质保首登", "apple-id-account"],
   ["苹果ID 土区账号 可改密", "apple-id-account"],
   ["美区ID 独享账号 自动发货", "apple-id-account"],
-  ["X-Twitter Premium自助卡密", "x-twitter-account"],
-  ["推特 Premium 会员直充卡密", "x-twitter-account"],
+  ["香港ID (未激活iCloud 可下载APP)独享稳定老号", "apple-id-account"],
+  ["推特 | 高质量月份号 | 可关注转发点赞 | 邮箱绑定 | token/2fa登录", "x-twitter-account"],
+  ["Twitter涨粉 - 加密货币相关粉丝｜0-1H｜500/天｜无售后 1000=¥48", "other-product"],
+  ["X-Twitter Premium自助卡密", "x-twitter-premium"],
+  ["推特 Premium 会员直充卡密", "x-twitter-premium"],
+  ["3个月-X-推特 Premium（自带Super Grok）", "x-twitter-premium"],
   ["Telegram成品号 / 规格5", "telegram-account"],
   ["TG电报高权重老号", "telegram-account"],
   ["Telegram-星星 1000 stars", "telegram-account"],
@@ -336,6 +345,25 @@ for (const [title, expected] of warrantyFilterCases) {
     expected,
     `${title} warranty_long should be ${expected}.`,
   );
+}
+
+const tagCases = [
+  ["Super Grok 独享成品号 3天会员", ["duration_trial"]],
+  ["Super Grok 成品号-1个月（质保）", ["duration_month"]],
+  ["3个月-X-推特 Premium（自带Super Grok）", ["duration_quarter"]],
+  ["6个月-X-推特 Premium（自带Super Grok）", ["duration_half_year"]],
+  ["12个月-X-推特 Premium（自带Super Grok）", ["duration_year"]],
+  ["OpenAI Codex 单次接码 1次验证", ["verification_single"]],
+  ["短效接码 antigravity 验证使用gmail", ["verification_short"]],
+  ["【长效接码链接】GPT Codex 接码（7.5号到期）", ["verification_long"]],
+  ["OpenAI 接码包月 月租号码", ["verification_monthly"]],
+];
+
+for (const [title, expectedTags] of tagCases) {
+  const tags = deriveOfferFilterTags({ sourceTitle: title });
+  for (const tag of expectedTags) {
+    assert.ok(tags.includes(tag), `${title} should include ${tag}. actual=${tags.join(",")}`);
+  }
 }
 
 const sharedAccessGroups = buildProductGroups([

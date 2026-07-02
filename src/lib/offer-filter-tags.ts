@@ -1,12 +1,26 @@
 export const OFFER_FILTER_TAG_GROUPS = {
   access: "交付方式",
+  duration: "时长",
   proxy: "反代能力",
+  verification: "接码时效",
   warranty: "质保",
 } as const;
 
 export type OfferFilterTagGroup = keyof typeof OFFER_FILTER_TAG_GROUPS;
 
-export type OfferFilterTagId = "shared_access" | "proxy_supported" | "warranty_long";
+export type OfferFilterTagId =
+  | "shared_access"
+  | "duration_trial"
+  | "duration_month"
+  | "duration_quarter"
+  | "duration_half_year"
+  | "duration_year"
+  | "verification_single"
+  | "verification_short"
+  | "verification_long"
+  | "verification_monthly"
+  | "proxy_supported"
+  | "warranty_long";
 
 export type OfferFilterTagDefinition = {
   id: OfferFilterTagId;
@@ -25,6 +39,60 @@ export const OFFER_FILTER_TAGS: OfferFilterTagDefinition[] = [
     label: "拼车/团购",
     group: "access",
     description: "多人共享、几人车、拼车、团购、车位或合租类报价。",
+  },
+  {
+    id: "duration_trial",
+    label: "短体验",
+    group: "duration",
+    description: "2-10 天、3 天号、周会员或短期体验类报价。",
+  },
+  {
+    id: "duration_month",
+    label: "月卡",
+    group: "duration",
+    description: "一个月、30 天、月卡或月会员报价。",
+  },
+  {
+    id: "duration_quarter",
+    label: "3个月",
+    group: "duration",
+    description: "三个月、3 个月或 90 天报价。",
+  },
+  {
+    id: "duration_half_year",
+    label: "6个月",
+    group: "duration",
+    description: "六个月、6 个月或 180 天报价。",
+  },
+  {
+    id: "duration_year",
+    label: "年卡",
+    group: "duration",
+    description: "一年、12 个月、365 天、年度或年卡报价。",
+  },
+  {
+    id: "verification_single",
+    label: "单次",
+    group: "verification",
+    description: "单次接码、一次性接码、1 次验证或单号接码。",
+  },
+  {
+    id: "verification_short",
+    label: "短效",
+    group: "verification",
+    description: "短效手机号、短期接码或短时可用号码。",
+  },
+  {
+    id: "verification_long",
+    label: "长效链接",
+    group: "verification",
+    description: "长效接码、原始接码链接、电话接码链接或可续接链接。",
+  },
+  {
+    id: "verification_monthly",
+    label: "月租/包月",
+    group: "verification",
+    description: "月租号码、包月接码、长期租号或 30 天接码服务。",
   },
   {
     id: "proxy_supported",
@@ -79,6 +147,28 @@ export function deriveOfferFilterTags(input: {
 
   if (!hasSharedAccessNegativeSignal(text) && hasSharedAccessSignal(text)) {
     output.add("shared_access");
+  }
+
+  if (hasDurationYearSignal(text)) {
+    output.add("duration_year");
+  } else if (hasDurationHalfYearSignal(text)) {
+    output.add("duration_half_year");
+  } else if (hasDurationQuarterSignal(text)) {
+    output.add("duration_quarter");
+  } else if (hasDurationMonthSignal(text)) {
+    output.add("duration_month");
+  } else if (hasDurationTrialSignal(text)) {
+    output.add("duration_trial");
+  }
+
+  if (hasVerificationMonthlySignal(text)) {
+    output.add("verification_monthly");
+  } else if (hasVerificationLongSignal(text)) {
+    output.add("verification_long");
+  } else if (hasVerificationShortSignal(text)) {
+    output.add("verification_short");
+  } else if (hasVerificationSingleSignal(text)) {
+    output.add("verification_single");
   }
 
   if (
@@ -158,6 +248,42 @@ function hasWeakSharedAccessSignal(text: string): boolean {
 
 function hasExclusiveAccessSignal(text: string): boolean {
   return /独享|独立|一人一号|一人一户|专享/.test(text);
+}
+
+function hasDurationTrialSignal(text: string): boolean {
+  return /(?:^|[^0-9])(?:[1-9]|10)天(?:号|会员|体验)?|(?:二|两|三|四|五|六|七|八|九|十)天(?:号|会员|体验)?|[1-9]-10天|2到10天|2至10天|3-7天|7-10天|周会员|一周会员|体验卡|短期体验/.test(text);
+}
+
+function hasDurationMonthSignal(text: string): boolean {
+  return /月卡|月会员|一个月|1个月|30天|三十天|一月|单月/.test(text);
+}
+
+function hasDurationQuarterSignal(text: string): boolean {
+  return /3个月|三个月|90天|九十天|季度|季卡/.test(text);
+}
+
+function hasDurationHalfYearSignal(text: string): boolean {
+  return /6个月|六个月|180天|一百八十天|半年|半年卡/.test(text);
+}
+
+function hasDurationYearSignal(text: string): boolean {
+  return /12个月|十二个月|一年|1年|365天|三百六十五天|年卡|年度|全年/.test(text);
+}
+
+function hasVerificationSingleSignal(text: string): boolean {
+  return /单次接码|一次性接码|一次性验证|1次接码|1次验证|一次码|单号接码|接一次|质保1次成功接码|质保一次成功接码/.test(text);
+}
+
+function hasVerificationShortSignal(text: string): boolean {
+  return /短效接码|短效手机号|短期接码|短时接码|临时号码|短效号码|实卡接码|实体卡接码/.test(text);
+}
+
+function hasVerificationLongSignal(text: string): boolean {
+  return /长效接码|长期接码|长效手机号|长期手机号|原始接码链接|电话接码链接|带电话接码链接|接码链接|取码url|取码链接|可续接|续接/.test(text);
+}
+
+function hasVerificationMonthlySignal(text: string): boolean {
+  return /月租|包月接码|接码包月|包月号码|长期租号|月付接码|30天接码|一个月接码|1个月接码/.test(text);
 }
 
 function hasBlockingNoWarrantySignal(text: string): boolean {
