@@ -12,6 +12,7 @@ import {
   isTransitStandardModel,
 } from "@/data/api-transit/types";
 import { seedStations } from "@/data/api-transit/stations";
+import { withTransitCommercialOfferDisclosure } from "@/lib/api-transit";
 import { getSupabaseServerClient } from "@/lib/supabase";
 
 let cached: TransitStation[] | null = null;
@@ -901,7 +902,7 @@ function commercialOffers(value: unknown): NonNullable<TransitStation["commercia
     validUntil: nullableString(item.validUntil || item.valid_until),
     disclosure: nullableString(item.disclosure),
     enabled: item.enabled === undefined ? true : Boolean(item.enabled),
-  })).filter((item) => item.title);
+  })).filter((item) => item.title).map(withTransitCommercialOfferDisclosure);
 }
 
 function verificationEvents(value: unknown): NonNullable<TransitStation["verificationEvents"]> {

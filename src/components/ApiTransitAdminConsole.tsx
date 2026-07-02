@@ -45,6 +45,7 @@ import {
   TRANSIT_INVOICE_SUPPORT_LABELS,
   TRANSIT_MODEL_FAMILY_OPTIONS,
   TRANSIT_OPERATOR_TYPE_LABELS,
+  TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE,
   TRANSIT_RISK_LABELS,
   TRANSIT_STATION_SYSTEM_LABELS,
   type TransitStationSystem,
@@ -1568,7 +1569,12 @@ function StationEditDialog({
               <textarea name="offerDescription" defaultValue={station.commercialOffers[0]?.description || ""} className={`${adminFieldClassName} min-h-20 resize-y py-2 leading-6`} />
             </AdminField>
             <AdminField label="披露文案">
-              <textarea name="offerDisclosure" defaultValue={station.commercialOffers[0]?.disclosure || ""} className={`${adminFieldClassName} min-h-20 resize-y py-2 leading-6`} placeholder="例如 该链接可能包含 AFF，不影响排序口径。" />
+              <textarea
+                name="offerDisclosure"
+                defaultValue={station.commercialOffers[0]?.disclosure || TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE}
+                className={`${adminFieldClassName} min-h-20 resize-y py-2 leading-6`}
+                placeholder={TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE}
+              />
             </AdminField>
           </div>
         </AdminFormSection>
@@ -2216,9 +2222,13 @@ function buildCommercialOffersFromForm(
   const code = formNullableText(formData, "offerCode");
   const description = formNullableText(formData, "offerDescription");
   const listLabel = formNullableText(formData, "offerListLabel");
-  const disclosure = formNullableText(formData, "offerDisclosure");
+  const validUntil = formNullableText(formData, "offerValidUntil");
+  const enabled = formData.get("offerEnabled") === "on";
+  const disclosure = enabled
+    ? formNullableText(formData, "offerDisclosure") || TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE
+    : null;
   const existing = station.commercialOffers[0];
-  if (!title && !url && !code && !description && !listLabel && !disclosure) return [];
+  if (!title && !url && !code && !description && !listLabel && !validUntil) return [];
 
   return [
     {
@@ -2229,9 +2239,9 @@ function buildCommercialOffersFromForm(
       description,
       code,
       url,
-      validUntil: formNullableText(formData, "offerValidUntil"),
+      validUntil,
       disclosure,
-      enabled: formData.get("offerEnabled") === "on",
+      enabled,
     },
   ];
 }

@@ -17,6 +17,7 @@ import {
   TRANSIT_STANDARD_MODELS,
   TRANSIT_STANDARD_MODEL_FAMILY,
   TRANSIT_COMMERCIAL_LABELS,
+  TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE,
 } from "@/data/api-transit/types";
 import { seedStations } from "@/data/api-transit/stations";
 
@@ -653,7 +654,9 @@ export function getEffectiveTransitChannelTypes(station: TransitStation): Transi
 export function getActiveTransitCommercialOffers(
   station: TransitStation
 ): TransitCommercialOffer[] {
-  return (station.commercialOffers || []).filter((offer) => offer.enabled);
+  return (station.commercialOffers || [])
+    .filter((offer) => offer.enabled)
+    .map(withTransitCommercialOfferDisclosure);
 }
 
 export function hasTransitAffRelation(station: TransitStation): boolean {
@@ -688,6 +691,34 @@ export function getPrimaryTransitOutboundOffer(
 ): TransitCommercialOffer | null {
   const offers = getActiveTransitCommercialOffers(station).filter((offer) => Boolean(offer.url));
   return offers.find((offer) => offer.type === "affiliate") ?? offers[0] ?? null;
+}
+
+export function withTransitCommercialOfferDisclosure(
+  offer: TransitCommercialOffer
+): TransitCommercialOffer {
+  if (!offer.enabled) return { ...offer, disclosure: null };
+  return {
+    ...offer,
+    disclosure: normalizedTransitCommercialOfferDisclosure(offer.disclosure),
+  };
+}
+
+export function normalizedTransitCommercialOfferDisclosure(value: string | null | undefined): string {
+  const text = value?.trim();
+  if (!text || isLegacyTransitCommercialOfferDisclosure(text)) {
+    return TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE;
+  }
+  return text;
+}
+
+function isLegacyTransitCommercialOfferDisclosure(value: string): boolean {
+  return [
+    "该链接可能包含 AFF；优惠为首充充值折扣，不改变模型公开价格倍率，也不代表 PriceAI 担保。",
+    "该站点存在商业合作信息，不影响页面价格口径；注册后请回原站核验活动规则、充值比例和退款规则。",
+    "该链接包含AFF,但不影响排序口径。",
+    "该链接包含AFF，但不影响排序口径。",
+    "该链接可能包含 AFF，不影响排序口径。",
+  ].includes(value);
 }
 
 export function getTransitVerificationEvents(

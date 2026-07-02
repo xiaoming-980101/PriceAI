@@ -110,6 +110,9 @@ export type TransitCommercialOfferType = "coupon" | "affiliate" | "sponsored";
 export type TransitVerificationEventSource = "priceai" | "official" | "user" | "merchant";
 export type TransitVerificationEventStatus = "success" | "warning" | "failed" | "info";
 
+export const TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE =
+  "该访问链接包含 AFF，但不影响页面排序及价格口径；注册后请回原站核验活动规则、充值比例和退款规则。";
+
 export interface TransitCommercialOffer {
   id: string;
   type: TransitCommercialOfferType;

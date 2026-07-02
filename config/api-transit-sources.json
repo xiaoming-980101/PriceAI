@@ -79,7 +79,7 @@
         "code": "PRICEAI",
         "url": "https://onehop.ai/invite/EYPFRA",
         "validUntil": null,
-        "disclosure": "该链接可能包含 AFF；优惠为首充充值折扣，不改变模型公开价格倍率，也不代表 PriceAI 担保。",
+        "disclosure": "该访问链接包含 AFF，但不影响页面排序及价格口径；注册后请回原站核验活动规则、充值比例和退款规则。",
         "enabled": true
       }
     ]
@@ -119,7 +119,7 @@
         "code": "PRICEAI",
         "url": "https://apinode.ltd/register?promo=PRICEAI",
         "validUntil": null,
-        "disclosure": "该站点存在商业合作信息，不影响页面价格口径；注册后请回原站核验活动规则、充值比例和退款规则。",
+        "disclosure": "该访问链接包含 AFF，但不影响页面排序及价格口径；注册后请回原站核验活动规则、充值比例和退款规则。",
         "enabled": true
       }
     ]

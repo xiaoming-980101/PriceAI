@@ -1,4 +1,4 @@
-import type { TransitModelFamily, TransitStation } from "./types";
+import { TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE, type TransitModelFamily, type TransitStation } from "./types";
 
 const seedManualAvailabilitySource = {
   sourceType: "manual_snapshot",
@@ -53,7 +53,7 @@ export const seedStations: TransitStation[] = [
     strengths: ["公开价格页较完整", "Claude / GPT 分组清楚", "支持公开监控"],
     cautions: ["当前仍作为样例口径展示", "首次使用仍建议小额充值"],
     commercialOffers: [
-      offer("packy-first", "coupon", "首充 9 折", "站点公开优惠示例，使用前请回原站确认。", "PRICEAI", "https://www.packyapi.com", null, "该优惠不代表 PriceAI 担保。"),
+      offer("packy-first", "coupon", "首充 9 折", "站点公开优惠示例，使用前请回原站确认。", "PRICEAI", "https://www.packyapi.com", null, TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE),
     ],
     verificationEvents: [
       event("packy-price", "priceai", "success", "公开价格页已解析", "已收录 Claude / GPT 主流模型倍率。", "2026-06-15 10:40"),
@@ -171,7 +171,7 @@ export const seedStations: TransitStation[] = [
     strengths: ["商家资料较完整", "支持低门槛充值", "已说明部分 Claude / GPT 分池"],
     cautions: ["可用性样本仍不足", "入驻关系需要前台披露", "部分线路来源仍需继续核验"],
     commercialOffers: [
-      offer("micu-entry", "affiliate", "入驻站点优惠入口", "如站点提供首充码，可在后台补充后展示。", null, "https://micuapi.ai", null, "该站点为入驻关系，可能包含商业合作。"),
+      offer("micu-entry", "affiliate", "入驻站点优惠入口", "如站点提供首充码，可在后台补充后展示。", null, "https://micuapi.ai", null, TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE),
     ],
     verificationEvents: [
       event("micu-merchant", "merchant", "info", "商家提交入驻资料", "提交了分组倍率、支付方式和测试额度说明。", "2026-06-15 11:00"),

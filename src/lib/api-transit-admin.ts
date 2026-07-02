@@ -3,6 +3,7 @@ import "server-only";
 import {
   getOfficialTransitUnitCurrency,
   getOfficialTransitUnitPrice,
+  normalizedTransitCommercialOfferDisclosure,
   type TransitPriceCurrency,
   type TransitPriceMetric,
 } from "@/lib/api-transit";
@@ -1519,8 +1520,10 @@ function commercialOffers(value: unknown): ApiTransitCommercialOffer[] {
     code: nullableString(item.code),
     url: nullableString(item.url),
     validUntil: nullableString(item.validUntil || item.valid_until),
-    disclosure: nullableString(item.disclosure),
     enabled: item.enabled === undefined ? true : Boolean(item.enabled),
+    disclosure: item.enabled === false
+      ? null
+      : normalizedTransitCommercialOfferDisclosure(nullableString(item.disclosure)),
   })).filter((item) => item.title);
 }
 
@@ -1537,18 +1540,23 @@ function verificationEvents(value: unknown): ApiTransitVerificationEvent[] {
 
 function sanitizeCommercialOffers(values: ApiTransitCommercialOffer[]): ApiTransitCommercialOffer[] {
   return values
-    .map((item, index) => ({
-      id: cleanNullable(item.id) || `offer-${index}`,
-      type: commercialOfferType(item.type),
-      title: cleanNullable(item.title) || "",
-      listLabel: cleanNullable(item.listLabel),
-      description: cleanNullable(item.description),
-      code: cleanNullable(item.code),
-      url: cleanNullable(item.url),
-      validUntil: cleanNullable(item.validUntil),
-      disclosure: cleanNullable(item.disclosure),
-      enabled: Boolean(item.enabled),
-    }))
+    .map((item, index) => {
+      const enabled = Boolean(item.enabled);
+      return {
+        id: cleanNullable(item.id) || `offer-${index}`,
+        type: commercialOfferType(item.type),
+        title: cleanNullable(item.title) || "",
+        listLabel: cleanNullable(item.listLabel),
+        description: cleanNullable(item.description),
+        code: cleanNullable(item.code),
+        url: cleanNullable(item.url),
+        validUntil: cleanNullable(item.validUntil),
+        disclosure: enabled
+          ? normalizedTransitCommercialOfferDisclosure(cleanNullable(item.disclosure))
+          : null,
+        enabled,
+      };
+    })
     .filter((item) => item.title)
     .slice(0, 8);
 }

@@ -1,5 +1,13 @@
-import { compareStations, scoreTransitCombinedRate } from "../src/lib/api-transit";
-import type { TransitStation } from "../src/data/api-transit/types";
+import {
+  compareStations,
+  getActiveTransitCommercialOffers,
+  normalizedTransitCommercialOfferDisclosure,
+  scoreTransitCombinedRate,
+} from "../src/lib/api-transit";
+import {
+  TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE,
+  type TransitStation,
+} from "../src/data/api-transit/types";
 
 const now = "2026-07-02T07:00:00.000Z";
 
@@ -100,6 +108,50 @@ assertDeepEqual(
 assertDeepEqual(
   compareStations([neko, wawa], "rate", { activeFamily: "claude" }).map((item) => item.id),
   ["wawazz-xyz", "999555999-com"],
+);
+
+const commercialStation = station({
+  id: "commercial-test",
+  name: "Commercial Test",
+  claudeRate: 0.8,
+  availabilityRate: 1,
+  availabilitySamples: 10,
+});
+commercialStation.commercialOffers = [
+  {
+    id: "enabled-empty-disclosure",
+    type: "coupon",
+    title: "首充优惠",
+    description: null,
+    code: "PRICEAI",
+    url: "https://commercial-test.example.test/register",
+    validUntil: null,
+    disclosure: null,
+    enabled: true,
+  },
+  {
+    id: "disabled-offer",
+    type: "coupon",
+    title: "不展示优惠",
+    description: null,
+    code: null,
+    url: "https://commercial-test.example.test/hidden",
+    validUntil: null,
+    disclosure: "不应展示",
+    enabled: false,
+  },
+];
+
+const activeCommercialOffers = getActiveTransitCommercialOffers(commercialStation);
+assertEqual(activeCommercialOffers.length, 1);
+assertEqual(activeCommercialOffers[0]?.disclosure, TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE);
+assertEqual(
+  normalizedTransitCommercialOfferDisclosure("该链接包含AFF,但不影响排序口径。"),
+  TRANSIT_DEFAULT_COMMERCIAL_OFFER_DISCLOSURE,
+);
+assertEqual(
+  normalizedTransitCommercialOfferDisclosure("特殊活动说明：仅限老用户。"),
+  "特殊活动说明：仅限老用户。",
 );
 
 console.log("api transit sorting test passed");
