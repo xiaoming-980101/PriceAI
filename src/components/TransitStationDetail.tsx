@@ -47,6 +47,7 @@ import {
   getActiveTransitCommercialOffers,
   formatAvailability,
   formatPercent,
+  formatTransitModelMultiplier,
   getAvailabilitySourceMeta,
   formatRate,
   getCombinedRateForPrice,
@@ -64,6 +65,7 @@ import {
   getTransitVerificationEvents,
   getTransitReviewTags,
   getTransitStationSystemLabel,
+  hasComparableTransitOfficialPrice,
   getUsageAdviceBadgeClass,
   hasTransitAffRelation,
   isTransitStationOutboundAff,
@@ -89,6 +91,7 @@ type TransitPriceGroup = {
   rechargeCoefficient: number | null;
   modelMultiplierMin: number | null;
   modelMultiplierMax: number | null;
+  modelMultiplierLabel: string;
   sevenDayRate: number | null;
   sevenDaySamples: number;
   firstCheckedAt: string | null;
@@ -1379,7 +1382,7 @@ function PriceGroupMobileCard({
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         <MobilePriceFact label="充值折算" value={formatRate(group.rechargeCoefficient)} />
-        <MobilePriceFact label="模型倍率" value={formatModelRateRange(group.modelMultiplierMin, group.modelMultiplierMax)} />
+        <MobilePriceFact label="模型倍率" value={group.modelMultiplierLabel} />
         <MobilePriceFact label="覆盖" value={`${group.prices.length} 个模型`} />
         <MobilePriceFact label="可用率" value={formatPercent(group.sevenDayRate)} />
       </div>
@@ -1476,7 +1479,7 @@ function PriceGroupRow({
         </span>
         <div className="mt-2 space-y-1 text-[11px] font-semibold text-[#5a6061]">
           <div title={TRANSIT_RECHARGE_COEFFICIENT_EXPLANATION}>充值折算 {formatRate(group.rechargeCoefficient)}</div>
-          <div title={TRANSIT_MODEL_MULTIPLIER_EXPLANATION}>模型倍率 {formatModelRateRange(group.modelMultiplierMin, group.modelMultiplierMax)}</div>
+          <div title={TRANSIT_MODEL_MULTIPLIER_EXPLANATION}>模型倍率 {group.modelMultiplierLabel}</div>
           <div>{group.prices.length} 个模型</div>
         </div>
       </td>
@@ -1577,6 +1580,7 @@ function buildPriceGroup(
     rechargeCoefficient,
     modelMultiplierMin: modelMultipliers.length ? Math.min(...modelMultipliers) : null,
     modelMultiplierMax: modelMultipliers.length ? Math.max(...modelMultipliers) : null,
+    modelMultiplierLabel: formatModelGroupMultiplierLabel(primaryPrice, modelMultipliers),
     sevenDayRate: weightedAvailability,
     sevenDaySamples: availabilitySamples,
     firstCheckedAt,
@@ -1599,7 +1603,8 @@ function modelPriority(model: TransitModelPrice["standardModel"]): number {
   if (model === "GPT Image 2") return 602;
   if (model === "Nano Banana Pro") return 595;
   if (model === "Nano Banana 2") return 594;
-  if (model === "Nano Banana Lite") return 593;
+  if (model === "Nano Banana") return 593;
+  if (model === "Nano Banana Lite") return 592;
   if (model === "Sora 2 Pro") return 590;
   if (model === "Sora 2") return 589;
   if (model === "Veo 3.1") return 588;
@@ -1627,6 +1632,7 @@ function modelPriority(model: TransitModelPrice["standardModel"]): number {
 function shortModelLabel(model: TransitModelPrice["standardModel"]): string {
   if (model === "Nano Banana Pro") return "Banana Pro";
   if (model === "Nano Banana 2") return "Banana 2";
+  if (model === "Nano Banana") return "Banana";
   if (model === "Nano Banana Lite") return "Banana Lite";
   if (model === "Gemini Omni Flash") return "Omni Flash";
   return model
@@ -1935,6 +1941,14 @@ function isPublicRuleValue(value: string | null): value is string {
 
 function formatModelRate(value: number | null) {
   return value === null || !Number.isFinite(value) ? "未公开" : `${value.toFixed(2)}x`;
+}
+
+function formatModelGroupMultiplierLabel(primaryPrice: TransitModelPrice, values: number[]): string {
+  if (!values.length) return "未公开";
+  if (!hasComparableTransitOfficialPrice(primaryPrice.standardModel)) return formatTransitModelMultiplier(primaryPrice);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return formatModelRateRange(min, max);
 }
 
 function formatModelRateRange(min: number | null, max: number | null): string {

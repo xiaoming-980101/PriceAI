@@ -62,6 +62,7 @@ const officialTransitPrices = {
   "GPT Image 2": { input: 5, output: null, cacheRead: 1.25, cacheWrite: null, imageOutput: 30, currency: "USD" },
   "Nano Banana Pro": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
   "Nano Banana 2": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
+  "Nano Banana": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
   "Nano Banana Lite": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
   "Sora 2": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
   "Sora 2 Pro": { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: null, currency: "USD" },
@@ -89,6 +90,7 @@ const modelFamilyByStandard = {
   "GPT Image 2": "image",
   "Nano Banana Pro": "image",
   "Nano Banana 2": "image",
+  "Nano Banana": "image",
   "Nano Banana Lite": "image",
   "Sora 2": "video",
   "Sora 2 Pro": "video",
@@ -1696,6 +1698,7 @@ function buildOfferRow(source, item, group, standard, collectedAt) {
       group,
       unit_prices_usd: splitMultipliers.unitPricesUsd || null,
       multiplier_basis: splitMultipliers.basis || "unknown",
+      fixed_price: splitMultipliers.fixedPrice ?? null,
     },
     created_at: collectedAt,
   };
@@ -1703,8 +1706,11 @@ function buildOfferRow(source, item, group, standard, collectedAt) {
 
 function getSplitMultipliers(item, group, standard, groupMultiplier) {
   const official = officialTransitPrices[standard];
+  const fixed = getFixedPriceMultipliers(item, groupMultiplier, official);
+  if (fixed) return fixed;
+
   const billing = parseBillingExpression(item?.billing_expr);
-  if (billing && official) {
+  if (billing && official && hasComparableOfficialPrice(official)) {
     const input = ratioValue(billing.input, official.input, groupMultiplier);
     const output = ratioValue(billing.output, official.output, groupMultiplier);
     const cacheRead = ratioValue(billing.cacheRead, official.cacheRead, groupMultiplier);
@@ -1724,7 +1730,7 @@ function getSplitMultipliers(item, group, standard, groupMultiplier) {
   if (modelRatio === null || modelRatio <= 0) return null;
 
   const unitPricesUsd = getNewApiUnitPricesUsd(group, groupMultiplier);
-  if (official && unitPricesUsd.input !== null) {
+  if (official && hasComparableOfficialPrice(official) && unitPricesUsd.input !== null) {
     const input = unitRatioValue(unitPricesUsd.input, official.input);
     const output = unitRatioValue(unitPricesUsd.output, official.output);
     const cacheRead = unitRatioValue(unitPricesUsd.cacheRead, official.cacheRead);
@@ -1776,6 +1782,49 @@ function getNewApiUnitPricesUsd(group, groupMultiplier) {
   };
 }
 
+function getFixedPriceMultipliers(item, groupMultiplier, official) {
+  const fixedPrice = numberValue(item?.model_price ?? item?.fixed_price);
+  if (fixedPrice === null || fixedPrice <= 0) return null;
+  const quotaType = numberValue(item?.quota_type ?? item?.quotaType);
+  if (quotaType !== null && quotaType !== 1) return null;
+
+  const effectivePrice = fixedPrice * groupMultiplier;
+  if (official) {
+    const imageOutput = unitRatioValue(effectivePrice, official.imageOutput);
+    if (imageOutput !== null) {
+      return {
+        model: imageOutput,
+        input: null,
+        output: null,
+        cacheRead: null,
+        cacheWrite: null,
+        imageOutput,
+        unitPricesUsd: { input: null, output: null, cacheRead: null, cacheWrite: null, imageOutput: effectivePrice },
+        basis: "new_api_fixed_price_against_official_image_output",
+        fixedPrice,
+      };
+    }
+  }
+
+  return {
+    model: effectivePrice,
+    input: null,
+    output: null,
+    cacheRead: null,
+    cacheWrite: null,
+    imageOutput: effectivePrice,
+    unitPricesUsd: null,
+    basis: "new_api_fixed_price",
+    fixedPrice,
+  };
+}
+
+function hasComparableOfficialPrice(official) {
+  return [official?.input, official?.output, official?.cacheRead, official?.cacheWrite, official?.imageOutput].some(
+    (value) => value !== null && Number.isFinite(value) && value > 0,
+  );
+}
+
 function parseBillingExpression(value) {
   const text = String(value || "");
   if (!text) return null;
@@ -1822,38 +1871,66 @@ function standardizeModelName(name) {
   if (value.includes("gpt-image-2") || value.includes("gpt image 2") || value.includes("gpt_image_2")) {
     return "GPT Image 2";
   }
+  if (
+    value.includes("gemini-3-pro-image") ||
+    value.includes("gemini 3 pro image") ||
+    value.includes("gemini-3-pro-image-preview")
+  ) {
+    return "Nano Banana Pro";
+  }
+  if (
+    value.includes("gemini-3.1-flash-image") ||
+    value.includes("gemini-3-1-flash-image") ||
+    value.includes("gemini 3.1 flash image")
+  ) {
+    return "Nano Banana 2";
+  }
+  if (
+    value.includes("gemini-2.5-flash-image") ||
+    value.includes("gemini-2-5-flash-image") ||
+    value.includes("gemini 2.5 flash image")
+  ) {
+    return "Nano Banana";
+  }
   if (value.includes("nano-banana-pro") || value.includes("nano banana pro")) return "Nano Banana Pro";
   if (value.includes("nano-banana-lite") || value.includes("nano banana lite")) return "Nano Banana Lite";
   if (value.includes("nano-banana-2") || value.includes("nano banana 2")) return "Nano Banana 2";
+  if (value.includes("nano-banana") || value.includes("nano banana")) return "Nano Banana";
   if (value.includes("sora-2-pro") || value.includes("sora 2 pro")) return "Sora 2 Pro";
   if (value.includes("sora-2") || value.includes("sora 2")) return "Sora 2";
   if (value.includes("veo-3.1-lite") || value.includes("veo 3.1 lite") || value.includes("veo-3-1-lite")) return "Veo 3.1 Lite";
   if (value.includes("veo-3.1") || value.includes("veo 3.1") || value.includes("veo-3-1")) return "Veo 3.1";
   if (value.includes("gemini-omni-flash") || value.includes("gemini omni flash")) return "Gemini Omni Flash";
-  if (value.includes("seedance-2.0") || value.includes("seedance 2.0") || value.includes("seedance-2")) return "Seedance 2.0";
+  if (
+    value.includes("seedance-2.0") ||
+    value.includes("seedance 2.0") ||
+    value.includes("seedance-2") ||
+    value.includes("video-ds-2.0") ||
+    value.includes("video-ds-2")
+  ) return "Seedance 2.0";
   if (value.includes("kling-2.5-turbo") || value.includes("kling 2.5 turbo") || value.includes("kling-2-5-turbo")) return "Kling 2.5 Turbo";
 
   if (value.includes("claude") && value.includes("fable")) {
-    if (matchesVersion(value, "5") || /fable[-._ ]?5\b/.test(value)) return "Claude Fable 5";
+    if (hasExplicitModelVersion(value, "fable", "5")) return "Claude Fable 5";
     return null;
   }
 
   if (value.includes("claude") && value.includes("sonnet")) {
-    if (matchesVersion(value, "5") || /sonnet[-._ ]?5\b/.test(value)) return "Claude Sonnet 5";
-    if (matchesVersion(value, "4.6") || value.includes("4-6")) return "Claude Sonnet 4.6";
+    if (hasExplicitModelVersion(value, "sonnet", "5")) return "Claude Sonnet 5";
+    if (hasExplicitModelVersion(value, "sonnet", "4.6")) return "Claude Sonnet 4.6";
     return null;
   }
   if (value.includes("claude") && value.includes("opus")) {
-    if (matchesVersion(value, "4.8") || value.includes("4-8")) return "Claude Opus 4.8";
-    if (matchesVersion(value, "4.7") || value.includes("4-7")) return "Claude Opus 4.7";
-    if (matchesVersion(value, "4.6") || value.includes("4-6")) return "Claude Opus 4.6";
+    if (hasExplicitModelVersion(value, "opus", "4.8")) return "Claude Opus 4.8";
+    if (hasExplicitModelVersion(value, "opus", "4.7")) return "Claude Opus 4.7";
+    if (hasExplicitModelVersion(value, "opus", "4.6")) return "Claude Opus 4.6";
     return null;
   }
 
   if (value.includes("gpt") || value.includes("codex") || value.includes("openai")) {
-    if (matchesVersion(value, "5.5") || value.includes("5-5")) return "GPT 5.5";
-    if (/\bgpt[-._ ]?5[-._ ]?4[-._ ]?mini\b/.test(value)) return null;
-    if (matchesVersion(value, "5.4") || value.includes("5-4")) return "GPT 5.4";
+    if (isExcludedGptVariant(value)) return null;
+    if (hasExplicitGptVersion(value, "5.5")) return "GPT 5.5";
+    if (hasExplicitGptVersion(value, "5.4")) return "GPT 5.4";
   }
 
   if (value.includes("gemini")) {
@@ -1880,9 +1957,23 @@ function standardizeModelName(name) {
   return null;
 }
 
-function matchesVersion(value, version) {
-  const escaped = version.replace(".", "[.-]");
-  return new RegExp(`(^|[^0-9])${escaped}([^0-9]|$)`).test(value);
+function hasExplicitModelVersion(value, family, version) {
+  const separator = "[-._ ]?";
+  const escapedVersion = version.split(".").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(separator);
+  const boundary = "(?:\\b|[-._ ])";
+  return new RegExp(`${family}${separator}${escapedVersion}${boundary}`).test(value) ||
+    new RegExp(`(?<![0-9][-._ ])${escapedVersion}${separator}${family}${boundary}`).test(value);
+}
+
+function hasExplicitGptVersion(value, version) {
+  const separator = "[-._ ]?";
+  const escapedVersion = version.split(".").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(separator);
+  return new RegExp(`(?:\\bgpt|\\bcodex|\\bopenai)${separator}${escapedVersion}(?:\\b|[-._ ])`).test(value);
+}
+
+function isExcludedGptVariant(value) {
+  return /\bgpt[-._ ]?5[-._ ]?[45]?[-._ ]?(mini|nano)\b/.test(value) ||
+    /\b(gpt|codex|openai)[-._ ]?5[-._ ]?(mini|nano)\b/.test(value);
 }
 
 function inferAccountPool(text) {
@@ -2566,6 +2657,7 @@ export const __test = {
   mergeOfferForRefresh,
   parseApinodePublicSiteInfoPayload,
   parseOneHopPublicModelsPayload,
+  parsePricingPayload,
   parseZivvModelHubPayload,
   standardizeModelName,
   shouldRestrictToPublishedStations,

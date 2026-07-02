@@ -91,6 +91,8 @@ export function getCombinedRateForPrice(
   station: TransitStation,
   price: TransitModelPrice
 ): number | null {
+  if (!hasComparableTransitOfficialPrice(price.standardModel)) return null;
+
   const coefficient =
     getRechargeCoefficientFromRatio(price.rechargeRatio) ??
     getStationRechargeCoefficient(station);
@@ -292,6 +294,7 @@ const TRANSIT_OFFICIAL_MODEL_PRICES: Record<
   },
   "Nano Banana Pro": unpricedOfficialModel("Google Gemini API", geminiImageGenerationUrl),
   "Nano Banana 2": unpricedOfficialModel("Google Gemini API", geminiImageGenerationUrl),
+  "Nano Banana": unpricedOfficialModel("Google Gemini API", geminiImageGenerationUrl),
   "Nano Banana Lite": unpricedOfficialModel("Google Gemini API", geminiImageGenerationUrl),
   "Sora 2": unpricedOfficialModel("OpenAI Video API", openAiVideoGenerationUrl),
   "Sora 2 Pro": unpricedOfficialModel("OpenAI Video API", openAiVideoGenerationUrl),
@@ -321,6 +324,15 @@ export function getOfficialTransitUnitCurrency(
   standardModel: TransitModelPrice["standardModel"]
 ): TransitPriceCurrency {
   return getOfficialTransitModelPrice(standardModel).currency;
+}
+
+export function hasComparableTransitOfficialPrice(
+  standardModel: TransitModelPrice["standardModel"]
+): boolean {
+  const price = getOfficialTransitModelPrice(standardModel);
+  return [price.input, price.output, price.cacheRead, price.cacheWrite, price.imageOutput].some(
+    (value) => value !== null && Number.isFinite(value) && value > 0
+  );
 }
 
 export function getTransitSplitMultiplier(
@@ -1173,6 +1185,21 @@ export function formatRate(rate: number | null): string {
   return `${rate.toFixed(2)}x`;
 }
 
+export function formatTransitModelMultiplier(price: TransitModelPrice): string {
+  const value = price.modelMultiplier;
+  if (value === null || !Number.isFinite(value)) return "—";
+  if (!hasComparableTransitOfficialPrice(price.standardModel)) return `${formatFixedTransitUnitPrice(value)} 固定价`;
+  return `${value.toFixed(2)}x`;
+}
+
+function formatFixedTransitUnitPrice(value: number): string {
+  if (value >= 100) return value.toFixed(0);
+  if (value >= 10) return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+  if (value >= 1) return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(2);
+  if (value >= 0.1) return value.toFixed(3);
+  return value.toFixed(4);
+}
+
 export function formatUsdPerMTok(price: number | null): string {
   return formatOfficialUnitPrice(price, "USD");
 }
@@ -1192,10 +1219,11 @@ export function formatOfficialUnitPrice(
 
 export function formatMultiplierRange(summary: TransitFamilyRateSummary): string {
   if (summary.modelMultiplierMin === null) return "—";
+  const suffix = summary.combinedRateMin === null && (summary.family === "image" || summary.family === "video") ? " 固定价" : "x";
   if (summary.modelMultiplierMax === null || summary.modelMultiplierMax === summary.modelMultiplierMin) {
-    return `${summary.modelMultiplierMin.toFixed(2)}x`;
+    return `${summary.modelMultiplierMin.toFixed(2)}${suffix}`;
   }
-  return `${summary.modelMultiplierMin.toFixed(2)}-${summary.modelMultiplierMax.toFixed(2)}x`;
+  return `${summary.modelMultiplierMin.toFixed(2)}-${summary.modelMultiplierMax.toFixed(2)}${suffix}`;
 }
 
 export function formatPercent(value: number | null): string {

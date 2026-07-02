@@ -79,6 +79,7 @@ export type TransitStandardModel =
   | "GPT Image 2"
   | "Nano Banana Pro"
   | "Nano Banana 2"
+  | "Nano Banana"
   | "Nano Banana Lite"
   | "Sora 2"
   | "Sora 2 Pro"
@@ -245,6 +246,7 @@ export const TRANSIT_STANDARD_MODELS = [
   "GPT Image 2",
   "Nano Banana Pro",
   "Nano Banana 2",
+  "Nano Banana",
   "Nano Banana Lite",
   "Sora 2",
   "Sora 2 Pro",
@@ -273,6 +275,7 @@ export const TRANSIT_STANDARD_MODEL_FAMILY: Record<TransitStandardModel, Transit
   "GPT Image 2": "image",
   "Nano Banana Pro": "image",
   "Nano Banana 2": "image",
+  "Nano Banana": "image",
   "Nano Banana Lite": "image",
   "Sora 2": "video",
   "Sora 2 Pro": "video",

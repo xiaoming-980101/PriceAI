@@ -15,6 +15,7 @@ assert.deepEqual(__test.keywordsForStandardModel("Claude Sonnet 5"), ["claude", 
 assert.deepEqual(__test.keywordsForStandardModel("Claude Fable 5"), ["claude", "fable", "5"]);
 assert.deepEqual(__test.keywordsForStandardModel("Gemini 3.1 Pro"), ["gemini", "pro", "3.1"]);
 assert.deepEqual(__test.keywordsForStandardModel("DeepSeek V4 Flash"), ["deepseek", "flash", "4"]);
+assert.deepEqual(__test.keywordsForStandardModel("Nano Banana"), ["nano", "banana"]);
 assert.deepEqual(__test.keywordsForStandardModel("Nano Banana Lite"), ["nano", "banana", "lite"]);
 assert.deepEqual(__test.keywordsForStandardModel("Sora 2 Pro"), ["sora", "pro", "2"]);
 
@@ -168,6 +169,14 @@ assert.deepEqual(
   },
 );
 assert.deepEqual(
+  sub2ApiTest.representativeModelForGroup({ name: "gemini-2.5-flash-image 生图池", platform: "google" }),
+  {
+    family: "image",
+    standardModel: "Nano Banana",
+    rawModelName: "nano-banana",
+  },
+);
+assert.deepEqual(
   sub2ApiTest.representativeModelForGroup({ name: "Sora 2 Pro 视频池", platform: "openai" }),
   {
     family: "video",
@@ -188,6 +197,7 @@ assert.deepEqual(
     .standardModelsFromAvailableModels([
       "nano-banana-pro",
       "nano-banana-2",
+      "gemini-2.5-flash-image",
       "sora-2-pro",
       "veo-3.1-lite",
       "gemini-omni-flash",
@@ -198,6 +208,7 @@ assert.deepEqual(
   [
     ["image", "Nano Banana Pro", "nano-banana-pro"],
     ["image", "Nano Banana 2", "nano-banana-2"],
+    ["image", "Nano Banana", "gemini-2.5-flash-image"],
     ["video", "Sora 2 Pro", "sora-2-pro"],
     ["video", "Veo 3.1 Lite", "veo-3.1-lite"],
     ["video", "Gemini Omni Flash", "gemini-omni-flash"],

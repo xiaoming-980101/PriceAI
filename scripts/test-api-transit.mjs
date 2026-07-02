@@ -106,16 +106,70 @@ assert.equal(__test.standardizeModelName("anthropic/claude-fable-5"), "Claude Fa
 assert.equal(__test.standardizeModelName("Claude Fable 5"), "Claude Fable 5");
 assert.equal(__test.standardizeModelName("claude-fable-5-0"), "Claude Fable 5");
 assert.equal(__test.standardizeModelName("openai/gpt-image-2"), "GPT Image 2");
+assert.equal(__test.standardizeModelName("google/gemini-3-pro-image-preview"), "Nano Banana Pro");
+assert.equal(__test.standardizeModelName("google/gemini-3.1-flash-image-preview"), "Nano Banana 2");
+assert.equal(__test.standardizeModelName("google/gemini-2.5-flash-image"), "Nano Banana");
 assert.equal(__test.standardizeModelName("google/nano-banana-pro"), "Nano Banana Pro");
 assert.equal(__test.standardizeModelName("google/nano-banana-2"), "Nano Banana 2");
+assert.equal(__test.standardizeModelName("google/nano-banana"), "Nano Banana");
 assert.equal(__test.standardizeModelName("google/nano-banana-lite"), "Nano Banana Lite");
 assert.equal(__test.standardizeModelName("openai/sora-2-pro"), "Sora 2 Pro");
 assert.equal(__test.standardizeModelName("openai/sora-2"), "Sora 2");
 assert.equal(__test.standardizeModelName("google/veo-3.1-lite"), "Veo 3.1 Lite");
 assert.equal(__test.standardizeModelName("google/veo-3.1"), "Veo 3.1");
 assert.equal(__test.standardizeModelName("google/gemini-omni-flash"), "Gemini Omni Flash");
+assert.equal(__test.standardizeModelName("volcengine/video-ds-2.0"), "Seedance 2.0");
 assert.equal(__test.standardizeModelName("bytedance/seedance-2.0"), "Seedance 2.0");
 assert.equal(__test.standardizeModelName("kling/kling-2.5-turbo"), "Kling 2.5 Turbo");
+assert.equal(__test.standardizeModelName("claude-3-5-sonnet-20241022"), null);
+assert.equal(__test.standardizeModelName("claude-sonnet-4-5-20250929-thinking"), null);
+assert.equal(__test.standardizeModelName("gpt-5.4-nano"), null);
+
+const fixedPricePayload = {
+  data: [
+    {
+      model_name: "google/gemini-2.5-flash-image",
+      quota_type: 1,
+      model_ratio: 0,
+      model_price: 0.04,
+      enable_groups: ["default"],
+    },
+    {
+      model_name: "openai/sora-2",
+      quota_type: 1,
+      model_ratio: 0,
+      model_price: 0.1,
+      enable_groups: ["default"],
+    },
+    {
+      model_name: "openai/gpt-image-2",
+      quota_type: 1,
+      model_ratio: 0,
+      model_price: 0.25,
+      enable_groups: ["default"],
+    },
+  ],
+  group_ratio: { default: 1 },
+};
+const fixedPriceRows = __test.parsePricingPayload(
+  {
+    id: "fixed-price-new-api",
+    slug: "fixed-price-new-api",
+    name: "Fixed Price New API",
+    websiteUrl: "https://example.test",
+    pricingEndpointUrl: "https://example.test/api/pricing",
+    collectorKind: "new_api_pricing",
+  },
+  fixedPricePayload,
+  "2026-07-02T00:00:00.000Z",
+);
+const fixedOffersByModel = new Map(fixedPriceRows.offers.map((offer) => [offer.standard_model, offer]));
+assert.equal(fixedOffersByModel.get("Nano Banana").model_multiplier, 0.04);
+assert.equal(fixedOffersByModel.get("Nano Banana").image_output_price, 0.04);
+assert.equal(fixedOffersByModel.get("Sora 2").model_multiplier, 0.1);
+assert.equal(fixedOffersByModel.get("GPT Image 2").model_multiplier, 0.008333);
+assert.equal(fixedOffersByModel.get("GPT Image 2").image_output_price, 0.008333);
+assert.equal(fixedOffersByModel.get("GPT Image 2").raw_payload.fixed_price, 0.25);
 
 const apinodePayload = {
   code: 0,

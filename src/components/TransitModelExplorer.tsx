@@ -25,6 +25,7 @@ import {
 import {
   formatPercent,
   formatRate,
+  formatTransitModelMultiplier,
   getRateBadgeClass,
   getTransitModelSummaries,
   getTransitStationSystemLabel,
@@ -396,9 +397,7 @@ function ModelExpandedEntryRow({ entry }: { entry: TransitModelPriceEntry }) {
         <div className="mt-1 text-[11px] text-[#5a6061]">{getTransitStationSystemLabel(entry.station)}</div>
       </td>
       <td className="px-4 py-3 text-[#2d3435]">{entry.price.groupName}</td>
-      <td className="px-4 py-3 font-semibold text-[#202829]">
-        {entry.price.modelMultiplier !== null ? `${entry.price.modelMultiplier.toFixed(2)}x` : "—"}
-      </td>
+      <td className="px-4 py-3 font-semibold text-[#202829]">{formatTransitModelMultiplier(entry.price)}</td>
       <td className="px-4 py-3">
         <span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${getRateBadgeClass(entry.combinedRate)}`}>
           {formatRate(entry.combinedRate)}
@@ -444,9 +443,7 @@ function ModelMobileExpandedPanel({ summary, stationId }: { summary: TransitMode
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-xs font-bold text-[#202829]">
-                  {entry.price.modelMultiplier !== null ? `${entry.price.modelMultiplier.toFixed(2)}x` : "—"}
-                </p>
+                <p className="text-xs font-bold text-[#202829]">{formatTransitModelMultiplier(entry.price)}</p>
                 <p className={`mt-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${getRateBadgeClass(entry.combinedRate)}`}>
                   {formatRate(entry.combinedRate)}
                 </p>
@@ -476,7 +473,7 @@ function RepresentativeStation({ entry }: { entry: TransitModelPriceEntry }) {
       <p className="truncate font-semibold text-[#202829]">{entry.station.name}</p>
       <p className="mt-1 truncate text-xs text-[#5a6061]">
         {TRANSIT_ACCOUNT_POOL_LABELS[entry.price.accountPool]} · 充值 {formatRate(entry.rechargeCoefficient)} · 模型{" "}
-        {entry.price.modelMultiplier !== null ? `${entry.price.modelMultiplier.toFixed(2)}x` : "—"}
+        {formatTransitModelMultiplier(entry.price)}
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${getRateBadgeClass(entry.combinedRate)}`}>

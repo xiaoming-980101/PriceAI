@@ -12,6 +12,7 @@
 | [采集器贡献](./collectors.md) | 新增或修复采集器时需要遵守的规则 |
 | [数据策略](./data-policy.md) | 库存、新鲜度、最低价和分类原则 |
 | [API 中转站收录说明](./api-transit-station-admission.md) | 面向中转站站长的公开收录与合作要求 |
+| [API 中转模型采集流程](./api-transit-model-collection-flow.md) | 中转站模型价格、公开目录和可用性监测的数据流 |
 
 ## 不放在这里的内容
 

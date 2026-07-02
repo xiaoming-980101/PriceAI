@@ -3,11 +3,13 @@
 import type { TransitModelPrice, TransitStation } from "@/data/api-transit/types";
 import {
   formatRate,
+  formatTransitModelMultiplier,
   formatOfficialUnitPrice,
   getOfficialTransitUnitCurrency,
   getOfficialTransitUnitPrice,
   getTransitConvertedUnitPrice,
   getTransitEffectiveMetricRate,
+  hasComparableTransitOfficialPrice,
   type TransitPriceMetric,
 } from "@/lib/api-transit";
 
@@ -29,6 +31,7 @@ export function TransitPriceBreakdown({
   mode?: "compact" | "detail";
 }) {
   const hasImageOutput = getOfficialTransitUnitPrice(price.standardModel, "imageOutput") !== null;
+  const hasComparableOfficial = hasComparableTransitOfficialPrice(price.standardModel);
   const compactMetrics = hasImageOutput
     ? priceMetrics.filter(({ metric }) => metric === "input" || metric === "imageOutput")
     : priceMetrics.filter(({ metric }) => metric === "input" || metric === "output");
@@ -38,6 +41,22 @@ export function TransitPriceBreakdown({
     return true;
   });
   const currency = getOfficialTransitUnitCurrency(price.standardModel);
+
+  if (!hasComparableOfficial) {
+    return (
+      <div className="overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-panel-soft)] px-2 py-1.5 leading-tight">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <p className="truncate text-[10px] font-bold text-[var(--color-text-muted)]">公开固定价</p>
+          <span className="shrink-0 rounded-full bg-[var(--color-surface-raised)] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[var(--color-text-muted)] ring-1 ring-[var(--color-border-soft)]">
+            非官方倍率
+          </span>
+        </div>
+        <p className="mt-0.5 text-[13px] font-extrabold tabular-nums text-[var(--color-text-primary)]">
+          {formatTransitModelMultiplier(price)}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-2 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-panel)]">

@@ -114,7 +114,12 @@ const standardModelMatchers = [
   {
     family: "image",
     standardModel: "Nano Banana 2",
-    candidates: ["nano-banana-2", "nano banana 2"],
+    candidates: ["nano-banana-2", "nano banana 2", "gemini-3.1-flash-image", "gemini-3-1-flash-image"],
+  },
+  {
+    family: "image",
+    standardModel: "Nano Banana",
+    candidates: ["nano-banana", "nano banana", "gemini-2.5-flash-image", "gemini-2-5-flash-image"],
   },
   {
     family: "image",
@@ -1049,6 +1054,13 @@ function representativeModelForGroup(group) {
       family: "image",
       standardModel: "Nano Banana 2",
       rawModelName: "nano-banana-2",
+    };
+  }
+  if (/nano[-_\s]?banana|gemini[-_\s]?2[.\-_\s]?5[-_\s]?flash[-_\s]?image/.test(text)) {
+    return {
+      family: "image",
+      standardModel: "Nano Banana",
+      rawModelName: "nano-banana",
     };
   }
   if (/image|draw|生图|绘图|flux/.test(text)) {

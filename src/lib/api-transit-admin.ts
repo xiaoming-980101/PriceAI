@@ -1294,6 +1294,7 @@ function modelSortValue(value: string): number {
     "GPT Image 2",
     "Nano Banana Pro",
     "Nano Banana 2",
+    "Nano Banana",
     "Nano Banana Lite",
     "Sora 2",
     "Sora 2 Pro",
