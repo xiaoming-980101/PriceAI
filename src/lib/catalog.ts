@@ -825,7 +825,7 @@ function applyPriceFloor(product: CanonicalProduct, price: number | null | undef
 function shouldBlockStoredProductFallback(title: string): boolean {
   const value = normalizeTitle(title);
 
-  return isMixedChatGptProTier(value);
+  return isMixedChatGptProTier(value) || isTelegramLanguagePack(value);
 }
 
 export function buildProductGroups(
@@ -1417,6 +1417,7 @@ function isDreaminaProduct(value: string): boolean {
 function isTelegramProduct(value: string, contextValue = ""): boolean {
   if (matches(value, ["飞机大厨", "airplane chefs"])) return false;
   if (isTelegramContactOnly(value)) return false;
+  if (isTelegramLanguagePack(value)) return false;
   if (isNonTelegramAccountProduct(value)) return false;
   if (matches(value, ["grok", "supergrok", "super grok"])) return false;
   if (isTelegramPremiumProduct(value, contextValue)) return false;
@@ -1430,6 +1431,10 @@ function isTelegramProduct(value: string, contextValue = ""): boolean {
 
 function hasTelegramSignal(value: string): boolean {
   return /\b(tg|telegram)\b/.test(value) || matches(value, ["电报", "飞机号", "飞机账号", "飞机成品", "telegram 星星"]);
+}
+
+function isTelegramLanguagePack(value: string): boolean {
+  return hasTelegramSignal(value) && matches(value, ["中文包", "语言包", "汉化包", "官方中文包"]);
 }
 
 function hasTelegramRegionAccountSignal(value: string): boolean {

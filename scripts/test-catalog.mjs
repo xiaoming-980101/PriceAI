@@ -212,6 +212,7 @@ const cases = [
   ["3个月-X-推特 Premium（自带Super Grok）", "x-twitter-premium"],
   ["Telegram成品号 / 规格5", "telegram-account"],
   ["TG电报高权重老号", "telegram-account"],
+  ["TG官方中文包", "other-product"],
   ["Telegram账号|+1美国|1月注册", "telegram-account"],
   ["【印度+91】1~3年 精养老号 | 高权重 | 抗风控强", "telegram-account"],
   ["Telegram Premium会员兑换码 3个月", "telegram-premium"],
