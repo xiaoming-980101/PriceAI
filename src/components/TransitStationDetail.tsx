@@ -68,6 +68,12 @@ import {
   hasTransitAffRelation,
   isTransitStationOutboundAff,
 } from "@/lib/api-transit";
+import {
+  TRANSIT_COMBINED_RATE_EXPLANATION,
+  TRANSIT_MODEL_MULTIPLIER_EXPLANATION,
+  TRANSIT_MONITORED_PRICE_EXPLANATION,
+  TRANSIT_RECHARGE_COEFFICIENT_EXPLANATION,
+} from "@/lib/api-transit-copy";
 import { sanitizeListReturnHref } from "@/lib/list-return";
 
 interface Props {
@@ -240,13 +246,13 @@ export default function TransitStationDetail({ station, children }: Props) {
               {familySummaries.slice(0, 2).map((summary) => (
                 <MetricCard
                   key={summary.family}
-                  label={`${TRANSIT_MODEL_FAMILY_LABELS[summary.family]} 倍率`}
+                  label={`${TRANSIT_MODEL_FAMILY_LABELS[summary.family]} 综合倍率`}
                   value={formatRate(summary.combinedRateMin)}
                   helper={`${summary.priceCount} 个分组`}
                 />
               ))}
               {familySummaries.length === 0 ? (
-                <MetricCard label="模型倍率" value="—" helper="暂无报价" />
+                <MetricCard label="综合倍率" value="—" helper="暂无报价" />
               ) : null}
               <MetricCard label="可用率" value={formatPercent(stationAvailability.sevenDayRate)} helper={`样本 ${stationAvailability.sevenDaySamples}`} />
               <MetricCard label="最近检查" value={formatDateMinute(stationAvailability.lastCheckedAt)} helper={formatAvailabilityBasis(stationAvailability)} />
@@ -950,8 +956,8 @@ function PriceTable({
                   <thead>
                     <tr className="bg-[#f2f4f4]/50">
                       <DataTableHead compact>分组 / 模型</DataTableHead>
-                      <DataTableHead compact explanation="充值折算系数 × 当前分组模型倍率；越低表示按官方价折算后越便宜。">综合倍率</DataTableHead>
-                      <DataTableHead compact explanation="用代表模型的官方输入、输出、缓存或图片价格折算出的监测价格。">监测模型价格</DataTableHead>
+                      <DataTableHead compact explanation={TRANSIT_COMBINED_RATE_EXPLANATION}>综合倍率</DataTableHead>
+                      <DataTableHead compact explanation={TRANSIT_MONITORED_PRICE_EXPLANATION}>监测模型价格</DataTableHead>
                       <DataTableHead compact explanation="展示该分组的可用性探测、来源披露和最近监测确认时间。">监测 / 确认</DataTableHead>
                     </tr>
                   </thead>
@@ -1372,8 +1378,8 @@ function PriceGroupMobileCard({
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <MobilePriceFact label="充值" value={formatRate(group.rechargeCoefficient)} />
-        <MobilePriceFact label="模型" value={formatModelRateRange(group.modelMultiplierMin, group.modelMultiplierMax)} />
+        <MobilePriceFact label="充值折算" value={formatRate(group.rechargeCoefficient)} />
+        <MobilePriceFact label="模型倍率" value={formatModelRateRange(group.modelMultiplierMin, group.modelMultiplierMax)} />
         <MobilePriceFact label="覆盖" value={`${group.prices.length} 个模型`} />
         <MobilePriceFact label="可用率" value={formatPercent(group.sevenDayRate)} />
       </div>
@@ -1469,8 +1475,8 @@ function PriceGroupRow({
           {formatRate(group.combinedRate)}
         </span>
         <div className="mt-2 space-y-1 text-[11px] font-semibold text-[#5a6061]">
-          <div>充值 {formatRate(group.rechargeCoefficient)}</div>
-          <div>模型 {formatModelRateRange(group.modelMultiplierMin, group.modelMultiplierMax)}</div>
+          <div title={TRANSIT_RECHARGE_COEFFICIENT_EXPLANATION}>充值折算 {formatRate(group.rechargeCoefficient)}</div>
+          <div title={TRANSIT_MODEL_MULTIPLIER_EXPLANATION}>模型倍率 {formatModelRateRange(group.modelMultiplierMin, group.modelMultiplierMax)}</div>
           <div>{group.prices.length} 个模型</div>
         </div>
       </td>

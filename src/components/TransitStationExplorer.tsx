@@ -62,6 +62,10 @@ import {
   parseRechargeRatio,
   type TransitSortKey,
 } from "@/lib/api-transit";
+import {
+  TRANSIT_COMBINED_RATE_EXPLANATION,
+  TRANSIT_RATE_BREAKDOWN_EXPLANATION,
+} from "@/lib/api-transit-copy";
 
 const CHANNEL_OPTIONS: { value: TransitChannelType | "all"; label: string }[] = [
   { value: "all", label: "全部渠道" },
@@ -204,10 +208,10 @@ export default function TransitStationExplorer({ stations }: Props) {
   }, [channelFilter, familyFilter, modelFilter, poolFilter, search, sortBy]);
 
   const rateColumnLabel = modelFilter !== "all"
-    ? `${modelFilter} 综合`
+    ? `${modelFilter} 综合倍率`
     : effectiveFamilyFilter === "all"
-      ? "最低综合"
-      : `${TRANSIT_MODEL_FAMILY_LABELS[effectiveFamilyFilter]} 综合`;
+      ? "最低综合倍率"
+      : `${TRANSIT_MODEL_FAMILY_LABELS[effectiveFamilyFilter]} 综合倍率`;
   const availabilityColumnExplanation = modelFilter !== "all"
     ? `${modelFilter} 近 7 日可用性样本汇总；样本不足时不会借用站点整体稳定性。`
     : effectiveFamilyFilter === "all"
@@ -338,10 +342,10 @@ export default function TransitStationExplorer({ stations }: Props) {
                 <thead className="bg-[#f2f4f4] text-[0.68rem] font-semibold text-[#5a6061]">
                   <tr role="row">
                     <DataTableHead>站点</DataTableHead>
-                    <DataTableHead explanation="综合倍率 = 充值折算系数 × 模型分组倍率；越低表示按官方价折算后越便宜。">
+                    <DataTableHead className="whitespace-nowrap" explanation={TRANSIT_COMBINED_RATE_EXPLANATION}>
                       {rateColumnLabel}
                     </DataTableHead>
-                    <DataTableHead explanation="站内充值额度与人民币的折算关系，会影响实际扣费倍率。">充值倍率</DataTableHead>
+                    <DataTableHead explanation={TRANSIT_RATE_BREAKDOWN_EXPLANATION}>倍率构成</DataTableHead>
                     <DataTableHead explanation={availabilityColumnExplanation}>稳定性</DataTableHead>
                     <DataTableHead explanation="公开披露或 PriceAI 推断的上游来源与号池类型，用于判断风险边界。">来源渠道</DataTableHead>
                     <DataTableHead>更新时间</DataTableHead>
@@ -372,6 +376,7 @@ export default function TransitStationExplorer({ stations }: Props) {
                 href={stationDetailHref(station.slug)}
                 activeFamily={effectiveFamilyFilter}
                 activeStandardModel={modelFilter}
+                rateLabel={rateColumnLabel}
                 onClick={navigateToStation}
                 onWarm={() => prefetchStation(station.slug)}
               />
@@ -418,10 +423,11 @@ function getDisplayRechargeRatio(text: string | null): string | null {
 
 function rechargeRatioTitle(originalText: string | null, displayRatio: string): string {
   const quota = parseRechargeRatio(displayRatio);
-  const quotaText = quota === null ? "未解析" : `1 元约等于 ${quota.toFixed(2)} 站内美元额度`;
+  const quotaText = quota === null ? "未解析" : `1 元约等于 ${quota.toFixed(2)} 站内额度`;
+  const suffix = "这里只影响充值折算，不代表模型倍率。";
   return originalText && originalText !== displayRatio
-    ? `充值比例：${displayRatio}；原始说明：${originalText}；${quotaText}`
-    : `充值比例：${displayRatio}；${quotaText}`;
+    ? `充值比例：${displayRatio}；原始说明：${originalText}；${quotaText}；${suffix}`
+    : `充值比例：${displayRatio}；${quotaText}；${suffix}`;
 }
 
 function CombinedRateCell({
@@ -485,22 +491,25 @@ function PriceBreakdownCell({
   return (
     <div className={compact ? "space-y-1" : "min-w-[166px] space-y-1"}>
       <div className="flex items-center justify-between gap-2 rounded-md bg-[#f2f4f4] px-2 py-1 text-[11px]">
-        <span className="font-semibold text-[#5a6061]">充值</span>
+        <span className="font-semibold text-[#5a6061]">充值折算</span>
         <RechargeRatioDisplay station={station} />
       </div>
-      <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold">
-        {visibleSummaries.length ? (
-          visibleSummaries.map((item) => (
-            <CompactRateTag
-              key={activeStandardModel !== "all" ? activeStandardModel : item.family}
-              label={activeStandardModel !== "all" ? "模型" : TRANSIT_MODEL_FAMILY_LABELS[item.family]}
-              value={formatMultiplierRange(item)}
-              missing={false}
-            />
-          ))
-        ) : (
-          <CompactRateTag label="模型" value="—" missing />
-        )}
+      <div className="flex items-start gap-1.5 text-[11px] font-semibold">
+        <span className="mt-0.5 shrink-0 text-[10px] font-extrabold text-[#7f8889]">模型倍率</span>
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          {visibleSummaries.length ? (
+            visibleSummaries.map((item) => (
+              <CompactRateTag
+                key={activeStandardModel !== "all" ? activeStandardModel : item.family}
+                label={activeStandardModel !== "all" ? "模型" : TRANSIT_MODEL_FAMILY_LABELS[item.family]}
+                value={formatMultiplierRange(item)}
+                missing={false}
+              />
+            ))
+          ) : (
+            <CompactRateTag label="模型" value="—" missing />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -598,6 +607,7 @@ function StationCard({
   href,
   activeFamily,
   activeStandardModel,
+  rateLabel,
   onClick,
   onWarm,
 }: {
@@ -605,6 +615,7 @@ function StationCard({
   href: string;
   activeFamily: "all" | TransitModelFamily;
   activeStandardModel: "all" | TransitStandardModel;
+  rateLabel: string;
   onClick: (href: string) => void;
   onWarm: () => void;
 }) {
@@ -631,13 +642,7 @@ function StationCard({
       </div>
 
       <div className="mb-3 flex items-center justify-between gap-3 border-t border-[#edf0f1] pt-3 text-xs">
-        <span className="text-[10px] font-bold text-[#5a6061]">
-          {activeStandardModel !== "all"
-            ? `${activeStandardModel} 综合`
-            : activeFamily === "all"
-              ? "最低综合"
-              : `${TRANSIT_MODEL_FAMILY_LABELS[activeFamily]} 综合`}
-        </span>
+        <span className="min-w-0 break-words text-[10px] font-bold text-[#5a6061]">{rateLabel}</span>
         <CombinedRateCell station={station} family={activeFamily} standardModel={activeStandardModel} compact />
       </div>
       <div className="mb-3">
