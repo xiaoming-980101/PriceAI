@@ -44,6 +44,7 @@ import {
 } from "@/data/api-transit/types";
 import {
   ALLOWED_RETURN_KEYS,
+  compareTransitModelPriority,
   getActiveTransitCommercialOffers,
   formatAvailability,
   formatPercent,
@@ -54,6 +55,7 @@ import {
   getFamilyAvailabilitySourceMeta,
   getFamilyPrices,
   getFamilyRateSummary,
+  getRepresentativeTransitPrice,
   getPrimaryTransitCommercialOffer,
   getPrimaryTransitOutboundOffer,
   getRechargeCoefficientFromRatio,
@@ -251,7 +253,7 @@ export default function TransitStationDetail({ station, children }: Props) {
                   key={summary.family}
                   label={`${TRANSIT_MODEL_FAMILY_LABELS[summary.family]} 综合倍率`}
                   value={formatRate(summary.combinedRateMin)}
-                  helper={`${summary.priceCount} 个分组`}
+                  helper={`${getFamilyPriceGroups(station, summary.family).length} 个分组`}
                 />
               ))}
               {familySummaries.length === 0 ? (
@@ -1539,8 +1541,11 @@ function buildPriceGroup(
   groupName: string,
   prices: TransitModelPrice[],
 ): TransitPriceGroup {
-  const sortedPrices = [...prices].sort(comparePricePriority);
-  const primaryPrice = sortedPrices[0];
+  const primaryPrice = getRepresentativeTransitPrice(prices) ?? prices[0];
+  const sortedPrices = [
+    primaryPrice,
+    ...prices.filter((price) => price !== primaryPrice).sort(comparePricePriority),
+  ];
   const rechargeCoefficient =
     getRechargeCoefficientFromRatio(primaryPrice.rechargeRatio) ??
     getStationRechargeCoefficient(station);
@@ -1595,38 +1600,7 @@ function buildPriceGroup(
 }
 
 function comparePricePriority(left: TransitModelPrice, right: TransitModelPrice): number {
-  return modelPriority(right.standardModel) - modelPriority(left.standardModel) ||
-    new Date(right.lastVerifiedAt).getTime() - new Date(left.lastVerifiedAt).getTime();
-}
-
-function modelPriority(model: TransitModelPrice["standardModel"]): number {
-  if (model === "GPT Image 2") return 602;
-  if (model === "Nano Banana Pro") return 595;
-  if (model === "Nano Banana 2") return 594;
-  if (model === "Nano Banana") return 593;
-  if (model === "Nano Banana Lite") return 592;
-  if (model === "Sora 2 Pro") return 590;
-  if (model === "Sora 2") return 589;
-  if (model === "Veo 3.1") return 588;
-  if (model === "Veo 3.1 Lite") return 587;
-  if (model === "Gemini Omni Flash") return 586;
-  if (model === "Seedance 2.0") return 585;
-  if (model === "Kling 2.5 Turbo") return 584;
-  if (model === "GPT 5.5") return 505;
-  if (model === "GPT 5.4") return 504;
-  if (model === "Claude Fable 5") return 510;
-  if (model === "Claude Sonnet 5") return 500;
-  if (model === "Claude Opus 4.8") return 408;
-  if (model === "Claude Opus 4.7") return 407;
-  if (model === "Claude Opus 4.6") return 406;
-  if (model === "Claude Sonnet 4.6") return 306;
-  if (model === "Gemini 3.5 Flash") return 335;
-  if (model === "Gemini 3.1 Pro") return 331;
-  if (model === "GLM-5.2") return 252;
-  if (model === "GLM-5.1") return 251;
-  if (model === "DeepSeek V4 Pro") return 244;
-  if (model === "DeepSeek V4 Flash") return 243;
-  return 0;
+  return compareTransitModelPriority(left, right);
 }
 
 function shortModelLabel(model: TransitModelPrice["standardModel"]): string {

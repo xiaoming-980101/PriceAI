@@ -101,6 +101,50 @@ export function getCombinedRateForPrice(
   return coefficient * price.modelMultiplier;
 }
 
+export function getRepresentativeTransitPrice(
+  prices: TransitModelPrice[]
+): TransitModelPrice | null {
+  return [...prices].sort(compareTransitModelPriority)[0] ?? null;
+}
+
+export function compareTransitModelPriority(
+  left: TransitModelPrice,
+  right: TransitModelPrice
+): number {
+  return getTransitModelPriority(right.standardModel) - getTransitModelPriority(left.standardModel) ||
+    new Date(right.lastVerifiedAt).getTime() - new Date(left.lastVerifiedAt).getTime();
+}
+
+function getTransitModelPriority(model: TransitModelPrice["standardModel"]): number {
+  if (model === "GPT Image 2") return 602;
+  if (model === "Nano Banana Pro") return 595;
+  if (model === "Nano Banana 2") return 594;
+  if (model === "Nano Banana") return 593;
+  if (model === "Nano Banana Lite") return 592;
+  if (model === "Sora 2 Pro") return 590;
+  if (model === "Sora 2") return 589;
+  if (model === "Veo 3.1") return 588;
+  if (model === "Veo 3.1 Lite") return 587;
+  if (model === "Gemini Omni Flash") return 586;
+  if (model === "Seedance 2.0") return 585;
+  if (model === "Kling 2.5 Turbo") return 584;
+  if (model === "GPT 5.5") return 505;
+  if (model === "GPT 5.4") return 504;
+  if (model === "Claude Fable 5") return 510;
+  if (model === "Claude Sonnet 5") return 500;
+  if (model === "Claude Opus 4.8") return 408;
+  if (model === "Claude Opus 4.7") return 407;
+  if (model === "Claude Opus 4.6") return 406;
+  if (model === "Claude Sonnet 4.6") return 306;
+  if (model === "Gemini 3.5 Flash") return 335;
+  if (model === "Gemini 3.1 Pro") return 331;
+  if (model === "GLM-5.2") return 252;
+  if (model === "GLM-5.1") return 251;
+  if (model === "DeepSeek V4 Pro") return 244;
+  if (model === "DeepSeek V4 Flash") return 243;
+  return 0;
+}
+
 export type TransitPriceMetric = "input" | "output" | "cacheWrite" | "cacheRead" | "imageOutput";
 export type TransitPriceCurrency = "USD" | "CNY";
 
@@ -469,12 +513,14 @@ export type TransitAvailabilityRollup = Pick<
 function summarizeRateScope(
   station: TransitStation,
   family: TransitModelFamily,
-  prices: TransitModelPrice[]
+  prices: TransitModelPrice[],
+  options: { rollupByGroup?: boolean } = {}
 ): TransitFamilyRateSummary {
-  const multipliers = prices
+  const scopePrices = options.rollupByGroup ? getRepresentativePricesByGroup(prices) : prices;
+  const multipliers = scopePrices
     .map((price) => price.modelMultiplier)
     .filter((value): value is number => value !== null && Number.isFinite(value));
-  const combinedRates = prices
+  const combinedRates = scopePrices
     .map((price) => getCombinedRateForPrice(station, price))
     .filter((value): value is number => value !== null && Number.isFinite(value));
   const availabilitySamples = prices.reduce(
@@ -520,7 +566,7 @@ export function getFamilyRateSummary(
   station: TransitStation,
   family: TransitModelFamily
 ): TransitFamilyRateSummary {
-  return summarizeRateScope(station, family, getFamilyPrices(station, family));
+  return summarizeRateScope(station, family, getFamilyPrices(station, family), { rollupByGroup: true });
 }
 
 export function getStandardModelRateSummary(
@@ -532,6 +578,20 @@ export function getStandardModelRateSummary(
     TRANSIT_STANDARD_MODEL_FAMILY[standardModel],
     getStandardModelPrices(station, standardModel)
   );
+}
+
+function getRepresentativePricesByGroup(prices: TransitModelPrice[]): TransitModelPrice[] {
+  const grouped = new Map<string, TransitModelPrice[]>();
+  for (const price of prices) {
+    const groupName = price.groupName || "默认分组";
+    const groupPrices = grouped.get(groupName) || [];
+    groupPrices.push(price);
+    grouped.set(groupName, groupPrices);
+  }
+
+  return Array.from(grouped.values())
+    .map(getRepresentativeTransitPrice)
+    .filter((price): price is TransitModelPrice => price !== null);
 }
 
 export type TransitStationComparisonSummary = {

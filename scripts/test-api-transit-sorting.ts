@@ -3,6 +3,7 @@ import {
   getActiveTransitCommercialOffers,
   getStationComparisonSummary,
   getStationPublishedAvailabilitySummary,
+  getStandardModelRateSummary,
   normalizedTransitCommercialOfferDisclosure,
   scoreTransitCombinedRate,
 } from "../src/lib/api-transit";
@@ -137,6 +138,61 @@ const publishedAvailability = getStationPublishedAvailabilitySummary(mixedAvaila
 assertEqual(publishedAvailability.sevenDaySamples, 298);
 assertEqual(publishedAvailability.sevenDayRate, 0.916);
 assertEqual(getStationComparisonSummary(mixedAvailabilityStation).stabilityRate, 0.916);
+
+const mixedClaudeGroupStation = station({
+  id: "mixed-claude-group",
+  name: "Mixed Claude Group",
+  claudeRate: 1.32,
+  availabilityRate: 1,
+  availabilitySamples: 1,
+});
+mixedClaudeGroupStation.prices = [
+  {
+    ...mixedClaudeGroupStation.prices[0]!,
+    standardModel: "Claude Sonnet 4.6",
+    groupName: "GPT",
+    modelMultiplier: 0.06,
+    inputPrice: 0.06,
+    outputPrice: 0.06,
+    cacheReadPrice: 0.06,
+    cacheWritePrice: 0.06,
+  },
+  {
+    ...mixedClaudeGroupStation.prices[0]!,
+    standardModel: "Claude Opus 4.6",
+    groupName: "GPT",
+    modelMultiplier: 0.9,
+    inputPrice: 0.9,
+    outputPrice: 0.9,
+    cacheReadPrice: 0.9,
+    cacheWritePrice: 0.9,
+  },
+  {
+    ...mixedClaudeGroupStation.prices[0]!,
+    standardModel: "Claude Opus 4.6",
+    groupName: "Kiro",
+    modelMultiplier: 0.22,
+    inputPrice: 0.22,
+    outputPrice: 0.22,
+    cacheReadPrice: 0.22,
+    cacheWritePrice: 0.22,
+  },
+  {
+    ...mixedClaudeGroupStation.prices[0]!,
+    standardModel: "Claude Opus 4.6",
+    groupName: "Claude",
+    modelMultiplier: 1.32,
+    inputPrice: 1.32,
+    outputPrice: 1.32,
+    cacheReadPrice: 1.32,
+    cacheWritePrice: 1.32,
+  },
+];
+const mixedClaudeSummary = getStationComparisonSummary(mixedClaudeGroupStation);
+assertEqual(mixedClaudeSummary.claude.priceCount, 4);
+assertEqual(mixedClaudeSummary.claude.combinedRateMin, 0.22);
+assertEqual(mixedClaudeSummary.bestCombinedRate, 0.22);
+assertEqual(getStandardModelRateSummary(mixedClaudeGroupStation, "Claude Sonnet 4.6").combinedRateMin, 0.06);
 
 const commercialStation = station({
   id: "commercial-test",
