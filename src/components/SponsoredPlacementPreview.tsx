@@ -7,6 +7,7 @@ import { type ComponentProps, type ReactNode, useCallback, useEffect, useMemo, u
 import {
   defaultFooterSponsorCreatives,
   getVisibleSponsorCreatives,
+  sponsorCreativeDisclosureLabel,
   type SponsorCreative,
   type SponsorPlacementKind,
   type SponsorSettingsSummary,
@@ -217,6 +218,8 @@ function TopNoticeAd({
   onDismiss: () => void;
   pathname: string;
 }) {
+  const disclosureLabel = sponsorCreativeDisclosureLabel(creative, kind);
+
   return (
     <section
       aria-label={`${copy.eyebrow}广告位`}
@@ -232,7 +235,7 @@ function TopNoticeAd({
         >
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-[#2f7a4b] ring-1 ring-[#b9d8c9]">
             <Megaphone className="h-3.5 w-3.5" />
-            {copy.label}
+            {disclosureLabel}
           </span>
           <span className="truncate">
             <span className="font-extrabold">{creative.title || copy.title}</span>
@@ -372,6 +375,7 @@ function SponsorCard({
   path: string;
   compact?: boolean;
 }) {
+  const disclosureLabel = sponsorCreativeDisclosureLabel(card, kind);
   const imageUrl = sponsorAssetDisplayUrl(card.imageUrl);
 
   return (
@@ -402,7 +406,7 @@ function SponsorCard({
           <h3 className="min-w-0 text-sm font-extrabold leading-5 text-[#202829]">{card.title}</h3>
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#fff7e8] px-2 py-0.5 text-[11px] font-extrabold text-[#7a541b]">
             <Megaphone className="h-3 w-3" />
-            {copy.label}
+            {disclosureLabel}
           </span>
         </div>
         <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#5a6061]">{card.description}</p>
@@ -468,6 +472,7 @@ function getPreviewCreatives(kind: SponsorPlacementKind): SponsorCreative[] {
     campaignId: `${copy.id}-preview`,
     visualTitle: copy.visualTitle,
     visualMeta: copy.visualBody,
+    label: copy.label,
     tone: copy.tone,
   }];
 }

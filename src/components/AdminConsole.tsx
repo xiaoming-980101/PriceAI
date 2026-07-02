@@ -48,7 +48,13 @@ import {
   knownAutoCollectorHosts as createKnownAutoCollectorHosts,
 } from "@/lib/collector-registry";
 import { sponsorAssetDisplayUrl } from "@/lib/sponsor-asset-url";
-import { sponsorPlacementLabels, type SponsorCreative } from "@/lib/sponsor-settings-shared";
+import {
+  SPONSOR_DISCLOSURE_LABEL_MAX_LENGTH,
+  sponsorCreativeDisclosureLabel,
+  sponsorDisclosureLabelOptions,
+  sponsorPlacementLabels,
+  type SponsorCreative,
+} from "@/lib/sponsor-settings-shared";
 import type {
   AdminSummary,
   ChannelSubmission,
@@ -4973,6 +4979,12 @@ function SponsorSettingsPanel({
                               <option value="amber">琥珀色</option>
                             </select>
                           </label>
+                          <SponsorDisclosureLabelField
+                            kind={kind}
+                            index={index}
+                            creative={creative}
+                            setDraft={setDraft}
+                          />
                           <label className="block md:col-span-2">
                             <span className="mb-1 block text-xs font-medium text-[#5a6061]">标题</span>
                             <input
@@ -5074,6 +5086,64 @@ function SponsorSettingsPanel({
         </div>
       </form>
     </section>
+  );
+}
+
+function SponsorDisclosureLabelField({
+  kind,
+  index,
+  creative,
+  setDraft,
+}: {
+  kind: string;
+  index: number;
+  creative: SponsorCreative;
+  setDraft: Dispatch<SetStateAction<SponsorSettings>>;
+}) {
+  const fallbackLabel = sponsorCreativeDisclosureLabel({ label: null }, kind);
+  const currentLabel = creative.label || "";
+
+  return (
+    <div className="md:col-span-2">
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-[#5a6061]">角标文案</span>
+        <input
+          value={currentLabel}
+          onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { label: event.target.value }))}
+          className={adminInputClassName}
+          maxLength={SPONSOR_DISCLOSURE_LABEL_MAX_LENGTH}
+          placeholder={`留空默认显示「${fallbackLabel}」`}
+        />
+      </label>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {sponsorDisclosureLabelOptions.map((label) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => setDraft((current) => updateSponsorCreative(current, kind, index, { label }))}
+            className={`inline-flex h-7 items-center rounded-full px-2.5 text-[11px] font-semibold transition ${
+              currentLabel === label
+                ? "bg-[#2d3435] text-white"
+                : "bg-[#f2f4f4] text-[#5a6061] hover:bg-[#e4e9ea] hover:text-[#202829]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        {currentLabel ? (
+          <button
+            type="button"
+            onClick={() => setDraft((current) => updateSponsorCreative(current, kind, index, { label: "" }))}
+            className="inline-flex h-7 items-center rounded-full bg-white px-2.5 text-[11px] font-semibold text-[#8a9293] ring-1 ring-[#adb3b4]/25 transition hover:text-[#2d3435]"
+          >
+            用默认
+          </button>
+        ) : null}
+      </div>
+      <span className="mt-1 block text-[11px] leading-5 text-[#8a9293]">
+        用于卡片右侧披露角标，建议保留广告或赞助语义，最多 {SPONSOR_DISCLOSURE_LABEL_MAX_LENGTH} 个字。
+      </span>
+    </div>
   );
 }
 
@@ -5179,7 +5249,7 @@ function SponsorImageField({
 
 function SponsorCreativePreview({ creative, kind }: { creative: SponsorCreative; kind: string }) {
   const imageUrl = sponsorAssetDisplayUrl(creative.imageUrl);
-  const label = kind === "apiTransit" || kind === "apiTransitModels" ? "赞助" : "广告";
+  const label = sponsorCreativeDisclosureLabel(creative, kind);
 
   return (
     <div className="mt-4 rounded-lg bg-[#f9f9f9] p-3 ring-1 ring-[#adb3b4]/20">
@@ -5344,6 +5414,7 @@ function addSponsorCreative(settings: SponsorSettings, kind: string): SponsorSet
     imageUrl: null,
     visualTitle: "",
     visualMeta: "",
+    label: "",
     tone: "green",
     startsAt: null,
     endsAt: null,

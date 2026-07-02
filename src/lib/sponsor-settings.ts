@@ -5,6 +5,7 @@ import { isSponsorAssetReference } from "@/lib/sponsor-asset-storage";
 import {
   createDefaultSponsorSettingsSummary,
   defaultSponsorCreativesByPlacement,
+  SPONSOR_DISCLOSURE_LABEL_MAX_LENGTH,
   SPONSOR_PLACEMENT_KINDS,
   type SponsorCreative,
   type SponsorCreativeStatus,
@@ -207,7 +208,7 @@ function normalizeCreative(value: unknown, fallback: SponsorCreative | undefined
     imageUrl: cleanAssetUrl(record.imageUrl, fallback?.imageUrl || null),
     visualTitle: cleanText(record.visualTitle, fallback?.visualTitle || title),
     visualMeta: cleanText(record.visualMeta, fallback?.visualMeta || ""),
-    label: cleanText(record.label, fallback?.label || null),
+    label: cleanText(record.label, fallback?.label || null, SPONSOR_DISCLOSURE_LABEL_MAX_LENGTH),
     tone: readTone(record.tone, fallback?.tone || "green"),
     startsAt: cleanDate(record.startsAt, fallback?.startsAt || null),
     endsAt: cleanDate(record.endsAt, fallback?.endsAt || null),

@@ -10,6 +10,15 @@ export const SPONSOR_PLACEMENT_KINDS = [
 export type SponsorPlacementKind = (typeof SPONSOR_PLACEMENT_KINDS)[number];
 export type SponsorTone = "green" | "blue" | "amber";
 export type SponsorCreativeStatus = "draft" | "live" | "paused" | "expired";
+export const SPONSOR_DISCLOSURE_LABEL_MAX_LENGTH = 8;
+export const sponsorDisclosureLabelOptions = [
+  "广告",
+  "赞助",
+  "广告赞助",
+  "活动赞助",
+  "生态赞助",
+  "合作展示",
+] as const;
 
 export type SponsorCreative = {
   id: string;
@@ -51,6 +60,18 @@ export const sponsorPlacementLabels: Record<SponsorPlacementKind, string> = {
   apiModels: "API 模型页赞助位",
   listFooter: "底部赞助展示区",
 };
+
+export function defaultSponsorDisclosureLabel(kind: SponsorPlacementKind | string): string {
+  return kind === "apiTransit" || kind === "apiTransitModels" ? "赞助" : "广告";
+}
+
+export function sponsorCreativeDisclosureLabel(
+  creative: Pick<SponsorCreative, "label"> | null | undefined,
+  kind: SponsorPlacementKind | string,
+): string {
+  const label = String(creative?.label || "").trim().slice(0, SPONSOR_DISCLOSURE_LABEL_MAX_LENGTH);
+  return label || defaultSponsorDisclosureLabel(kind);
+}
 
 export const defaultSponsorCreativesByPlacement: Record<SponsorPlacementKind, SponsorCreative[]> = {
   topBanner: [
