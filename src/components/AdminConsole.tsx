@@ -29,6 +29,7 @@ import {
   Server,
   Store,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   TerminalSquare,
   X,
@@ -4977,7 +4978,9 @@ function SponsorSettingsPanel({
                   <div>
                     <h4 className="text-sm font-semibold text-[#202829]">{sponsorPlacementLabel(kind)}</h4>
                     <p className="mt-1 text-xs leading-5 text-[#5a6061]">
-                      {kind === "listFooter"
+                      {kind === "topBanner"
+                        ? "展示为首页顶部通知条，只需要短标题、说明和跳转链接，不使用图片卡。"
+                        : kind === "listFooter"
                         ? "底部区域支持多张图片卡，可放 AI 周边和中转 API 周边赞助；不得写成榜单推荐或排序权益。"
                         : "展示为轻量横幅或图文卡片。"}
                     </p>
@@ -5074,18 +5077,24 @@ function SponsorSettingsPanel({
                               <option value="expired">过期</option>
                             </select>
                           </label>
-                          <label className="block">
-                            <span className="mb-1 block text-xs font-medium text-[#5a6061]">色调</span>
-                            <select
-                              value={creative.tone}
-                              onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { tone: event.target.value as SponsorCreative["tone"] }))}
-                              className={adminInputClassName}
-                            >
-                              <option value="green">绿色</option>
-                              <option value="blue">蓝色</option>
-                              <option value="amber">琥珀色</option>
-                            </select>
-                          </label>
+                          {kind !== "topBanner" ? (
+                            <label className="block">
+                              <span className="mb-1 block text-xs font-medium text-[#5a6061]">色调</span>
+                              <select
+                                value={creative.tone}
+                                onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { tone: event.target.value as SponsorCreative["tone"] }))}
+                                className={adminInputClassName}
+                              >
+                                <option value="green">绿色</option>
+                                <option value="blue">蓝色</option>
+                                <option value="amber">琥珀色</option>
+                              </select>
+                            </label>
+                          ) : (
+                            <p className="rounded-lg bg-[#eef3f8] px-3 py-2 text-[11px] leading-5 text-[#47657a]">
+                              顶部横幅使用固定通知条样式。
+                            </p>
+                          )}
                           <SponsorDisclosureLabelField
                             kind={kind}
                             index={index}
@@ -5118,28 +5127,36 @@ function SponsorSettingsPanel({
                             />
                             <span className="mt-1 block text-[11px] leading-5 text-[#8a9293]">外部链接会自动追加 utm_source=priceai、utm_medium=sponsor、utm_campaign 和 utm_content。</span>
                           </label>
-                          <SponsorImageField
-                            kind={kind}
-                            index={index}
-                            creative={creative}
-                            setDraft={setDraft}
-                          />
-                          <label className="block">
-                            <span className="mb-1 block text-xs font-medium text-[#5a6061]">图片主标题</span>
-                            <input
-                              value={creative.visualTitle || ""}
-                              onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { visualTitle: event.target.value }))}
-                              className={adminInputClassName}
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="mb-1 block text-xs font-medium text-[#5a6061]">图片副信息</span>
-                            <input
-                              value={creative.visualMeta || ""}
-                              onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { visualMeta: event.target.value }))}
-                              className={adminInputClassName}
-                            />
-                          </label>
+                          {kind !== "topBanner" ? (
+                            <>
+                              <SponsorImageField
+                                kind={kind}
+                                index={index}
+                                creative={creative}
+                                setDraft={setDraft}
+                              />
+                              <label className="block">
+                                <span className="mb-1 block text-xs font-medium text-[#5a6061]">图片主标题</span>
+                                <input
+                                  value={creative.visualTitle || ""}
+                                  onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { visualTitle: event.target.value }))}
+                                  className={adminInputClassName}
+                                />
+                              </label>
+                              <label className="block">
+                                <span className="mb-1 block text-xs font-medium text-[#5a6061]">图片副信息</span>
+                                <input
+                                  value={creative.visualMeta || ""}
+                                  onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { visualMeta: event.target.value }))}
+                                  className={adminInputClassName}
+                                />
+                              </label>
+                            </>
+                          ) : (
+                            <p className="md:col-span-2 rounded-lg bg-[#eef3f8] px-3 py-2 text-[11px] leading-5 text-[#47657a]">
+                              顶部横幅是通知条样式，不读取图片素材；前台展示为一行短文案和跳转箭头。
+                            </p>
+                          )}
                           <label className="block">
                             <span className="mb-1 block text-xs font-medium text-[#5a6061]">开始时间</span>
                             <input
@@ -5159,7 +5176,9 @@ function SponsorSettingsPanel({
                             />
                           </label>
                         </div>
-                        <SponsorCreativePreview creative={creative} kind={kind} />
+                        {kind === "topBanner"
+                          ? <SponsorTopBannerPreview creative={creative} kind={kind} />
+                          : <SponsorCreativePreview creative={creative} kind={kind} />}
                       </div>
                     ))}
                   </div>
@@ -5209,6 +5228,9 @@ function SponsorDisclosureLabelField({
 }) {
   const fallbackLabel = sponsorCreativeDisclosureLabel({ label: null }, kind);
   const currentLabel = creative.label || "";
+  const helperText = kind === "topBanner"
+    ? `用于顶部通知条左侧披露角标，建议保留广告或赞助语义，最多 ${SPONSOR_DISCLOSURE_LABEL_MAX_LENGTH} 个字。`
+    : `用于卡片右侧披露角标，建议保留广告或赞助语义，最多 ${SPONSOR_DISCLOSURE_LABEL_MAX_LENGTH} 个字。`;
 
   return (
     <div className="md:col-span-2">
@@ -5248,7 +5270,7 @@ function SponsorDisclosureLabelField({
         ) : null}
       </div>
       <span className="mt-1 block text-[11px] leading-5 text-[#8a9293]">
-        用于卡片右侧披露角标，建议保留广告或赞助语义，最多 {SPONSOR_DISCLOSURE_LABEL_MAX_LENGTH} 个字。
+        {helperText}
       </span>
     </div>
   );
@@ -5349,6 +5371,38 @@ function SponsorImageField({
             打开图片
           </a>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+function SponsorTopBannerPreview({ creative, kind }: { creative: SponsorCreative; kind: string }) {
+  const label = sponsorCreativeDisclosureLabel(creative, kind);
+
+  return (
+    <div className="mt-4 rounded-lg bg-[#f9f9f9] p-3 ring-1 ring-[#adb3b4]/20">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-[#2d3435]">横幅效果预览</span>
+        <span className="rounded-full bg-[#eef3f8] px-2 py-0.5 text-[11px] font-semibold text-[#47657a]">首页顶部通知条</span>
+      </div>
+      <div className="overflow-hidden rounded-lg border-b border-[#d8e3df] bg-[#edf7f3] text-[#202829] ring-1 ring-[#d8e3df]">
+        <div className="flex min-h-11 items-center gap-3 px-3">
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-2 text-sm leading-6 text-[#2f6247]">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-[#2f7a4b] ring-1 ring-[#b9d8c9]">
+              <Megaphone className="h-3.5 w-3.5" />
+              {label}
+            </span>
+            <span className="truncate">
+              <span className="font-extrabold">{creative.title || "顶部横幅标题"}</span>
+              <span className="mx-2 text-[#7d9690]">/</span>
+              {creative.description || "这里会显示一行顶部通知说明。"}
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0" />
+          </div>
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#5a6061] ring-1 ring-[#d8e3df]">
+            <X className="h-4 w-4" />
+          </span>
+        </div>
       </div>
     </div>
   );
