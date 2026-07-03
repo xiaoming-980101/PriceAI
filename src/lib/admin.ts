@@ -3108,7 +3108,7 @@ export async function approveSubmission(
 
   const importedOfferResult = importedOffers.length
     ? await upsertRawOffers(importedOffers, { collectionMethod: source.collectionMethod === "manual" ? "http" : source.collectionMethod })
-    : { receivedCount: 0, writtenCount: 0, unchangedCount: 0, refreshedCount: 0 };
+    : { receivedCount: 0, writtenCount: 0, unchangedCount: 0, refreshedCount: 0, confirmedCount: 0 };
   const importedOfferCount = importedOfferResult.receivedCount;
 
   const reviewedAt = new Date().toISOString();
@@ -3134,6 +3134,7 @@ export async function approveSubmission(
           writtenCount: importedOfferResult.writtenCount,
           unchangedCount: importedOfferResult.unchangedCount,
           refreshedCount: importedOfferResult.refreshedCount,
+          confirmedCount: importedOfferResult.confirmedCount,
         },
       },
     });

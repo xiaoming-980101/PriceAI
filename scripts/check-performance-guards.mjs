@@ -97,8 +97,10 @@ assert(/markPublicApiSnapshotsDirty/.test(crawlLogRouteText), "src/app/api/admin
 assert(!/refreshPublicApiSnapshots/.test(crawlLogRouteText), "src/app/api/admin/crawl-log/route.ts: crawl-log writes must not synchronously refresh all public API snapshots.");
 
 const adminText = read("src/lib/admin.ts");
-assert(/UNCHANGED_OFFER_REFRESH_INTERVAL_MS\s*=\s*25\s*\*\s*60\s*\*\s*1000/.test(adminText), "src/lib/admin.ts: unchanged offers must refresh within one 30-minute collector cycle.");
-assert(/shouldRefreshUnchangedOffer/.test(adminText), "src/lib/admin.ts: unchanged offer refresh logic must stay explicit.");
+assert(/upsertRawOfferConfirmations/.test(adminText), "src/lib/admin.ts: unchanged offers must write lightweight confirmation rows instead of refreshing raw_offers.");
+assert(/raw_offer_confirmations/.test(adminText), "src/lib/admin.ts: offer confirmation writes must use raw_offer_confirmations.");
+assert(!/UNCHANGED_OFFER_REFRESH_INTERVAL_MS/.test(adminText), "src/lib/admin.ts: unchanged confirmation timing must not be implemented by raw_offers refresh intervals.");
+assert(!/function\s+shouldRefreshUnchangedOffer/.test(adminText), "src/lib/admin.ts: unchanged offer confirmation must not depend on old raw_offers refresh logic.");
 assert(/function expireStaleOffersAfterRepeatedFailures/.test(adminText), "src/lib/admin.ts: repeated collector failures must only expire stale offers after a threshold.");
 assert(/MAX_STALE_OFFERS_TO_EXPIRE_PER_FAILURE\s*=\s*50/.test(adminText), "src/lib/admin.ts: repeated collector failure expiry must stay capped per failure.");
 assert(!/recordOfferCollectionFailure/.test(adminText), "src/lib/admin.ts: single collector failures must not bulk-write all raw_offers for a source.");
