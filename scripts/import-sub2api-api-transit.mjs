@@ -592,6 +592,13 @@ async function probeCompletion(source, apiKey, model, options) {
         stream: false,
       },
     },
+    {
+      parameterMode: "minimal",
+      body: {
+        model,
+        messages: [{ role: "user", content: "ping" }],
+      },
+    },
   ];
 
   for (const attempt of bodies) {
@@ -811,6 +818,7 @@ async function buildCredentialRows(source, selectedTargets, keyResults, collecte
 function buildOfferRow(source, result, collectedAt) {
   const multiplier = round(result.multiplier, 6);
   const ok = Boolean(result.ok);
+  const status = apiTransitOfferStatusForProbeResult(result);
   return {
     id: stableId("api-transit-offer", source.id, result.standardModel, result.groupId),
     station_id: source.id,
@@ -833,12 +841,12 @@ function buildOfferRow(source, result, collectedAt) {
     availability_seven_day_samples: 1,
     availability_first_checked_at: collectedAt,
     availability_last_checked_at: collectedAt,
-    availability_note: ok ? "单轮准入抽样通过；后续接入定时监测。" : result.error || "单轮准入抽样未通过。",
+    availability_note: ok ? "单轮准入抽样通过；后续接入定时监测。" : result.error || "单轮准入抽样未通过，待复核。",
     availability_source_type: "priceai_probe",
     availability_source_label: "PriceAI 实测",
     availability_source_url: null,
     last_verified_at: collectedAt,
-    status: ok ? "active" : "inactive",
+    status,
     raw_payload: {
       group: {
         id: result.groupId,
@@ -854,6 +862,12 @@ function buildOfferRow(source, result, collectedAt) {
     },
     created_at: collectedAt,
   };
+}
+
+function apiTransitOfferStatusForProbeResult(result) {
+  if (result?.ok) return "active";
+  if (result?.groupId && typeof result.multiplier === "number" && Number.isFinite(result.multiplier)) return "needs_review";
+  return "inactive";
 }
 
 function buildOfferRows(source, groups, probeResults, collectedAt) {
@@ -1833,6 +1847,7 @@ function errorMessage(error) {
 }
 
 export const __test = {
+  apiTransitOfferStatusForProbeResult,
   buildOfferRows,
   modelsForProbeResult,
   representativeModelForGroup,

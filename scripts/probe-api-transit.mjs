@@ -357,53 +357,79 @@ async function probeModelList(profile, baseUrl, options) {
 }
 
 async function probeCompletion(profile, baseUrl, target, options) {
-  const started = Date.now();
   const checkedAt = new Date().toISOString();
+  const endpoint = profile.protocol === "anthropic_compatible" ? `${baseUrl}/messages` : `${baseUrl}/chat/completions`;
+  const attempts = [];
 
-  try {
-    const endpoint = profile.protocol === "anthropic_compatible" ? `${baseUrl}/messages` : `${baseUrl}/chat/completions`;
-    const response = await fetchJson(endpoint, {
-      timeoutMs: options.timeoutMs,
-      method: "POST",
-      headers: {
-        ...authHeaders(profile, options.apiKey),
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(completionBody(profile, target.modelId)),
-    });
+  for (const attempt of completionAttempts(profile, target.modelId)) {
+    const started = Date.now();
+    try {
+      const response = await fetchJson(endpoint, {
+        timeoutMs: options.timeoutMs,
+        method: "POST",
+        headers: {
+          ...authHeaders(profile, options.apiKey),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(attempt.body),
+      });
 
-    return {
-      family: target.family,
-      standardModel: target.standardModel,
-      groupName: target.groupName || null,
-      accountPool: target.accountPool || null,
-      channelType: target.channelType || null,
-      configuredModelId: target.modelId,
-      ok: true,
-      skipped: false,
-      status: response.status,
-      errorType: null,
-      message: null,
-      latencyMs: Date.now() - started,
-      checkedAt,
-    };
-  } catch (error) {
-    return {
-      family: target.family,
-      standardModel: target.standardModel,
-      groupName: target.groupName || null,
-      accountPool: target.accountPool || null,
-      channelType: target.channelType || null,
-      configuredModelId: target.modelId,
-      ok: false,
-      skipped: false,
-      status: error.status || null,
-      errorType: classifyProbeError(error),
-      message: errorMessage(error),
-      latencyMs: Date.now() - started,
-      checkedAt,
-    };
+      attempts.push({
+        ok: true,
+        status: response.status,
+        parameterMode: attempt.parameterMode,
+        message: null,
+        latencyMs: Date.now() - started,
+      });
+
+      return {
+        family: target.family,
+        standardModel: target.standardModel,
+        groupName: target.groupName || null,
+        accountPool: target.accountPool || null,
+        channelType: target.channelType || null,
+        configuredModelId: target.modelId,
+        ok: true,
+        skipped: false,
+        status: response.status,
+        errorType: null,
+        message: null,
+        latencyMs: attempts.reduce((total, item) => total + Number(item.latencyMs || 0), 0),
+        checkedAt,
+        attempts,
+      };
+    } catch (error) {
+      const message = errorMessage(error);
+      attempts.push({
+        ok: false,
+        status: error.status || null,
+        parameterMode: attempt.parameterMode,
+        message,
+        latencyMs: Date.now() - started,
+      });
+      if (!isParameterRetryable(message)) break;
+    }
   }
+
+  const firstError = attempts.find((item) => item.message) || {};
+  const status = firstError.status || null;
+  const message = firstError.message || "探测请求失败。";
+  return {
+    family: target.family,
+    standardModel: target.standardModel,
+    groupName: target.groupName || null,
+    accountPool: target.accountPool || null,
+    channelType: target.channelType || null,
+    configuredModelId: target.modelId,
+    ok: false,
+    skipped: false,
+    status,
+    errorType: classifyProbeError({ status, message }),
+    message,
+    latencyMs: attempts.reduce((total, item) => total + Number(item.latencyMs || 0), 0),
+    checkedAt,
+    attempts,
+  };
 }
 
 function selectProbeTargets(input) {
@@ -569,6 +595,34 @@ function completionBody(profile, modelId) {
     max_tokens: 1,
     stream: false,
   };
+}
+
+function completionAttempts(profile, modelId) {
+  const primary = {
+    parameterMode: "max_tokens",
+    body: completionBody(profile, modelId),
+  };
+  if (profile.protocol === "anthropic_compatible") return [primary];
+
+  return [
+    primary,
+    {
+      parameterMode: "max_completion_tokens",
+      body: {
+        model: modelId,
+        messages: [{ role: "user", content: "ping" }],
+        max_completion_tokens: 1,
+        stream: false,
+      },
+    },
+    {
+      parameterMode: "minimal",
+      body: {
+        model: modelId,
+        messages: [{ role: "user", content: "ping" }],
+      },
+    },
+  ];
 }
 
 function authHeaders(profile, apiKey) {
@@ -1350,6 +1404,10 @@ function classifyProbeError(error) {
   return "request_failed";
 }
 
+function isParameterRetryable(message) {
+  return /max_tokens|max_completion_tokens|max_output_tokens|temperature|unsupported|not support|不支持/i.test(String(message || ""));
+}
+
 function runStatus(input) {
   if (!input.modelListOk) return "failed";
   if (input.skipCompletions) return input.modelCount > 0 ? "success" : "partial";
@@ -1567,6 +1625,7 @@ function errorMessage(error) {
 }
 
 export const __test = {
+  completionAttempts,
   completionBody,
   availabilitySamplesFromProbe,
   filterProfilesByRunnableStationIds,

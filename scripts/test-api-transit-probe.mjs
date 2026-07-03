@@ -152,6 +152,48 @@ assert.equal(
   duplicateSub2ApiOffers.length,
   "Sub2API import must not emit duplicate offer upsert keys.",
 );
+assert.equal(
+  sub2ApiTest.apiTransitOfferStatusForProbeResult({
+    groupId: 16,
+    multiplier: 0.16,
+    ok: false,
+    error: "Unsupported parameter: max_output_tokens",
+  }),
+  "needs_review",
+  "Sub2API groups returned by the source must not be hidden after one probe failure.",
+);
+const failedButReturnedSub2ApiOffers = sub2ApiTest.buildOfferRows(
+  { id: "wawazz", dashboardUrl: "https://example.test/dashboard" },
+  [{ id: 16, name: "gpt-pro", platform: "openai", multiplier: 0.16 }],
+  [
+    {
+      targetId: "gpt_pro",
+      family: "gpt",
+      standardModel: "GPT 5.5",
+      rawModelName: "gpt-5.5",
+      groupId: 16,
+      groupName: "gpt-pro",
+      multiplier: 0.16,
+      ok: false,
+      modelListed: true,
+      modelListStatus: 200,
+      sampleModels: ["gpt-5.5"],
+      attempts: [
+        {
+          ok: false,
+          status: 400,
+          message: "Unsupported parameter: max_output_tokens",
+          parameterMode: "max_tokens",
+        },
+      ],
+      error: "Unsupported parameter: max_output_tokens",
+    },
+  ],
+  "2026-07-03T00:00:00.000Z",
+);
+assert.equal(failedButReturnedSub2ApiOffers.length, 1);
+assert.equal(failedButReturnedSub2ApiOffers[0].status, "needs_review");
+assert.equal(failedButReturnedSub2ApiOffers[0].availability_source_label, "PriceAI 实测");
 assert.deepEqual(
   sub2ApiTest.representativeModelForGroup({ name: "gpt-image-2", platform: "openai" }),
   {
@@ -271,6 +313,21 @@ assert.deepEqual(__test.completionBody({ protocol: "openai_compatible" }, "gpt-5
   max_tokens: 1,
   stream: false,
 });
+assert.deepEqual(
+  __test.completionAttempts({ protocol: "openai_compatible" }, "gpt-5.5").map((attempt) => [
+    attempt.parameterMode,
+    Object.keys(attempt.body).sort(),
+  ]),
+  [
+    ["max_tokens", ["max_tokens", "messages", "model", "stream"]],
+    ["max_completion_tokens", ["max_completion_tokens", "messages", "model", "stream"]],
+    ["minimal", ["messages", "model"]],
+  ],
+);
+assert.deepEqual(
+  __test.completionAttempts({ protocol: "anthropic_compatible" }, "claude-opus-4-8").map((attempt) => attempt.parameterMode),
+  ["max_tokens"],
+);
 
 const probeSamples = __test.availabilitySamplesFromProbe({
   runId: "run-1",
