@@ -409,8 +409,8 @@ export const canonicalCatalog: CanonicalProduct[] = [
     platform: "其他",
     productType: "工具账号",
     spec: "Pro / 额度",
-    summary: "Kiro Pro、Pro+、Pro Max、Power、额度号、号池或可超额相关权益。",
-    aliases: ["kiro pro", "kiro pro+", "kiro promax", "kiro power", "kiro 积分", "kiro 额度", "kiro 号池"],
+    summary: "Kiro Pro、Pro+、Pro Max、Power、额度号或可超额相关权益。",
+    aliases: ["kiro pro", "kiro pro+", "kiro promax", "kiro power", "kiro 积分", "kiro 额度"],
   },
   {
     id: "windsurf-account",
@@ -1051,6 +1051,7 @@ function normalizeTitle(title: string): string {
     .replace(/\bcluade\b/g, "claude")
     .replace(/\bbusisness\b/g, "business")
     .replace(/chat\s*gpt/g, "chatgpt")
+    .replace(/claude\s*code/g, "claude code")
     .replace(/supergrok/g, "super grok")
     .replace(/\s+/g, " ")
     .trim();
@@ -1422,6 +1423,7 @@ function classifyOtherTool(value: string): string {
   if (isTelegramPremiumProduct(value)) return "telegram-premium";
   if (isTelegramProduct(value)) return "telegram-account";
   if (matches(value, ["cursor"])) return "cursor-account";
+  if (isKiroApiCreditProduct(value)) return "openai-api-cdk";
   if (isKiroProProduct(value)) return "kiro-pro-account";
   if (matches(value, ["kiro"])) return "kiro-account";
   if (matches(value, ["windsurf", "wind surf"])) return "windsurf-account";
@@ -1664,6 +1666,7 @@ function isApiProduct(value: string): boolean {
   if (isChatGptPeripheralService(value)) return false;
   if (isGooglePlayOrPixelRechargeProduct(value)) return false;
   if (isChatGptTransitOrApiCreditProduct(value)) return true;
+  if (isKiroApiCreditProduct(value)) return true;
   if (isModelApiCreditProduct(value)) return true;
   if (isModelPoolCreditProduct(value)) return true;
   if (isClaudeCodeCreditProduct(value)) return true;
@@ -1684,6 +1687,17 @@ function isApiProduct(value: string): boolean {
   if (matches(value, ["额度"]) && matches(value, ["claude", "gemini", "gpt", "codex", "openai", "ai 平台"])) return true;
 
   return false;
+}
+
+function isKiroApiCreditProduct(value: string): boolean {
+  if (!matches(value, ["kiro"])) return false;
+  if (matches(value, ["注册机", "生成器", "源码"])) return false;
+
+  if (matches(value, ["号池"])) return true;
+  if (matches(value, ["claude code"]) && hasMoneyAmount(value)) return true;
+  if (matches(value, ["刀额度", "美元额度", "美金额度"])) return true;
+
+  return /(?:\d+\s*(?:刀|美元|美金)|\d+\s*\$)\s*额度/.test(value);
 }
 
 function isCodexPhoneVerification(value: string): boolean {
@@ -1764,8 +1778,7 @@ function isModelPoolCreditProduct(value: string): boolean {
 function isClaudeCodeCreditProduct(value: string): boolean {
   if (!matches(value, ["claude code"])) return false;
 
-  return matches(value, ["每天", "有效期", "额度", "不限量额度"]) &&
-    (matches(value, ["刀", "美元", "美金"]) || /\d+\s*\$/.test(value));
+  return matches(value, ["每天", "有效期", "额度", "不限量额度"]) && hasMoneyAmount(value);
 }
 
 function isModelApiCreditProduct(value: string): boolean {
@@ -1773,6 +1786,10 @@ function isModelApiCreditProduct(value: string): boolean {
   if (matches(value, ["余额兑换码", "余额 兑换码", "兑换码", "额度", "刀卡", "美元额度", "美金额度"])) return true;
 
   return /\d+\s*\$\s*余额/.test(value) || /\d+\s*\$\s*余额兑换码/.test(value);
+}
+
+function hasMoneyAmount(value: string): boolean {
+  return matches(value, ["刀", "美元", "美金"]) || /\d+\s*\$/.test(value);
 }
 
 function isVirtualCardProduct(value: string): boolean {
@@ -2182,7 +2199,6 @@ function isKiroProProduct(value: string): boolean {
     "积分",
     "额度号",
     "额度",
-    "号池",
     "可超额",
     "1000",
     "2000",

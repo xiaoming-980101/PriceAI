@@ -153,7 +153,7 @@ const productSeoProfiles: Record<string, ProductSeoProfile> = {
   }),
   "kiro-pro-account": profile({
     metadataTitle: "Kiro Pro 价格对比：额度号、Pro 账号和渠道报价",
-    metadataDescription: "查看 Kiro Pro、Pro+、Pro Max、Power、额度号、号池和可超额账号的有货最低价、渠道报价和库存。",
+    metadataDescription: "查看 Kiro Pro、Pro+、Pro Max、Power、额度号和可超额账号的有货最低价、渠道报价和库存。",
   }),
   "windsurf-account": profile({
     metadataTitle: "Windsurf 账号价格对比：AI 编程工具账号和渠道报价",
