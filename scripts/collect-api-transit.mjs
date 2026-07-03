@@ -44,6 +44,7 @@ const AVAILABILITY_SOURCES = {
     label: null,
   },
 };
+const STALE_UNKNOWN_AVAILABILITY_NOTE_PATTERN = /PriceAI API Key 探测|PriceAI 临时 Key|单轮准入抽样|近 7 日 .*样本成功/;
 const officialTransitPrices = {
   "Claude Fable 5": { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5, imageOutput: null, currency: "USD" },
   "Claude Sonnet 5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5, imageOutput: null, currency: "USD" },
@@ -2280,7 +2281,24 @@ async function readExistingOffers(supabase, offers) {
     if (!chunk.length) continue;
     const { data, error } = await supabase
       .from("api_transit_offers")
-      .select("id,station_id,standard_model,group_name,status,created_at,availability_first_checked_at")
+      .select(
+        [
+          "id",
+          "station_id",
+          "standard_model",
+          "group_name",
+          "status",
+          "created_at",
+          "availability_seven_day_rate",
+          "availability_seven_day_samples",
+          "availability_first_checked_at",
+          "availability_last_checked_at",
+          "availability_note",
+          "availability_source_type",
+          "availability_source_label",
+          "availability_source_url",
+        ].join(","),
+      )
       .in("station_id", chunk);
     if (error) {
       if (isMissingColumnError(error, "availability_first_checked_at")) {
@@ -2311,13 +2329,13 @@ async function readExistingOffersWithoutFirstCheckedAt(supabase, offers) {
 function mergeOfferForRefresh(offer, existing, shouldActivate) {
   const row = { ...offer };
   delete row.auto_publish;
-  return {
+  const merged = mergeExistingAvailability({
     ...row,
     id: existing?.id || offer.id,
     status: shouldActivate ? "active" : existing?.status || offer.status,
-    availability_first_checked_at: existing?.availability_first_checked_at || offer.availability_first_checked_at,
     created_at: existing?.created_at || offer.created_at,
-  };
+  }, existing);
+  return normalizeUnknownAvailability(merged, "价格已抓取，尚未运行 API 可用性检测。");
 }
 
 function shouldAutoPublishSource(source) {
@@ -2346,7 +2364,14 @@ async function readExistingStations(supabase, stationIds) {
     "monitor_url",
     "commercial_offers",
     "verification_events",
+    "availability_seven_day_rate",
+    "availability_seven_day_samples",
     "availability_first_checked_at",
+    "availability_last_checked_at",
+    "availability_note",
+    "availability_source_type",
+    "availability_source_label",
+    "availability_source_url",
     "published",
     "admin_note",
     "created_at",
@@ -2382,15 +2407,15 @@ function mergeStationForRefresh(station, existing, options) {
   const { auto_publish: autoPublish, ...row } = station;
   const shouldPublish = options.publish || autoPublish;
   if (!existing) {
-    return {
+    return normalizeUnknownAvailability({
       ...row,
       published: Boolean(shouldPublish),
       data_status: shouldPublish ? "verified" : station.data_status,
       admin_note: row.admin_note,
-    };
+    }, "已抓取公开价格，尚未接入 API Key 可用性检测。");
   }
 
-  return {
+  return normalizeUnknownAvailability(mergeExistingAvailability({
     ...row,
     source_type: existing.source_type || station.source_type,
     commercial_relation: existing.commercial_relation || station.commercial_relation,
@@ -2411,7 +2436,47 @@ function mergeStationForRefresh(station, existing, options) {
     published: shouldPublish ? true : Boolean(existing.published),
     admin_note: shouldPublish && row.collection_status === "success" ? row.admin_note : existing.admin_note || station.admin_note,
     created_at: existing.created_at || station.created_at,
+  }, existing), "已抓取公开价格，尚未接入 API Key 可用性检测。");
+}
+
+function mergeExistingAvailability(row, existing) {
+  if (!existing || (row.availability_source_type || "unknown") !== "unknown") return row;
+  if (!isTrustedAvailabilitySource(existing.availability_source_type)) return row;
+  return {
+    ...row,
+    availability_seven_day_rate: existing.availability_seven_day_rate ?? row.availability_seven_day_rate,
+    availability_seven_day_samples: existing.availability_seven_day_samples ?? row.availability_seven_day_samples,
+    availability_first_checked_at: existing.availability_first_checked_at || row.availability_first_checked_at,
+    availability_last_checked_at: existing.availability_last_checked_at || row.availability_last_checked_at,
+    availability_note: existing.availability_note || row.availability_note,
+    availability_source_type: existing.availability_source_type,
+    availability_source_label: existing.availability_source_label ?? row.availability_source_label ?? null,
+    availability_source_url: existing.availability_source_url ?? row.availability_source_url ?? null,
   };
+}
+
+function isTrustedAvailabilitySource(sourceType) {
+  return sourceType && sourceType !== "unknown";
+}
+
+function normalizeUnknownAvailability(row, fallbackNote) {
+  if ((row.availability_source_type || "unknown") !== "unknown") return row;
+  return {
+    ...row,
+    availability_seven_day_rate: null,
+    availability_seven_day_samples: 0,
+    availability_first_checked_at: null,
+    availability_last_checked_at: null,
+    availability_note: unknownAvailabilityNote(row.availability_note, fallbackNote),
+    availability_source_label: null,
+    availability_source_url: null,
+  };
+}
+
+function unknownAvailabilityNote(note, fallbackNote) {
+  const text = stringOrNull(note);
+  if (!text || STALE_UNKNOWN_AVAILABILITY_NOTE_PATTERN.test(text)) return fallbackNote || null;
+  return text;
 }
 
 function keepConfiguredValue(existingValue, incomingValue) {

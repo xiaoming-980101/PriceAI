@@ -85,6 +85,57 @@ assert.equal(
   "needs_review",
 );
 
+const staleUnknownAvailabilityOffer = __test.mergeOfferForRefresh(
+  {
+    id: "new",
+    auto_publish: false,
+    status: "active",
+    created_at: "new",
+    availability_source_type: "unknown",
+    availability_seven_day_rate: 0.6081,
+    availability_seven_day_samples: 148,
+    availability_first_checked_at: "2026-06-29T00:00:00.000Z",
+    availability_last_checked_at: "2026-07-03T00:00:00.000Z",
+    availability_note: "PriceAI API Key 探测：近 7 日 GPT 5.5 90/148 个样本成功。",
+  },
+  undefined,
+  true,
+);
+assert.equal(staleUnknownAvailabilityOffer.availability_seven_day_rate, null);
+assert.equal(staleUnknownAvailabilityOffer.availability_seven_day_samples, 0);
+assert.equal(staleUnknownAvailabilityOffer.availability_first_checked_at, null);
+assert.equal(staleUnknownAvailabilityOffer.availability_last_checked_at, null);
+assert.equal(staleUnknownAvailabilityOffer.availability_note, "价格已抓取，尚未运行 API 可用性检测。");
+
+const preservedTrustedAvailabilityOffer = __test.mergeOfferForRefresh(
+  {
+    id: "new",
+    auto_publish: false,
+    status: "active",
+    created_at: "new",
+    availability_source_type: "unknown",
+    availability_seven_day_rate: null,
+    availability_seven_day_samples: 0,
+    availability_note: "价格已抓取，尚未运行 API 可用性检测。",
+  },
+  {
+    id: "old",
+    status: "active",
+    created_at: "old",
+    availability_source_type: "priceai_probe",
+    availability_source_label: "PriceAI 实测",
+    availability_seven_day_rate: 0.98,
+    availability_seven_day_samples: 50,
+    availability_first_checked_at: "2026-07-01T00:00:00.000Z",
+    availability_last_checked_at: "2026-07-03T00:00:00.000Z",
+    availability_note: "PriceAI API Key 探测：近 7 日 GPT 5.5 49/50 个样本成功。",
+  },
+  true,
+);
+assert.equal(preservedTrustedAvailabilityOffer.availability_source_type, "priceai_probe");
+assert.equal(preservedTrustedAvailabilityOffer.availability_seven_day_rate, 0.98);
+assert.equal(preservedTrustedAvailabilityOffer.availability_seven_day_samples, 50);
+
 const sources = [
   { id: "published-new-api" },
   { id: "pending-new-api" },

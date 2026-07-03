@@ -16,6 +16,7 @@ const defaultOutPath = path.join(repoRoot, "tmp", "api-transit-sub2api-latest.js
 const userAgent = "Mozilla/5.0 PriceAI/1.0 APITransitSub2APICollector";
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_RECHARGE_RATIO = "1:1";
+const STALE_UNKNOWN_AVAILABILITY_NOTE_PATTERN = /PriceAI API Key 探测|PriceAI 临时 Key|单轮准入抽样|近 7 日 .*样本成功/;
 
 const targetPlans = [
   {
@@ -1329,13 +1330,13 @@ async function readExistingOffersWithoutFirstCheckedAt(supabase, offers) {
 }
 
 function mergeOfferForRefresh(offer, existing, options) {
-  return {
+  const merged = {
     ...offer,
     id: existing?.id || offer.id,
     status: options.publish ? offer.status : existing?.status || offer.status,
-    availability_first_checked_at: existing?.availability_first_checked_at || offer.availability_first_checked_at,
     created_at: existing?.created_at || offer.created_at,
   };
+  return normalizeUnknownAvailability(merged, "已通过登录态分组接口刷新倍率；暂未用测试 Key 抽样。");
 }
 
 function offerKey(offer) {
@@ -1420,14 +1421,14 @@ async function readExistingStationsWithoutFirstCheckedAt(supabase, stationIds) {
 
 function mergeStationForRefresh(station, existing, options) {
   if (!existing) {
-    return {
+    return normalizeUnknownAvailability({
       ...station,
       published: Boolean(options.publish),
       data_status: options.publish ? "verified" : station.data_status,
-    };
+    }, "已通过登录态分组接口刷新倍率；暂未用测试 Key 抽样。");
   }
 
-  return {
+  return normalizeUnknownAvailability({
     ...station,
     source_type: existing.source_type || station.source_type,
     commercial_relation: existing.commercial_relation || station.commercial_relation,
@@ -1450,7 +1451,27 @@ function mergeStationForRefresh(station, existing, options) {
     published: options.publish ? true : Boolean(existing.published),
     admin_note: appendRefreshNote(existing.admin_note, station.admin_note),
     created_at: existing.created_at || station.created_at,
+  }, "已通过登录态分组接口刷新倍率；暂未用测试 Key 抽样。");
+}
+
+function normalizeUnknownAvailability(row, fallbackNote) {
+  if ((row.availability_source_type || "unknown") !== "unknown") return row;
+  return {
+    ...row,
+    availability_seven_day_rate: null,
+    availability_seven_day_samples: 0,
+    availability_first_checked_at: null,
+    availability_last_checked_at: null,
+    availability_note: unknownAvailabilityNote(row.availability_note, fallbackNote),
+    availability_source_label: null,
+    availability_source_url: null,
   };
+}
+
+function unknownAvailabilityNote(note, fallbackNote) {
+  const text = stringValue(note);
+  if (!text || STALE_UNKNOWN_AVAILABILITY_NOTE_PATTERN.test(text)) return fallbackNote || null;
+  return text;
 }
 
 function appendRefreshNote(existingNote, refreshNote) {
