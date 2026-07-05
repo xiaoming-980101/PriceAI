@@ -237,10 +237,10 @@ function buildSuspiciousChecks(items) {
     {
       key: "email_maybe_chatgpt",
       label: "邮箱中疑似 ChatGPT 账号或会员",
-      expected: "chatgpt-free-account/chatgpt-plus",
+      expected: "chatgpt-free-account/chatgpt-plus/chatgpt-team-business",
       filter: (offer) =>
         ["gmail-account", "outlook-account", "email-account"].includes(offer.nextProductId) &&
-        /(gptplus|chatgpt|gpt账号|gpt.*free|gpt.*白号|plus.*会员|pro12个月)/i.test(offer.normalizedTitle),
+        /(gptplus|chatgpt|gpt账号|gpt.*free|gpt.*白号|plus.*会员|plus.*成品|成品plus|pro12个月|gpt.*team|team.*gpt|gpt.*k12|k12.*gpt|k12.*team|team.*k12|json.*反代|cpa格式|发cpa)/i.test(offer.normalizedTitle),
     },
     {
       key: "other_maybe_chatgpt",

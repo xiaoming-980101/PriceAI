@@ -1836,6 +1836,7 @@ function isPureEmail(value: string): boolean {
   ]);
   if (!explicitEmail) return false;
   if (isICloudBackedAiAccountProduct(value)) return false;
+  if (isEmailBackedAiAccountProduct(value)) return false;
   if (matches(value, ["跑gemini", "跑 gemini", "失败的号", "包gcp", "带gcp"])) return true;
   if (
     matches(value, [
@@ -1876,6 +1877,49 @@ function isPureEmail(value: string): boolean {
     "gpt 专用",
     "gptplus",
   ]);
+}
+
+function isEmailBackedAiAccountProduct(value: string): boolean {
+  if (!hasEmailSignal(value)) return false;
+  if (isICloudStandaloneEmailProduct(value)) return false;
+
+  const hasChatGptSignal = matches(value, ["chatgpt", "gpt", "openai", "codex"]);
+  if (isChatGptTeamDominant(value)) return true;
+  if (isChatGptPlus(value)) return true;
+  if (hasChatGptSignal && isExplicitEmailBackedChatGptFreeAccount(value)) return true;
+  if (hasChatGptSignal && isChatGptAccountTitle(value)) return true;
+
+  if (!hasChatGptSignal) return false;
+  if (matches(value, ["注册gpt专用", "注册 gpt 专用", "适用于gpt", "适用于 gpt", "接收邮件", "可开gpt", "可开 gpt", "可开chatgpt", "可开 chatgpt", "可注册gpt", "可注册 gpt"])) return false;
+
+  return matches(value, [
+    "成品号",
+    "成品账号",
+    "成品",
+    "账号",
+    "账户",
+    "账密",
+    "rt",
+    "凭证",
+    "json",
+    "cpa",
+    "反代",
+    "sub2api",
+    "access token",
+    "access_token",
+    "质保首登",
+    "首登",
+    "未接码",
+    "已接码",
+    "at发货",
+  ]);
+}
+
+function isExplicitEmailBackedChatGptFreeAccount(value: string): boolean {
+  if (matches(value, ["free", "普号", "白号", "普通号", "普通账号", "空白账号"])) return true;
+
+  return matches(value, ["rt", "access token", "access_token", "token", "已绑定手机", "已绑手机", "手机已验证"]) &&
+    matches(value, ["chatgpt", "gpt", "openai", "codex"]);
 }
 
 function classifyPureEmail(value: string): string {
