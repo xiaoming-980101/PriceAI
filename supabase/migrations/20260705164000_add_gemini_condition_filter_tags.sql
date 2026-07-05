@@ -59,17 +59,54 @@ begin
 end;
 $migration$;
 
-with gemini_condition_candidates as (
-  select id
-  from raw_offers
-  where hidden = false
-    and canonical_product_id = 'gemini-pro-year'
-)
-update raw_offers
-set source_title = raw_offers.source_title
-from gemini_condition_candidates
-where raw_offers.id = gemini_condition_candidates.id
-  and coalesce(raw_offers.public_filter_tags, '{}'::text[]) is distinct from priceai_public_offer_filter_tags(raw_offers.source_title, raw_offers.tags);
+do $migration$
+declare
+  current_definition text;
+  next_definition text;
+  stored_tags_expression constant text := 'coalesce(raw_offers.public_filter_tags, priceai_public_offer_filter_tags(raw_offers.source_title, raw_offers.tags))';
+  live_tags_expression constant text := 'priceai_public_offer_filter_tags(raw_offers.source_title, raw_offers.tags)';
+  stored_filtered_expression constant text := 'filtered.public_filter_tags';
+  live_filtered_expression constant text := 'filtered.live_filter_tags';
+  old_filtered_select constant text := '      raw_offers.*,
+      concat_ws(';
+  new_filtered_select constant text := '      raw_offers.*,
+      priceai_public_offer_filter_tags(raw_offers.source_title, raw_offers.tags) as live_filter_tags,
+      concat_ws(';
+  old_filter_return constant text := '    ranked.public_filter_tags as filter_tags,';
+  new_filter_return constant text := '    ranked.live_filter_tags as filter_tags,';
+begin
+  select pg_get_functiondef('public.list_public_product_offer_filter_facets(text)'::regprocedure)
+  into current_definition;
+
+  next_definition := replace(current_definition, stored_tags_expression, live_tags_expression);
+  if next_definition <> current_definition then
+    execute next_definition;
+  else
+    raise notice 'list_public_product_offer_filter_facets already uses live offer filter tags';
+  end if;
+
+  select pg_get_functiondef('public.list_public_product_offers_page_v2(text, text[], text, text, integer, integer)'::regprocedure)
+  into current_definition;
+  next_definition := current_definition;
+
+  if position(live_filtered_expression in next_definition) = 0 then
+    if position(old_filtered_select in next_definition) = 0 then
+      raise exception 'Expected product offers v2 filtered select block was not found';
+    end if;
+
+    next_definition := replace(next_definition, old_filtered_select, new_filtered_select);
+  else
+    raise notice 'list_public_product_offers_page_v2 already defines live offer filter tags';
+  end if;
+
+  next_definition := replace(next_definition, stored_filtered_expression, live_filtered_expression);
+  next_definition := replace(next_definition, old_filter_return, new_filter_return);
+
+  if next_definition <> current_definition then
+    execute next_definition;
+  end if;
+end;
+$migration$;
 
 delete from public_api_snapshots
 where kind in ('explorer', 'offers', 'product_offers');
@@ -107,4 +144,8 @@ on conflict (kind, cache_key) do update set
   updated_at = excluded.updated_at;
 
 revoke execute on function priceai_public_offer_filter_tags(text, text[]) from anon, public;
+revoke execute on function list_public_product_offer_filter_facets(text) from anon, public;
+revoke execute on function list_public_product_offers_page_v2(text, text[], text, text, integer, integer) from anon, public;
 grant execute on function priceai_public_offer_filter_tags(text, text[]) to service_role;
+grant execute on function list_public_product_offer_filter_facets(text) to service_role;
+grant execute on function list_public_product_offers_page_v2(text, text[], text, text, integer, integer) to service_role;
