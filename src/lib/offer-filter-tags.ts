@@ -183,6 +183,7 @@ const TELEGRAM_PREMIUM_FILTER_TAG_IDS = new Set<OfferFilterTagId>([
 const DURATION_FILTER_PRODUCT_IDS = new Set<string>([
   "grok-account",
   "super-grok",
+  "x-twitter-premium",
 ]);
 const VERIFICATION_FILTER_PRODUCT_IDS = new Set<string>([
   "openai-phone-verification",
@@ -251,13 +252,17 @@ export function deriveOfferFilterTags(input: {
 
   if (hasDurationYearSignal(text)) {
     output.add("duration_year");
-  } else if (hasDurationHalfYearSignal(text)) {
+  }
+  if (hasDurationHalfYearSignal(text)) {
     output.add("duration_half_year");
-  } else if (hasDurationQuarterSignal(text)) {
+  }
+  if (hasDurationQuarterSignal(text)) {
     output.add("duration_quarter");
-  } else if (hasDurationMonthSignal(text)) {
+  }
+  if (hasDurationMonthSignal(text)) {
     output.add("duration_month");
-  } else if (hasDurationTrialSignal(text)) {
+  }
+  if (hasDurationTrialSignal(text)) {
     output.add("duration_trial");
   }
 

@@ -381,6 +381,7 @@ const tagCases = [
   ["3个月-X-推特 Premium（自带Super Grok）", ["duration_quarter"]],
   ["6个月-X-推特 Premium（自带Super Grok）", ["duration_half_year"]],
   ["12个月-X-推特 Premium（自带Super Grok）", ["duration_year"]],
+  ["【X Premium+Super Grok 一个月会员号】代开/成品号-1个月/3个月/6个月/12个月--质保30天", ["duration_month", "duration_quarter", "duration_half_year", "duration_year"]],
   ["OpenAI Codex 单次接码 1次验证", ["verification_single"]],
   ["短效接码 antigravity 验证使用gmail", ["verification_short"]],
   ["【长效接码链接】GPT Codex 接码（7.5号到期）", ["verification_long"]],
@@ -422,6 +423,10 @@ const superGrokFacetIds = filterOfferFilterFacetsForProduct("super-grok", produc
 assert.ok(superGrokFacetIds.includes("duration_trial"), "Super Grok should show duration filters.");
 assert.ok(!superGrokFacetIds.includes("verification_single"), "Super Grok must not show verification filters.");
 
+const xTwitterPremiumFacetIds = filterOfferFilterFacetsForProduct("x-twitter-premium", productFacetCases).map((facet) => facet.id);
+assert.ok(xTwitterPremiumFacetIds.includes("duration_quarter"), "X/Twitter Premium should show duration filters.");
+assert.ok(!xTwitterPremiumFacetIds.includes("verification_single"), "X/Twitter Premium must not show verification filters.");
+
 const phoneFacetIds = filterOfferFilterFacetsForProduct("openai-phone-verification", productFacetCases).map((facet) => facet.id);
 assert.ok(phoneFacetIds.includes("verification_single"), "OpenAI 接码 should show verification filters.");
 assert.ok(!phoneFacetIds.includes("duration_trial"), "OpenAI 接码 must not show Grok duration filters.");
@@ -443,8 +448,8 @@ assert.deepEqual(
 );
 assert.deepEqual(
   parseOfferFilterTagsForProduct("x-twitter-premium", "duration_quarter"),
-  [],
-  "X/Twitter Premium should not accept Grok duration filters.",
+  ["duration_quarter"],
+  "X/Twitter Premium should accept duration filters.",
 );
 const telegramAccountFacetIds = filterOfferFilterFacetsForProduct("telegram-account", productFacetCases).map((facet) => facet.id);
 assert.ok(telegramAccountFacetIds.includes("telegram_region_us"), "Telegram account should show US region filters.");

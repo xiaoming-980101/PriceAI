@@ -125,8 +125,8 @@ function buildSuspiciousChecks(items) {
       expected: "grok-account",
       filter: (offer) =>
         offer.nextProductId === "super-grok" &&
-        /(普号|free|sso|长效微软邮箱|账号\s*sso|取邮件\s*api|适合\s*super)/i.test(offer.normalizedTitle) &&
-        !/(月卡|年卡|充值|直充|卡密|激活码|订阅|会员|heavy|3天号|三天号|体验卡|独享成品号)/i.test(offer.normalizedTitle),
+        /(普号|free|sso|长效微软邮箱|域名邮箱|账号\s*sso|取邮件\s*api|适合\s*super|黑卫|黑五|黑号|号池)/i.test(offer.normalizedTitle) &&
+        !/(月卡|月会员|年卡|充值|直充|卡密|激活码|订阅|会员|heavy|[1-9]\s*天|3天号|三天号|七天号|体验卡|独享成品号|super\s*grok)/i.test(offer.normalizedTitle),
     },
     {
       key: "plus_maybe_api_transit_or_credit",

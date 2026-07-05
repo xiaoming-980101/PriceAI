@@ -309,13 +309,21 @@ begin
 
   if text_value ~ '(12个月|十二个月|一年|1年|365天|三百六十五天|年卡|年度|全年)' then
     output := array_append(output, 'duration_year');
-  elsif text_value ~ '(6个月|六个月|180天|一百八十天|半年|半年卡)' then
+  end if;
+
+  if text_value ~ '(6个月|六个月|180天|一百八十天|半年|半年卡)' then
     output := array_append(output, 'duration_half_year');
-  elsif text_value ~ '(3个月|三个月|90天|九十天|季度|季卡)' then
+  end if;
+
+  if text_value ~ '(3个月|三个月|90天|九十天|季度|季卡)' then
     output := array_append(output, 'duration_quarter');
-  elsif text_value ~ '(月卡|月会员|一个月|1个月|30天|三十天|一月|单月)' then
+  end if;
+
+  if text_value ~ '(月卡|月会员|一个月|1个月|30天|三十天|一月|单月)' then
     output := array_append(output, 'duration_month');
-  elsif text_value ~ '((^|[^0-9])([1-9]|10)天(号|会员|体验)?|(二|两|三|四|五|六|七|八|九|十)天(号|会员|体验)?|[1-9]-10天|2到10天|2至10天|3-7天|7-10天|周会员|一周会员|体验卡|短期体验)' then
+  end if;
+
+  if text_value ~ '((^|[^0-9])([1-9]|10)天(号|会员|体验)?|(二|两|三|四|五|六|七|八|九|十)天(号|会员|体验)?|[1-9]-10天|2到10天|2至10天|3-7天|7-10天|周会员|一周会员|体验卡|短期体验)' then
     output := array_append(output, 'duration_trial');
   end if;
 
