@@ -9,7 +9,9 @@ import { readSessionCache, writeSessionCache } from "@/lib/client-cache";
 import { useMediaQuery } from "@/lib/client-hooks";
 import { createTimeoutSignal, isGeneratedDatasetStale, newestUsableGeneratedDataset } from "@/lib/client-refresh";
 import {
+  OFFER_FILTER_TAGS,
   OFFER_FILTER_TAG_BY_ID,
+  filterOfferFilterFacetsForProduct,
   parseOfferFilterTagsForProduct,
   toggleOfferFilterTag,
   type OfferFilterTagFacet,
@@ -207,7 +209,13 @@ export function ProductOffersPanel({
   const activeData = dataCacheKey === activeCacheKey ? data : null;
   const offers = activeData?.offers ?? [];
   const total = activeData?.total ?? (selectedFilterTags.length > 0 || Boolean(offerQueryKey || offerExcludeQueryKey) ? 0 : initialCount);
-  const filterFacets = activeData?.filterFacets ?? data?.filterFacets ?? initialData?.filterFacets ?? [];
+  const filterFacets = productOfferFilterFacets(
+    productId,
+    activeData?.filterFacets,
+    data?.filterFacets,
+    initialData?.filterFacets,
+    selectedFilterTags,
+  );
   const hasMore = Boolean(activeData) && !loading && offers.length < total;
   const activeFilters = selectedFilterTags.length > 0 || Boolean(offerQueryKey || offerExcludeQueryKey);
 
@@ -434,6 +442,36 @@ function productOffersCacheKey(
   excludeQuery = "",
 ): string {
   return `priceai:product-offers:v11-risk-feedback:${productId}:${offset}:${OFFER_PAGE_SIZE}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}`;
+}
+
+function productOfferFilterFacets(
+  productId: string,
+  activeFacets: OfferFilterTagFacet[] | undefined,
+  cachedFacets: OfferFilterTagFacet[] | undefined,
+  initialFacets: OfferFilterTagFacet[] | undefined,
+  selectedTags: OfferFilterTagId[],
+): OfferFilterTagFacet[] {
+  const facets = firstProductOfferFilterFacets(activeFacets, cachedFacets, initialFacets);
+  const fallbackFacets = filterOfferFilterFacetsForProduct(
+    productId,
+    OFFER_FILTER_TAGS.map((definition) => ({ ...definition, count: 0 })),
+  );
+  const visibleFacets = facets.length > 0 ? facets : fallbackFacets;
+  if (selectedTags.length === 0) return visibleFacets;
+
+  const visibleFacetIds = new Set(visibleFacets.map((facet) => facet.id));
+  const missingSelectedFacets = selectedTags.flatMap((tagId) => {
+    if (visibleFacetIds.has(tagId)) return [];
+
+    const facet = OFFER_FILTER_TAG_BY_ID.get(tagId);
+    return facet ? [{ ...facet, count: 0 }] : [];
+  });
+
+  return missingSelectedFacets.length > 0 ? [...visibleFacets, ...missingSelectedFacets] : visibleFacets;
+}
+
+function firstProductOfferFilterFacets(...candidates: Array<OfferFilterTagFacet[] | undefined>) {
+  return candidates.find((candidate) => candidate && candidate.length > 0) ?? [];
 }
 
 function rememberProductOffers(cacheKey: string, value: ProductOffersResponse) {
