@@ -213,12 +213,8 @@ npm run collect:browser -- --url https://example.com/ --password your-admin-pass
 
 ## Star 趋势
 
-<a href="https://star-history.com/#physics-dimension/PriceAI&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=physics-dimension/PriceAI&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=physics-dimension/PriceAI&type=Date" />
-    <img alt="PriceAI Star History Chart" src="https://api.star-history.com/svg?repos=physics-dimension/PriceAI&type=Date" />
-  </picture>
+<a href="https://www.star-history.com/?type=date&repos=physics-dimension%2FPriceAI">
+  <img alt="PriceAI Star History Chart" src="./assets/priceai-star-history.svg" />
 </a>
 
 ## Roadmap
