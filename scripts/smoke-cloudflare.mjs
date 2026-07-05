@@ -1,5 +1,7 @@
 const DEFAULT_BASE_URL = "https://priceai.cc";
 const SMOKE_FETCH_TIMEOUT_MS = Number(process.env.CLOUDFLARE_SMOKE_TIMEOUT_MS || 15_000);
+const SMOKE_DATA_RETRY_ATTEMPTS = Number(process.env.CLOUDFLARE_SMOKE_DATA_RETRY_ATTEMPTS || 5);
+const SMOKE_RETRY_DELAY_MS = Number(process.env.CLOUDFLARE_SMOKE_RETRY_DELAY_MS || 1_500);
 
 const baseUrl = normalizeBaseUrl(
   process.argv[2] || process.env.CLOUDFLARE_SMOKE_BASE_URL || DEFAULT_BASE_URL,
@@ -63,6 +65,7 @@ const checks = [
     status: 200,
     maxBytes: 120_000,
     cache: true,
+    retries: SMOKE_DATA_RETRY_ATTEMPTS,
     json: validateExplorerJson,
   },
   {
@@ -70,14 +73,22 @@ const checks = [
     status: 200,
     maxBytes: 80_000,
     cache: true,
+    retries: SMOKE_DATA_RETRY_ATTEMPTS,
     json: validateOffersJson,
   },
-  { path: "/api/products/chatgpt-plus/offers?limit=30", status: 200, maxBytes: 80_000, cache: true },
+  {
+    path: "/api/products/chatgpt-plus/offers?limit=30",
+    status: 200,
+    maxBytes: 80_000,
+    cache: true,
+    retries: SMOKE_DATA_RETRY_ATTEMPTS,
+  },
   {
     path: "/api/merchants",
     status: 200,
     maxBytes: 100_000,
     cache: true,
+    retries: SMOKE_DATA_RETRY_ATTEMPTS,
     json: validateMerchantsJson,
   },
   { path: "/api/cron/collect-prices", status: 405, maxBytes: 5_000 },
@@ -92,55 +103,20 @@ let failures = 0;
 console.log(`Cloudflare smoke base: ${baseUrl}`);
 
 for (const check of checks) {
-  const url = new URL(check.path, baseUrl);
-  const startedAt = Date.now();
+  const maxAttempts = Math.max(1, 1 + (Number.isFinite(check.retries) ? check.retries : 0));
 
-  try {
-    const response = await fetchWithTimeout(url, {
-      method: check.method || "GET",
-      headers: {
-        "user-agent": "PriceAI Cloudflare smoke check",
-      },
-    });
-    const body = await response.arrayBuffer();
-    const bytes = body.byteLength;
-    const text = check.text || check.json ? new TextDecoder().decode(body) : "";
-    const elapsed = Date.now() - startedAt;
-    const cacheHeader =
-      response.headers.get("cloudflare-cdn-cache-control") ||
-      response.headers.get("cdn-cache-control") ||
-      response.headers.get("cache-control") ||
-      "";
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = await runHttpCheck(check);
+    const shouldRetry = !result.ok && attempt < maxAttempts;
 
-    const statusOk = response.status === check.status;
-    const maxBytes = Number.isFinite(check.maxBytes) ? check.maxBytes : null;
-    const sizeOk = maxBytes === null || bytes <= maxBytes;
-    const cacheOk = !check.cache || /s-maxage|max-age/i.test(cacheHeader);
-    const textFailures = check.text ? validateText(text, check.text) : [];
-    const jsonFailures = check.json ? validateJson(text, check.json) : [];
-    const contentOk = textFailures.length === 0 && jsonFailures.length === 0;
-    const ok = statusOk && sizeOk && cacheOk && contentOk;
+    if (!shouldRetry) {
+      if (!result.ok) failures += 1;
+      console.log(formatHttpCheckResult(result));
+      break;
+    }
 
-    if (!ok) failures += 1;
-
-    console.log(
-      [
-        ok ? "ok" : "fail",
-        response.status,
-        `${bytes}B`,
-        `${elapsed}ms`,
-        check.method ? `${check.method} ${check.path}` : check.path,
-        check.cache ? `cache=${cacheHeader || "missing"}` : "",
-        !sizeOk && maxBytes !== null ? `size>${maxBytes}B` : "",
-        textFailures.length ? `text=${textFailures.join(";")}` : "",
-        jsonFailures.length ? `json=${jsonFailures.join(";")}` : "",
-      ]
-        .filter(Boolean)
-        .join(" "),
-    );
-  } catch (error) {
-    failures += 1;
-    console.log(`fail error ${check.path} ${error instanceof Error ? error.message : String(error)}`);
+    console.log(`${formatHttpCheckResult(result, "retry")} attempt=${attempt}/${maxAttempts}`);
+    await sleep(SMOKE_RETRY_DELAY_MS);
   }
 }
 
@@ -201,6 +177,79 @@ function validateJson(text, validator) {
   } catch (error) {
     return [`invalid-json:${error instanceof Error ? error.message : String(error)}`];
   }
+}
+
+async function runHttpCheck(check) {
+  const url = new URL(check.path, baseUrl);
+  const startedAt = Date.now();
+
+  try {
+    const response = await fetchWithTimeout(url, {
+      method: check.method || "GET",
+      headers: {
+        "user-agent": "PriceAI Cloudflare smoke check",
+      },
+    });
+    const body = await response.arrayBuffer();
+    const bytes = body.byteLength;
+    const text = check.text || check.json ? new TextDecoder().decode(body) : "";
+    const elapsed = Date.now() - startedAt;
+    const cacheHeader =
+      response.headers.get("cloudflare-cdn-cache-control") ||
+      response.headers.get("cdn-cache-control") ||
+      response.headers.get("cache-control") ||
+      "";
+
+    const statusOk = response.status === check.status;
+    const maxBytes = Number.isFinite(check.maxBytes) ? check.maxBytes : null;
+    const sizeOk = maxBytes === null || bytes <= maxBytes;
+    const cacheOk = !check.cache || /s-maxage|max-age/i.test(cacheHeader);
+    const textFailures = check.text ? validateText(text, check.text) : [];
+    const jsonFailures = check.json ? validateJson(text, check.json) : [];
+    const contentOk = textFailures.length === 0 && jsonFailures.length === 0;
+    const ok = statusOk && sizeOk && cacheOk && contentOk;
+
+    return {
+      ok,
+      check,
+      status: response.status,
+      bytes,
+      elapsed,
+      cacheHeader,
+      maxBytes,
+      sizeOk,
+      textFailures,
+      jsonFailures,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      check,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function formatHttpCheckResult(result, label = result.ok ? "ok" : "fail") {
+  const { check } = result;
+
+  if (result.errorMessage) {
+    return `${label} error ${check.path} ${result.errorMessage}`;
+  }
+
+  return [
+    label,
+    result.status,
+    `${result.bytes}B`,
+    `${result.elapsed}ms`,
+    check.method ? `${check.method} ${check.path}` : check.path,
+    check.cache ? `cache=${result.cacheHeader || "missing"}` : "",
+    !result.sizeOk && result.maxBytes !== null ? `size>${result.maxBytes}B` : "",
+    result.textFailures.length ? `text=${result.textFailures.join(";")}` : "",
+    result.jsonFailures.length ? `json=${result.jsonFailures.join(";")}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function validateHealthJson(data) {
@@ -318,4 +367,8 @@ function fetchWithTimeout(input, init = {}) {
     ...init,
     signal: AbortSignal.timeout(SMOKE_FETCH_TIMEOUT_MS),
   });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
