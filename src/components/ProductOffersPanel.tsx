@@ -9,9 +9,7 @@ import { readSessionCache, writeSessionCache } from "@/lib/client-cache";
 import { useMediaQuery } from "@/lib/client-hooks";
 import { createTimeoutSignal, isGeneratedDatasetStale, newestUsableGeneratedDataset } from "@/lib/client-refresh";
 import {
-  OFFER_FILTER_TAGS,
   OFFER_FILTER_TAG_BY_ID,
-  filterOfferFilterFacetsForProduct,
   parseOfferFilterTagsForProduct,
   toggleOfferFilterTag,
   type OfferFilterTagFacet,
@@ -210,7 +208,6 @@ export function ProductOffersPanel({
   const offers = activeData?.offers ?? [];
   const total = activeData?.total ?? (selectedFilterTags.length > 0 || Boolean(offerQueryKey || offerExcludeQueryKey) ? 0 : initialCount);
   const filterFacets = productOfferFilterFacets(
-    productId,
     activeData?.filterFacets,
     data?.filterFacets,
     initialData?.filterFacets,
@@ -445,21 +442,15 @@ function productOffersCacheKey(
 }
 
 function productOfferFilterFacets(
-  productId: string,
   activeFacets: OfferFilterTagFacet[] | undefined,
   cachedFacets: OfferFilterTagFacet[] | undefined,
   initialFacets: OfferFilterTagFacet[] | undefined,
   selectedTags: OfferFilterTagId[],
 ): OfferFilterTagFacet[] {
   const facets = firstProductOfferFilterFacets(activeFacets, cachedFacets, initialFacets);
-  const fallbackFacets = filterOfferFilterFacetsForProduct(
-    productId,
-    OFFER_FILTER_TAGS.map((definition) => ({ ...definition, count: 0 })),
-  );
-  const visibleFacets = facets.length > 0 ? facets : fallbackFacets;
-  if (selectedTags.length === 0) return visibleFacets;
+  if (selectedTags.length === 0) return facets;
 
-  const visibleFacetIds = new Set(visibleFacets.map((facet) => facet.id));
+  const visibleFacetIds = new Set(facets.map((facet) => facet.id));
   const missingSelectedFacets = selectedTags.flatMap((tagId) => {
     if (visibleFacetIds.has(tagId)) return [];
 
@@ -467,7 +458,7 @@ function productOfferFilterFacets(
     return facet ? [{ ...facet, count: 0 }] : [];
   });
 
-  return missingSelectedFacets.length > 0 ? [...visibleFacets, ...missingSelectedFacets] : visibleFacets;
+  return missingSelectedFacets.length > 0 ? [...facets, ...missingSelectedFacets] : facets;
 }
 
 function firstProductOfferFilterFacets(...candidates: Array<OfferFilterTagFacet[] | undefined>) {
