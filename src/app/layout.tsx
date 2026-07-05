@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Suspense } from "react";
 import { GlobalSponsorFooter } from "@/components/GlobalSponsorFooter";
 import { GoogleAnalytics } from "@/components/GoogleAnalytics";
+import { QQGroupAutoPrompt } from "@/components/QQGroupAutoPrompt";
 import { SiteNoticePrompt } from "@/components/SiteNoticePrompt";
 import { UmamiAnalytics } from "@/components/UmamiAnalytics";
 import "./globals.css";
@@ -70,6 +72,9 @@ export default function RootLayout({
         {children}
         <GlobalSponsorFooter />
         <SiteNoticePrompt />
+        <Suspense fallback={null}>
+          <QQGroupAutoPrompt />
+        </Suspense>
         <GoogleAnalytics />
         <UmamiAnalytics />
       </body>
