@@ -1,17 +1,14 @@
 "use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { QQGroupDialog } from "@/components/FeedbackLink";
-
-const qqGroupHashes = new Set(["#qq-group", "#qqgroup"]);
-
-function wantsQQGroupFromQuery(queryString: string) {
-  const params = new URLSearchParams(queryString);
-  const qqGroup = params.get("qqGroup");
-  if (qqGroup === "1" || qqGroup === "true" || qqGroup === "open") return true;
-  return params.get("community") === "qq";
-}
+import {
+  isQQGroupPromptHash,
+  qqGroupPromptEventName,
+  removeQQGroupPromptMarkers,
+  wantsQQGroupFromSearch,
+} from "@/lib/community";
 
 function subscribeToHashChange(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -32,17 +29,35 @@ function getHashSnapshot() {
 }
 
 export function QQGroupAutoPrompt() {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryString = searchParams.toString();
   const clientReady = useSyncExternalStore(subscribeToClientReady, () => true, () => false);
   const hash = useSyncExternalStore(subscribeToHashChange, getHashSnapshot, () => "");
+  const [manualPromptIndex, setManualPromptIndex] = useState(0);
   const [dismissedPromptKey, setDismissedPromptKey] = useState<string | null>(null);
-  const promptKey = wantsQQGroupFromQuery(queryString) || qqGroupHashes.has(hash)
+  const urlPromptKey = wantsQQGroupFromSearch(queryString) || isQQGroupPromptHash(hash)
     ? `${pathname}?${queryString}${hash}`
     : null;
+  const manualPromptKey = manualPromptIndex > 0 ? `manual:${manualPromptIndex}` : null;
+  const promptKey = manualPromptKey || urlPromptKey;
+
+  useEffect(() => {
+    const openPrompt = () => setManualPromptIndex((current) => current + 1);
+    window.addEventListener(qqGroupPromptEventName, openPrompt);
+    return () => window.removeEventListener(qqGroupPromptEventName, openPrompt);
+  }, []);
+
+  function closePrompt() {
+    if (!promptKey) return;
+    setDismissedPromptKey(promptKey);
+    if (urlPromptKey) {
+      router.replace(removeQQGroupPromptMarkers(pathname, queryString, hash), { scroll: false });
+    }
+  }
 
   return clientReady && promptKey && dismissedPromptKey !== promptKey
-    ? <QQGroupDialog onClose={() => setDismissedPromptKey(promptKey)} />
+    ? <QQGroupDialog onClose={closePrompt} />
     : null;
 }

@@ -40,6 +40,7 @@ import type { Dispatch, FormEvent, ReactNode, SetStateAction, UIEvent } from "re
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiTransitAdminPanel } from "@/components/ApiTransitAdminConsole";
 import { apiProviderTypeLabels } from "@/lib/api-models";
+import { formatBeijingDateTimeLocalValue, parseBeijingDateTimeLocalValue } from "@/lib/beijing-time";
 import { classifyOffer } from "@/lib/catalog";
 import {
   collectorKindLabel,
@@ -5207,19 +5208,19 @@ function SponsorPlacementEditor({
                   </>
                 )}
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-[#5a6061]">开始时间</span>
+                  <span className="mb-1 block text-xs font-medium text-[#5a6061]">开始时间（北京时间）</span>
                   <input
-                    value={formatDateTimeLocalValue(creative.startsAt)}
-                    onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { startsAt: event.target.value || null }))}
+                    value={formatBeijingDateTimeLocalValue(creative.startsAt)}
+                    onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { startsAt: parseBeijingDateTimeLocalValue(event.target.value) }))}
                     type="datetime-local"
                     className={adminInputClassName}
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-[#5a6061]">到期时间</span>
+                  <span className="mb-1 block text-xs font-medium text-[#5a6061]">到期时间（北京时间）</span>
                   <input
-                    value={formatDateTimeLocalValue(creative.endsAt)}
-                    onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { endsAt: event.target.value || null }))}
+                    value={formatBeijingDateTimeLocalValue(creative.endsAt)}
+                    onChange={(event) => setDraft((current) => updateSponsorCreative(current, kind, index, { endsAt: parseBeijingDateTimeLocalValue(event.target.value) }))}
                     type="datetime-local"
                     className={adminInputClassName}
                   />
@@ -5707,14 +5708,6 @@ function sponsorPlacementDescription(kind: string): string {
   if (kind === "topBanner") return "展示为全站顶部通知条，单独占满后台宽度，只需要短标题、说明和跳转链接。";
   if (kind === "listFooter") return "底部区域支持多张图片卡，可放 AI 周边和中转 API 周边赞助；不得写成榜单推荐或排序权益。";
   return "展示为轻量横幅或图文卡片。";
-}
-
-function formatDateTimeLocalValue(value: string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
 function FeedbackEvidenceLink({ url }: { url: string }) {

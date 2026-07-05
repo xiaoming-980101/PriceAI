@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowRight, Megaphone, X } from "lucide-react";
-import { type ComponentProps, type ReactNode, useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { type ComponentProps, type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import {
   defaultFooterSponsorCreatives,
   getVisibleSponsorCreatives,
@@ -13,6 +13,7 @@ import {
   type SponsorSettingsSummary,
 } from "@/lib/sponsor-settings-shared";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { isQQGroupPromptUrl, qqGroupPromptEventName } from "@/lib/community";
 import { sponsorAssetDisplayUrl } from "@/lib/sponsor-asset-url";
 
 type SponsoredPlacementPreviewProps = {
@@ -426,14 +427,16 @@ type SponsorLinkProps = Omit<ComponentProps<typeof Link>, "href" | "onClick"> & 
 function SponsorLink({ creative, placement, placementId, path, children, ...props }: SponsorLinkProps) {
   const href = useMemo(() => sponsorHref(creative.targetUrl || "/commercial#slots", placement, creative), [creative, placement]);
   const isExternal = typeof href === "string" && /^https?:\/\//i.test(href);
+  const target = isExternal ? "_blank" : props.target;
+  const shouldOpenQQGroupPrompt = isQQGroupPromptUrl(href);
 
   return (
     <Link
       {...props}
       href={href}
-      target={isExternal ? "_blank" : props.target}
+      target={target}
       rel={isExternal ? sponsorRel : props.rel}
-      onClick={() => {
+      onClick={(event) => {
         trackAnalyticsEvent("sponsor_click", {
           placement,
           placement_id: placementId,
@@ -443,11 +446,21 @@ function SponsorLink({ creative, placement, placementId, path, children, ...prop
           target_url: href,
           path,
         });
+        if (shouldOpenQQGroupPrompt && shouldHandleInCurrentTab(event, target)) {
+          event.preventDefault();
+          window.dispatchEvent(new Event(qqGroupPromptEventName));
+        }
       }}
     >
       {children}
     </Link>
   );
+}
+
+function shouldHandleInCurrentTab(event: MouseEvent<HTMLAnchorElement>, target: ComponentProps<typeof Link>["target"]) {
+  if (event.defaultPrevented || event.button !== 0) return false;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
+  return !target || target === "_self";
 }
 
 function footerSponsorVisualClass(tone: SponsorCreative["tone"]) {

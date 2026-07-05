@@ -1,5 +1,6 @@
 import "server-only";
 
+import { parseBeijingDateTimeLocalValue } from "@/lib/beijing-time";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { isSponsorAssetReference } from "@/lib/sponsor-asset-storage";
 import {
@@ -249,6 +250,8 @@ function cleanText(value: unknown, fallback: string | null, maxLength = 240): st
 function cleanDate(value: unknown, fallback: string | null): string | null {
   const text = cleanText(value, null, 80);
   if (!text) return fallback;
+  const beijingIso = parseBeijingDateTimeLocalValue(text);
+  if (beijingIso) return beijingIso;
   const timestamp = Date.parse(text);
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : fallback;
 }
