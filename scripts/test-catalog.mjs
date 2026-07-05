@@ -395,6 +395,7 @@ const tagCases = [
   ["Gemini Pro 一年成品号 包GCP", ["gemini_antigravity_gcp"]],
   ["美区 Gemini Pro 包反重力 12个月", ["gemini_antigravity_gcp"]],
   ["Gemini 3.1pro 12个月pixel成品号需要绑定手机", ["gemini_phone_required"]],
+  ["Gemini pro 一年 pixel成品号（随机地区/美区人机号，22-24年账号）", ["gemini_phone_required"]],
   ["【首登需要申诉】Pixel - Gemini Pro一年成品号", ["gemini_appeal_required"]],
 ];
 

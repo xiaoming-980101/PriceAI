@@ -496,7 +496,7 @@ function hasGeminiPhoneRequiredSignal(text: string): boolean {
     return false;
   }
 
-  return /需要绑定手机|需绑定手机|需要绑手机|需绑手机|绑定手机号|绑定手机|手机号接码|手机接码|长效接码|接码/.test(text);
+  return /需要绑定手机|需绑定手机|需要绑手机|需绑手机|绑定手机号|绑定手机|手机号接码|手机接码|长效接码|接码|人机号|人机账号|人机帐号/.test(text);
 }
 
 function hasGeminiAppealRequiredSignal(text: string): boolean {
