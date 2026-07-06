@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
       productType: params.get("type"),
       stock: params.get("stock"),
       sort: params.get("sort"),
+      delivery: params.get("delivery"),
       minPrice,
       maxPrice,
       ...pagination,

@@ -14,6 +14,8 @@ import {
   Search,
   Store,
   Table2,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -21,6 +23,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandIcon } from "@/components/BrandIcon";
 import { CategoryTabBar, CategoryTabStrip, type CategoryTabItem } from "@/components/CategoryTabBar";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import { OfferActions, OfferFeedbackButton, OfferFeedbackDialog, OfferLink } from "@/components/ProductOffersPanel";
 import { SiteHeader } from "@/components/SiteHeader";
 import { listDetailNavigationHref, shouldHandleListDetailClick } from "@/lib/list-return";
@@ -39,6 +42,7 @@ import { createTimeoutSignal, isGeneratedDatasetStale, newestGeneratedDataset, n
 import { PRICE_DATA_CACHE_TTL_MS } from "@/lib/public-cache-policy";
 import { PUBLIC_MERCHANT_PAGE_SIZE } from "@/lib/public-merchant-policy";
 import { PUBLIC_OFFER_DEFAULT_LIMIT } from "@/lib/public-offer-query";
+import { DELIVERY_FILTERS, deliveryFilterLabel, parseDeliveryFilter, type DeliveryFilterId } from "@/lib/delivery-filter";
 import type {
   CanonicalProduct,
   ExplorerData,
@@ -58,6 +62,7 @@ export type ExplorerInitialState = {
   platform?: string;
   productType?: string;
   stock?: string;
+  delivery?: string;
   sort?: SortMode;
   minPrice?: string;
   maxPrice?: string;
@@ -139,6 +144,7 @@ const EMPTY_EXPLORER_DATA: ExplorerData = {
 };
 
 let explorerMemoryCache: ExplorerData | null = null;
+const explorerViewMemoryCache = new Map<string, ExplorerData>();
 const offerListMemoryCache = new Map<string, OfferListResponse>();
 const merchantListMemoryCache = new Map<string, MerchantListResponse>();
 
@@ -166,6 +172,7 @@ export function PriceExplorer({
   const [platform, setPlatform] = useState(initialState.platform ?? "全部");
   const [productType, setProductType] = useState(initialState.productType ?? "全部");
   const [stock, setStock] = useState(initialState.stock ?? "all");
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilterId>(parseDeliveryFilter(initialState.delivery));
   const [sort, setSort] = useState<SortMode>(initialState.sort ?? "available_price");
   const [minPrice, setMinPrice] = useState(initialState.minPrice ?? "");
   const [maxPrice, setMaxPrice] = useState(initialState.maxPrice ?? "");
@@ -211,6 +218,7 @@ export function PriceExplorer({
       setPlatform(nextState.platform ?? "全部");
       setProductType(nextState.productType ?? "全部");
       setStock(nextState.stock ?? "all");
+      setDeliveryFilter(parseDeliveryFilter(nextState.delivery));
       setSort(nextState.sort ?? "available_price");
       setMinPrice(nextState.minPrice ?? "");
       setMaxPrice(nextState.maxPrice ?? "");
@@ -301,7 +309,7 @@ export function PriceExplorer({
   const showingMerchants = scopeMode === "merchants";
   const title = buildTitle(platform, productType, scopeMode);
   const searchPlaceholder = searchPlaceholderForScope(scopeMode);
-  const activeFilterChips = buildActiveFilterChips({ productType, stock, minPrice, maxPrice, merchantCollector, merchantSignal, showingMerchants });
+  const activeFilterChips = buildActiveFilterChips({ productType, stock, deliveryFilter, minPrice, maxPrice, merchantCollector, merchantSignal, showingMerchants });
   const renderMobileProductList = isDesktopViewport !== true;
   const renderDesktopProductTable = viewMode === "table" && isDesktopViewport !== false;
   const renderDesktopProductCards = viewMode === "cards" && isDesktopViewport !== false;
@@ -312,6 +320,7 @@ export function PriceExplorer({
         platform,
         productType,
         stock,
+        delivery: deliveryFilter,
         sort,
         minPrice,
         maxPrice,
@@ -320,7 +329,7 @@ export function PriceExplorer({
         merchantCollector,
         merchantSignal,
       }).toString(),
-    [maxPrice, merchantCollector, merchantSignal, minPrice, platform, productType, query, scopeMode, sort, stock, viewMode],
+    [deliveryFilter, maxPrice, merchantCollector, merchantSignal, minPrice, platform, productType, query, scopeMode, sort, stock, viewMode],
   );
   const offerQueryString = useMemo(
     () =>
@@ -329,11 +338,12 @@ export function PriceExplorer({
         platform,
         productType,
         stock,
+        delivery: deliveryFilter,
         sort,
         minPrice,
         maxPrice,
       }).toString(),
-    [effectiveQuery, maxPrice, minPrice, platform, productType, sort, stock],
+    [deliveryFilter, effectiveQuery, maxPrice, minPrice, platform, productType, sort, stock],
   );
   const merchantQueryString = useMemo(
     () =>
@@ -342,13 +352,14 @@ export function PriceExplorer({
         platform,
         productType,
         stock,
+        delivery: deliveryFilter,
         sort,
         minPrice,
         maxPrice,
         collector: merchantCollector,
         signal: merchantSignal,
       }).toString(),
-    [effectiveQuery, maxPrice, merchantCollector, merchantSignal, minPrice, platform, productType, sort, stock],
+    [deliveryFilter, effectiveQuery, maxPrice, merchantCollector, merchantSignal, minPrice, platform, productType, sort, stock],
   );
   const visibleOfferResponse = showingOffers && offerQueryString === "" ? offerResponse ?? initialOffers : offerResponse;
   const platformOffers = visibleOfferResponse?.rows ?? [];
@@ -481,6 +492,7 @@ export function PriceExplorer({
     setPlatform("全部");
     setProductType("全部");
     setStock("all");
+    setDeliveryFilter("all");
     setSort("available_price");
     setMinPrice("");
     setMaxPrice("");
@@ -498,6 +510,7 @@ export function PriceExplorer({
   function resetAdvancedFilters() {
     setProductType("全部");
     setStock("all");
+    setDeliveryFilter("all");
     setMinPrice("");
     setMaxPrice("");
     setMerchantCollector("all");
@@ -864,7 +877,7 @@ export function PriceExplorer({
                   className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[#e4e9ea] px-4 text-sm font-semibold text-[#2d3435] transition hover:bg-[#dde4e5]"
                 >
                   <Filter size={16} className="shrink-0" />
-                  筛选{advancedFilterCount({ productType, stock, minPrice, maxPrice, merchantCollector, merchantSignal, showingMerchants }) ? ` ${advancedFilterCount({ productType, stock, minPrice, maxPrice, merchantCollector, merchantSignal, showingMerchants })}` : ""}
+                  筛选{advancedFilterCount({ productType, stock, deliveryFilter, minPrice, maxPrice, merchantCollector, merchantSignal, showingMerchants }) ? ` ${advancedFilterCount({ productType, stock, deliveryFilter, minPrice, maxPrice, merchantCollector, merchantSignal, showingMerchants })}` : ""}
                 </button>
               </div>
             </div>
@@ -989,6 +1002,14 @@ export function PriceExplorer({
                 ["out_of_stock", "缺货"],
               ]}
             />
+            {!showingMerchants ? (
+              <FilterSelect
+                label="交付方式"
+                value={deliveryFilter}
+                onChange={(value) => setDeliveryFilter(parseDeliveryFilter(value))}
+                options={DELIVERY_FILTERS.map((item) => [item.id, item.label] as [string, string])}
+              />
+            ) : null}
             <PriceInput label="最低价" value={minPrice} onChange={setMinPrice} />
             <PriceInput label="最高价" value={maxPrice} onChange={setMaxPrice} />
             {showingMerchants ? (
@@ -1021,6 +1042,7 @@ export function PriceExplorer({
           open={filtersOpen}
           productType={productType}
           stock={stock}
+          deliveryFilter={deliveryFilter}
           minPrice={minPrice}
           maxPrice={maxPrice}
           showingMerchants={showingMerchants}
@@ -1028,6 +1050,7 @@ export function PriceExplorer({
           merchantSignal={merchantSignal}
           onProductTypeChange={setProductType}
           onStockChange={setStock}
+          onDeliveryFilterChange={setDeliveryFilter}
           onMinPriceChange={setMinPrice}
           onMaxPriceChange={setMaxPrice}
           onMerchantCollectorChange={setMerchantCollector}
@@ -1351,7 +1374,9 @@ function PlatformOfferTable({
                       <RelativeTime value={offerTimestamp(offer)} />
                     </td>
                     <td className="px-3 py-3 text-center">
-                      <OfferLink offer={offer} available={available} compact />
+                      <div className="flex items-center justify-center gap-2">
+                        <OfferLink offer={offer} available={available} compact />
+                      </div>
                     </td>
                     <td className="px-3 py-3 text-center">
                       <OfferFeedbackButton
@@ -1414,7 +1439,9 @@ function PlatformOfferCard({
             <RelativeTime value={offerTimestamp(offer)} />
           </p>
         </div>
-        <OfferActions offer={offer} available={available} onFeedback={onFeedback} />
+        <div className="flex flex-wrap justify-end gap-2">
+          <OfferActions offer={offer} available={available} onFeedback={onFeedback} />
+        </div>
       </div>
     </article>
   );
@@ -2058,14 +2085,16 @@ function MobileProductCard({
             mode="mobile"
           />
         </div>
-        <Link
-          href={productHref}
-          onClick={handleProductClick}
-          className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#2d3435] px-4 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526]"
-        >
-          查看
-          <ChevronRight size={15} />
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={productHref}
+            onClick={handleProductClick}
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#2d3435] px-4 text-sm font-semibold text-[#f8f8f8] transition hover:bg-[#1f2526]"
+          >
+            查看
+            <ChevronRight size={15} />
+          </Link>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -2193,6 +2222,7 @@ function MobileFilterSheet({
   open,
   productType,
   stock,
+  deliveryFilter,
   minPrice,
   maxPrice,
   showingMerchants,
@@ -2200,6 +2230,7 @@ function MobileFilterSheet({
   merchantSignal,
   onProductTypeChange,
   onStockChange,
+  onDeliveryFilterChange,
   onMinPriceChange,
   onMaxPriceChange,
   onMerchantCollectorChange,
@@ -2210,6 +2241,7 @@ function MobileFilterSheet({
   open: boolean;
   productType: string;
   stock: string;
+  deliveryFilter: DeliveryFilterId;
   minPrice: string;
   maxPrice: string;
   showingMerchants: boolean;
@@ -2217,6 +2249,7 @@ function MobileFilterSheet({
   merchantSignal: MerchantSignalFilter;
   onProductTypeChange: (value: string) => void;
   onStockChange: (value: string) => void;
+  onDeliveryFilterChange: (value: DeliveryFilterId) => void;
   onMinPriceChange: (value: string) => void;
   onMaxPriceChange: (value: string) => void;
   onMerchantCollectorChange: (value: MerchantCollectorFilter) => void;
@@ -2268,6 +2301,14 @@ function MobileFilterSheet({
               ["out_of_stock", "缺货"],
             ]}
           />
+          {!showingMerchants ? (
+            <FilterSelect
+              label="交付方式"
+              value={deliveryFilter}
+              onChange={(value) => onDeliveryFilterChange(parseDeliveryFilter(value))}
+              options={DELIVERY_FILTERS.map((item) => [item.id, item.label] as [string, string])}
+            />
+          ) : null}
           <div className="grid grid-cols-2 gap-3">
             <PriceInput label="最低价" value={minPrice} onChange={onMinPriceChange} />
             <PriceInput label="最高价" value={maxPrice} onChange={onMaxPriceChange} />
@@ -2552,6 +2593,7 @@ function buildExplorerSearchParams({
   platform,
   productType,
   stock,
+  delivery,
   sort,
   minPrice,
   maxPrice,
@@ -2567,6 +2609,7 @@ function buildExplorerSearchParams({
   if (platform !== "全部") params.set("platform", platform);
   if (productType !== "全部") params.set("type", productType);
   if (stock !== "all") params.set("stock", stock);
+  if (parseDeliveryFilter(delivery) !== "all") params.set("delivery", parseDeliveryFilter(delivery));
   if (sort !== "available_price") params.set("sort", sort);
   if (minPrice) params.set("min", minPrice);
   if (maxPrice) params.set("max", maxPrice);
@@ -2583,6 +2626,7 @@ function buildPublicListSearchParams({
   platform,
   productType,
   stock,
+  delivery,
   sort,
   minPrice,
   maxPrice,
@@ -2593,6 +2637,7 @@ function buildPublicListSearchParams({
   platform: string;
   productType: string;
   stock: string;
+  delivery: string;
   sort: SortMode;
   minPrice: string;
   maxPrice: string;
@@ -2606,6 +2651,7 @@ function buildPublicListSearchParams({
   if (platform !== "全部") params.set("platform", platform);
   if (productType !== "全部") params.set("type", productType);
   if (stock !== "all") params.set("stock", stock);
+  if (parseDeliveryFilter(delivery) !== "all") params.set("delivery", parseDeliveryFilter(delivery));
   if (sort !== "available_price") params.set("sort", sort);
   if (minPrice) params.set("min", minPrice);
   if (maxPrice) params.set("max", maxPrice);
@@ -2624,6 +2670,7 @@ function parseExplorerInitialState(params: URLSearchParams): ExplorerInitialStat
     platform: pickParam(params.get("platform") || "", ["全部", ...visiblePlatformOptions], "全部"),
     productType: pickParam(params.get("type") || "", ["全部", ...productTypeOptions], "全部"),
     stock: pickParam(params.get("stock") || "", stockOptions, "all"),
+    delivery: parseDeliveryFilter(params.get("delivery")),
     sort: pickParam(params.get("sort") || "", sortOptions, "available_price"),
     minPrice: numericParam(params.get("min") || ""),
     maxPrice: numericParam(params.get("max") || ""),

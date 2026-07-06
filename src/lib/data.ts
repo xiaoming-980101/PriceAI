@@ -5,6 +5,7 @@ import { getAdminPasswordStatus } from "./admin-auth";
 import { notifyOperationalIssue } from "./alerts";
 import { getApiTransitAdminData, getEmptyApiTransitAdminData } from "./api-transit-admin";
 import { allPlatformOptions, buildProductGroups, canonicalCatalog, classifyOffer, comparePlatformOrder, isSharedAccessOffer, isTelegramStarsOffer, publicCatalogProducts, resolveOfferProduct } from "./catalog";
+import { deliveryFilterToFilterTags, parseDeliveryFilter, type DeliveryFilterId } from "./delivery-filter";
 import { isSupabaseConfigured } from "./env";
 import { getApiModelAdminData } from "./api-models-db";
 import { normalizeCollectorKind } from "./collector-registry";
@@ -15,6 +16,7 @@ import {
   filterOfferFilterFacetsForProduct,
   OFFER_FILTER_TAGS,
   offerMatchesFilterTags,
+  parseOfferFilterTags,
   parseOfferFilterTagsForProduct,
   type OfferFilterTagFacet,
   type OfferFilterTagId,
@@ -293,6 +295,8 @@ let publicOffersCache: { expiresAt: number; value: PublicOffersResult } | null =
 const publicOfferViewCache = new Map<string, { expiresAt: number; value: PublicOffersResult }>();
 let explorerDataCache: { expiresAt: number; value: ExplorerData } | null = null;
 let explorerDataPromise: Promise<ExplorerData> | null = null;
+const explorerDataViewCache = new Map<string, { expiresAt: number; value: ExplorerData }>();
+const explorerDataViewPromises = new Map<string, Promise<ExplorerData>>();
 let publicMerchantsCache: { expiresAt: number; value: PublicMerchantsResult } | null = null;
 let publicMerchantsPromise: Promise<PublicMerchantsResult> | null = null;
 const publicMerchantViewCache = new Map<string, { expiresAt: number; value: PublicMerchantsResult }>();
@@ -311,6 +315,7 @@ type OfferListFilters = {
   minPrice?: number | null;
   maxPrice?: number | null;
   sort?: string | null;
+  delivery?: string | null;
   limit?: number;
   offset?: number;
   skipSnapshot?: boolean;
@@ -344,6 +349,7 @@ type ProductOfferListFilters = {
   limit?: number;
   offset?: number;
   filterTags?: string[] | null;
+  delivery?: string | string[] | null;
   query?: string | string[] | null;
   excludeQuery?: string | string[] | null;
 };
@@ -355,6 +361,8 @@ export function clearPublicDataCache(): void {
   publicOfferViewCache.clear();
   explorerDataCache = null;
   explorerDataPromise = null;
+  explorerDataViewCache.clear();
+  explorerDataViewPromises.clear();
   publicMerchantsCache = null;
   publicMerchantsPromise = null;
   publicMerchantViewCache.clear();
@@ -828,6 +836,7 @@ function comparePublicSnapshotProductRefreshPriority(
 }
 
 export async function refreshPublicApiSnapshots(): Promise<PublicApiSnapshotRefreshResult> {
+  await refreshProductPriceDailySnapshots();
   const explorerData = await buildExplorerData({ skipSnapshot: true });
   const explorer = !explorerData.degraded && await writePublicApiSnapshot({
     kind: "explorer",
@@ -887,6 +896,7 @@ async function refreshPublicApiSnapshotsForScope({
   let explorerProducts: Array<{ id: string; slug?: string | null }> = [];
 
   if (refreshGlobal) {
+    await refreshProductPriceDailySnapshots();
     const explorerData = await buildExplorerData({ skipSnapshot: true });
     explorer = !explorerData.degraded && await writePublicApiSnapshot({
       kind: "explorer",
@@ -945,6 +955,7 @@ async function refreshPublicProductOfferSnapshots(
       filterProductId: product.id,
       query: "",
       excludeQuery: "",
+      delivery: "all",
       skipSnapshot: true,
     });
     const defaultKey = publicProductOffersSnapshotKey(product.id);
@@ -1203,7 +1214,10 @@ async function loadPublicOfferData(): Promise<PublicOfferData> {
   }
 }
 
-export async function getExplorerData(): Promise<ExplorerData> {
+export async function getExplorerData(filters: { delivery?: string | null } = {}): Promise<ExplorerData> {
+  const delivery = parseDeliveryFilter(filters.delivery);
+  if (delivery !== "all") return getExplorerDataForDelivery(delivery);
+
   const now = Date.now();
   if (explorerDataCache && explorerDataCache.expiresAt > now && isReusableGeneratedValue(explorerDataCache.value)) {
     return explorerDataCache.value;
@@ -1230,9 +1244,57 @@ export async function getExplorerData(): Promise<ExplorerData> {
   return explorerDataPromise;
 }
 
-async function buildExplorerData(options: { skipSnapshot?: boolean } = {}): Promise<ExplorerData> {
+async function refreshProductPriceDailySnapshots(): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .rpc("refresh_product_price_daily_snapshots")
+    .abortSignal(AbortSignal.timeout(PUBLIC_SUPABASE_BUILD_READ_TIMEOUT_MS));
+  if (error) {
+    if (isMissingPriceDailySnapshotsError(error)) return;
+    console.warn("Product price daily snapshot refresh failed:", error.message);
+  }
+}
+
+function isMissingPriceDailySnapshotsError(error: unknown): boolean {
+  const maybe = error as { code?: string; message?: string } | null;
+  return maybe?.code === "42883" || /refresh_product_price_daily_snapshots|product_price_daily_snapshots/i.test(String(maybe?.message || ""));
+}
+
+async function getExplorerDataForDelivery(delivery: DeliveryFilterId): Promise<ExplorerData> {
+  const cacheKey = `delivery:${delivery}`;
+  const now = Date.now();
+  const cached = explorerDataViewCache.get(cacheKey);
+  if (cached && cached.expiresAt > now && isReusableGeneratedValue(cached.value)) return cached.value;
+
+  const existing = explorerDataViewPromises.get(cacheKey);
+  if (existing) return existing;
+
+  const staleValue = cached?.value || null;
+  const promise = buildExplorerData({ delivery, skipSnapshot: true })
+    .then((value) => {
+      const nextValue = preferStaleExplorerData(staleValue, value);
+      if (!nextValue.degraded) {
+        explorerDataViewCache.set(cacheKey, {
+          expiresAt: Date.now() + EXPLORER_DATA_CACHE_TTL_MS,
+          value: nextValue,
+        });
+      }
+      return nextValue;
+    })
+    .finally(() => {
+      explorerDataViewPromises.delete(cacheKey);
+    });
+
+  explorerDataViewPromises.set(cacheKey, promise);
+  return promise;
+}
+
+async function buildExplorerData(options: { skipSnapshot?: boolean; delivery?: DeliveryFilterId } = {}): Promise<ExplorerData> {
+  const delivery = options.delivery || "all";
   let staleSnapshotValue: ExplorerData | null = null;
-  if (!options.skipSnapshot) {
+  if (!options.skipSnapshot && delivery === "all") {
     const snapshot = await readPublicApiSnapshot<ExplorerData>("explorer", PUBLIC_EXPLORER_SNAPSHOT_KEY);
     if (snapshot && isExplorerDataSnapshot(snapshot.value)) {
       const value = sanitizeExplorerDataForPublicCatalog(hydrateGeneratedAt(snapshot));
@@ -1241,10 +1303,10 @@ async function buildExplorerData(options: { skipSnapshot?: boolean } = {}): Prom
     }
   }
 
-  const value = await buildExplorerDataFromSource();
+  const value = await buildExplorerDataFromSource(delivery);
   const publicValue = sanitizeExplorerDataForPublicCatalog(value);
   const nextValue = staleSnapshotValue ? preferStaleExplorerData(staleSnapshotValue, publicValue) : publicValue;
-  if (!options.skipSnapshot && !value.degraded) {
+  if (!options.skipSnapshot && delivery === "all" && !value.degraded) {
     await writePublicApiSnapshot({
       kind: "explorer",
       key: PUBLIC_EXPLORER_SNAPSHOT_KEY,
@@ -1256,12 +1318,18 @@ async function buildExplorerData(options: { skipSnapshot?: boolean } = {}): Prom
   return nextValue;
 }
 
-async function buildExplorerDataFromSource(): Promise<ExplorerData> {
-  const rpcData = await getExplorerDataFromDatabase();
+async function buildExplorerDataFromSource(delivery: DeliveryFilterId = "all"): Promise<ExplorerData> {
+  const rpcData = await getExplorerDataFromDatabase(delivery);
   if (rpcData) return rpcData;
 
   const publicData = await readPublicOfferData();
-  const products = buildProductGroups(dedupePublicOffers(publicData.offers), publicData.products);
+  const deliveryTags = deliveryFilterToFilterTags(delivery);
+  const offerPool = deliveryTags.length
+    ? publicData.offers.filter((offer) => offerMatchesFilterTags(offer, deliveryTags))
+    : publicData.offers;
+  const products = buildProductGroups(dedupePublicOffers(offerPool), publicData.products, {
+    includeSharedAccessInLowest: delivery !== "all",
+  });
 
   return {
     generatedAt: publicData.generatedAt,
@@ -1274,12 +1342,14 @@ async function buildExplorerDataFromSource(): Promise<ExplorerData> {
   };
 }
 
-async function getExplorerDataFromDatabase(): Promise<ExplorerData | null> {
+async function getExplorerDataFromDatabase(delivery: DeliveryFilterId = "all"): Promise<ExplorerData | null> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
   const { data, error } = await supabase
-    .rpc("list_public_product_summaries")
+    .rpc("list_public_product_summaries", {
+      p_delivery: delivery,
+    })
     .abortSignal(publicSupabaseReadSignal());
   if (error) {
     console.error("Product summary RPC failed:", error.message);
@@ -1908,6 +1978,8 @@ function isPublicMerchantsSnapshot(value: unknown): value is PublicMerchantsResu
 }
 
 function publicOfferListSnapshotKeyForRequest(filters: OfferListFilters): string | null {
+  if (parseDeliveryFilter(filters.delivery) !== "all") return null;
+
   if (
     filters.limit !== PUBLIC_OFFERS_SNAPSHOT_LIMIT ||
     filters.offset !== PUBLIC_OFFERS_SNAPSHOT_OFFSET ||
@@ -2798,12 +2870,13 @@ export async function getPublicProductGroup(id: string) {
   return dashboard.products.find((product) => product.id === id || product.slug === id) || null;
 }
 
-export async function getPublicProductSummary(id: string) {
-  const explorerData = await getExplorerData();
+export async function getPublicProductSummary(id: string, filters: { delivery?: string | null } = {}) {
+  const delivery = parseDeliveryFilter(filters.delivery);
+  const explorerData = await getExplorerData({ delivery });
   const product = explorerData.products.find((item) => item.id === id || item.slug === id);
   if (product) return product;
 
-  const summary = await getPublicProductSummaryFromDatabase(id);
+  const summary = await getPublicProductSummaryFromDatabase(id, delivery);
   if (summary) return summary;
 
   const catalogProduct = canonicalCatalog.find((item) => item.id === id || item.slug === id);
@@ -2811,13 +2884,14 @@ export async function getPublicProductSummary(id: string) {
   return catalogProduct ? toExplorerProductSummary(makeEmptyProductGroup(catalogProduct)) : null;
 }
 
-async function getPublicProductSummaryFromDatabase(id: string): Promise<ExplorerProductSummary | null> {
+async function getPublicProductSummaryFromDatabase(id: string, delivery: DeliveryFilterId = "all"): Promise<ExplorerProductSummary | null> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
   const { data, error } = await supabase
     .rpc("get_public_product_summary", {
       p_product_key: id,
+      p_delivery: delivery,
     })
     .abortSignal(publicSupabaseReadSignal());
 
@@ -2837,10 +2911,15 @@ export async function listPublicProductOffers(id: string, filters: ProductOfferL
   const filterProductId = resolvePublicProductFilterId(id);
   const limit = normalizePublicOfferLimit(filters.limit);
   const offset = normalizePublicOfferOffset(filters.offset);
-  const filterTags = parseOfferFilterTagsForProduct(filterProductId, filters.filterTags || []);
+  const delivery = parseDeliveryFilter(filters.delivery);
+  const deliveryFilterTags = deliveryFilterToFilterTags(delivery);
+  const filterTags = parseOfferFilterTagsForProduct(filterProductId, [
+    ...(filters.filterTags || []),
+    ...deliveryFilterTags,
+  ]);
   const query = normalizeProductOfferQuery(filters.query);
   const excludeQuery = normalizeProductOfferQuery(filters.excludeQuery, 160);
-  const cacheKey = `${id}:${limit}:${offset}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}:offer-filter-v5-risk-feedback`;
+  const cacheKey = `${id}:${limit}:${offset}:${delivery}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}:offer-filter-v6-delivery`;
   const now = Date.now();
   const cached = productOffersCache.get(cacheKey);
 
@@ -2849,7 +2928,7 @@ export async function listPublicProductOffers(id: string, filters: ProductOfferL
   }
 
   const staleValue = cached?.value || null;
-  const value = await loadPublicProductOffers(id, { limit, offset, filterTags, filterProductId, query, excludeQuery });
+  const value = await loadPublicProductOffers(id, { limit, offset, filterTags, filterProductId, query, excludeQuery, delivery });
   const nextValue = sanitizePublicProductOffersResultForProduct(filterProductId, preferStaleProductOffers(staleValue, value));
   if (!nextValue.degraded) {
     productOffersCache.set(cacheKey, {
@@ -2877,6 +2956,7 @@ async function loadPublicProductOffers(
     filterProductId: string;
     query: string;
     excludeQuery: string;
+    delivery: DeliveryFilterId;
     skipSnapshot?: boolean;
   },
 ) : Promise<PublicProductOffersResult> {
@@ -2970,6 +3050,7 @@ async function getPublicProductOffersFromDatabase(
     filterProductId: string;
     query: string;
     excludeQuery: string;
+    delivery: DeliveryFilterId;
   },
 ): Promise<PublicProductOffersResult | null> {
   if (!isPublicProductKeyVisible(id) || !isPublicProductKeyVisible(filters.filterProductId)) {
@@ -3166,6 +3247,7 @@ export async function listPublicOffers(filters: OfferListFilters = {}) {
   const normalizedFilters = {
     ...filters,
     query: normalizePublicOfferQuery(filters.query),
+    delivery: parseDeliveryFilter(filters.delivery),
     limit: normalizePublicOfferLimit(filters.limit),
     offset: normalizePublicOfferOffset(filters.offset),
   };
@@ -3533,6 +3615,7 @@ async function loadPublicOffers(filters: OfferListFilters & { skipSnapshot?: boo
   const publicData = await readPublicOfferData();
   const productGroups = buildProductGroups(publicData.offers, publicData.products).map(toExplorerProductSummary);
   const normalizedQuery = (filters.query || "").trim().toLowerCase();
+  const deliveryTags = deliveryFilterToFilterTags(parseDeliveryFilter(filters.delivery));
   const limit = normalizePublicOfferLimit(filters.limit);
   const offset = normalizePublicOfferOffset(filters.offset);
 
@@ -3556,6 +3639,7 @@ async function loadPublicOffers(filters: OfferListFilters & { skipSnapshot?: boo
         .toLowerCase();
 
       if (normalizedQuery && !haystack.includes(normalizedQuery)) return false;
+      if (deliveryTags.length && !offerMatchesFilterTags(offer, deliveryTags)) return false;
       if (filters.platform && filters.platform !== "全部" && product.platform !== filters.platform) return false;
       if (filters.productType && filters.productType !== "全部" && product.productType !== filters.productType) return false;
       if (filters.stock === "available" && !isOfferAvailableForPublicList(offer)) return false;
@@ -3620,6 +3704,7 @@ async function listPublicOffersFromDatabase(filters: OfferListFilters = {}) {
       p_sort: filters.sort || null,
       p_min_price: filters.minPrice ?? null,
       p_max_price: filters.maxPrice ?? null,
+      p_delivery: parseDeliveryFilter(filters.delivery),
       p_limit: limit,
       p_offset: offset,
     })
@@ -4301,6 +4386,7 @@ function toExplorerProductSummary(product: DashboardData["products"][number]): E
     latestSeenAt: product.latestSeenAt,
     anomalyFlags: product.anomalyFlags,
     offerSearchText: buildOfferSearchText(product.offers),
+    priceTrend: null,
   };
 }
 
@@ -4344,7 +4430,38 @@ function mapPublicProductSummaryRow(row: Record<string, unknown>): ExplorerProdu
       ...(!inStockCount && outOfStockCount ? ["全部缺货"] : []),
     ],
     offerSearchText: toExplorerOfferSearchText(row.offer_search_text),
+    priceTrend: mapProductPriceTrend(row.price_trend),
   };
+}
+
+function mapProductPriceTrend(value: unknown): ExplorerProductSummary["priceTrend"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const currentPrice = numberOrNull(row.currentPrice);
+  if (currentPrice === null) return null;
+
+  return {
+    currentPrice,
+    previousDayPrice: numberOrNull(row.previousDayPrice),
+    previous7dPrice: numberOrNull(row.previous7dPrice),
+    deltaDay: numberOrNull(row.deltaDay),
+    delta7d: numberOrNull(row.delta7d),
+    isNewLow7d: row.isNewLow7d === true,
+    isNewListing: row.isNewListing === true,
+    latestSnapshotDate: stringOrNull(row.latestSnapshotDate),
+    previousDayDate: stringOrNull(row.previousDayDate),
+    previous7dDate: stringOrNull(row.previous7dDate),
+  };
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
 }
 
 function buildOfferSearchText(offers: RawOffer[]): string {
@@ -4679,7 +4796,9 @@ export function mapRawOffer(row: Record<string, unknown>): RawOffer {
     categorySlug: storedCategorySlug,
     price,
   });
-  const filterTags = deriveOfferFilterTags({ sourceTitle, tags });
+  const filterTags = Array.isArray(row.filter_tags)
+    ? parseOfferFilterTags(row.filter_tags.map(String))
+    : deriveOfferFilterTags({ sourceTitle, tags });
 
   return {
     id: String(row.id),

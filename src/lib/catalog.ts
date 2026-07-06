@@ -843,6 +843,7 @@ function shouldBlockStoredProductFallback(title: string): boolean {
 export function buildProductGroups(
   offers: RawOffer[],
   canonicalProducts: CanonicalProduct[] = canonicalCatalog,
+  options: { includeSharedAccessInLowest?: boolean } = {},
 ): ProductGroup[] {
   const map = new Map<string, ProductGroup>();
 
@@ -878,8 +879,8 @@ export function buildProductGroups(
     product.inStockCount = product.offers.filter(isAvailable).length;
     product.outOfStockCount = Math.max(0, product.offers.length - product.inStockCount);
     const excludeTelegramStars = product.id === "telegram-premium";
-    const displayLowestOffer = getDisplayLowestOffer(product.offers, { excludeSharedAccess: true, excludeTelegramStars });
-    const warrantyLowestOffer = getDisplayLowestOffer(product.offers.filter(isLongWarrantyOffer), { excludeSharedAccess: true, excludeTelegramStars });
+    const displayLowestOffer = getDisplayLowestOffer(product.offers, { excludeSharedAccess: !options.includeSharedAccessInLowest, excludeTelegramStars });
+    const warrantyLowestOffer = getDisplayLowestOffer(product.offers.filter(isLongWarrantyOffer), { excludeSharedAccess: !options.includeSharedAccessInLowest, excludeTelegramStars });
     const priceMeta = getOfferPriceMeta(displayLowestOffer);
 
     product.lowestOffer = displayLowestOffer;

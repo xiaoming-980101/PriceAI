@@ -3,6 +3,8 @@
 import { AlertTriangle, ExternalLink, Flag, ImageUp, Loader2, Search, ShieldAlert, Trash2, X } from "lucide-react";
 import { type ChangeEvent, type ClipboardEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { CommunityPrompt } from "@/components/FeedbackLink";
+import { FavoriteButton } from "@/components/FavoriteButton";
+import { useAuth } from "@/components/AuthProvider";
 import { isAvailable, isSharedAccessOffer } from "@/lib/catalog";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { readSessionCache, writeSessionCache } from "@/lib/client-cache";
@@ -27,6 +29,7 @@ import {
 } from "@/lib/trust-risk";
 import { PRICE_DATA_CACHE_TTL_MS } from "@/lib/public-cache-policy";
 import { PUBLIC_OFFER_DEFAULT_LIMIT } from "@/lib/public-offer-query";
+import { DELIVERY_FILTERS, deliveryFilterLabel, parseDeliveryFilter, type DeliveryFilterId } from "@/lib/delivery-filter";
 import type { RawOffer } from "@/lib/types";
 import { formatCurrency, formatDateMinute, formatRelativeTime } from "@/lib/utils";
 
@@ -61,6 +64,7 @@ export function ProductOffersPanel({
   productName,
   initialCount,
   initialData = null,
+  initialDelivery = "all",
   initialFilterTags = [],
   initialQuery = "",
   initialExcludeQuery = "",
@@ -70,13 +74,16 @@ export function ProductOffersPanel({
   productName: string;
   initialCount: number;
   initialData?: ProductOffersResponse | null;
+  initialDelivery?: string;
   initialFilterTags?: string[];
   initialQuery?: string;
   initialExcludeQuery?: string;
 }) {
+  const normalizedInitialDelivery = useMemo(() => parseDeliveryFilter(initialDelivery), [initialDelivery]);
   const normalizedInitialFilterTags = useMemo(() => parseOfferFilterTagsForProduct(productId, initialFilterTags), [initialFilterTags, productId]);
   const normalizedInitialQuery = useMemo(() => normalizeOfferSearchQuery(initialQuery), [initialQuery]);
   const normalizedInitialExcludeQuery = useMemo(() => normalizeOfferSearchQuery(initialExcludeQuery, 160), [initialExcludeQuery]);
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilterId>(normalizedInitialDelivery);
   const [selectedFilterTags, setSelectedFilterTags] = useState<OfferFilterTagId[]>(normalizedInitialFilterTags);
   const [searchOpen, setSearchOpen] = useState(Boolean(normalizedInitialQuery || normalizedInitialExcludeQuery));
   const [queryInput, setQueryInput] = useState(normalizedInitialQuery);
@@ -84,11 +91,12 @@ export function ProductOffersPanel({
   const [offerQuery, setOfferQuery] = useState(normalizedInitialQuery);
   const [offerExcludeQuery, setOfferExcludeQuery] = useState(normalizedInitialExcludeQuery);
   const selectedFilterKey = selectedFilterTags.join(",");
+  const deliveryFilterKey = deliveryFilter;
   const offerQueryKey = offerQuery.trim();
   const offerExcludeQueryKey = offerExcludeQuery.trim();
   const initialFilterKey = normalizedInitialFilterTags.join(",");
-  const initialCacheKey = productOffersCacheKey(productId, 0, normalizedInitialFilterTags, normalizedInitialQuery, normalizedInitialExcludeQuery);
-  const activeCacheKey = productOffersCacheKey(productId, 0, selectedFilterTags, offerQueryKey, offerExcludeQueryKey);
+  const initialCacheKey = productOffersCacheKey(productId, 0, normalizedInitialDelivery, normalizedInitialFilterTags, normalizedInitialQuery, normalizedInitialExcludeQuery);
+  const activeCacheKey = productOffersCacheKey(productId, 0, deliveryFilter, selectedFilterTags, offerQueryKey, offerExcludeQueryKey);
   const activeCacheKeyRef = useRef(activeCacheKey);
   const cachedInitialData = newestUsableGeneratedDataset(productOffersMemoryCache.get(initialCacheKey), initialData);
   const [data, setData] = useState<ProductOffersResponse | null>(cachedInitialData);
@@ -109,13 +117,15 @@ export function ProductOffersPanel({
     const urlFilters = readOfferFiltersFromUrl();
     if (!urlFilters) return;
 
+    const nextDelivery = parseDeliveryFilter(urlFilters.delivery);
     const nextFilterTags = parseOfferFilterTagsForProduct(productId, urlFilters.tags);
     const nextQuery = normalizeOfferSearchQuery(urlFilters.query);
     const nextExcludeQuery = normalizeOfferSearchQuery(urlFilters.excludeQuery, 160);
-    const hasUrlFilters = nextFilterTags.length > 0 || Boolean(nextQuery || nextExcludeQuery);
+    const hasUrlFilters = nextDelivery !== "all" || nextFilterTags.length > 0 || Boolean(nextQuery || nextExcludeQuery);
     if (!hasUrlFilters) return;
 
     const frameId = window.requestAnimationFrame(() => {
+      setDeliveryFilter(nextDelivery);
       setSelectedFilterTags(nextFilterTags);
       setQueryInput(nextQuery);
       setExcludeInput(nextExcludeQuery);
@@ -131,13 +141,14 @@ export function ProductOffersPanel({
     const filterTags = parseOfferFilterTagsForProduct(productId, selectedFilterKey);
     const query = normalizeOfferSearchQuery(offerQuery);
     const excludeQuery = normalizeOfferSearchQuery(offerExcludeQuery, 160);
-    const cacheKey = productOffersCacheKey(productId, 0, filterTags, query, excludeQuery);
+    const cacheKey = productOffersCacheKey(productId, 0, deliveryFilter, filterTags, query, excludeQuery);
     let cancelRefresh: (() => void) | null = null;
     let active = true;
 
     async function loadOffers() {
       const shouldUseInitialData =
         filterTags.join(",") === initialFilterKey &&
+        deliveryFilter === normalizedInitialDelivery &&
         query === normalizedInitialQuery &&
         excludeQuery === normalizedInitialExcludeQuery;
       const cachedData = newestUsableGeneratedDataset(
@@ -163,7 +174,7 @@ export function ProductOffersPanel({
       cancelRefresh = timeout.cancel;
 
       try {
-        const nextData = await fetchProductOfferPage(productId, 0, filterTags, query, excludeQuery, timeout.signal);
+        const nextData = await fetchProductOfferPage(productId, 0, deliveryFilter, filterTags, query, excludeQuery, timeout.signal);
         if (!active) return;
         const latestData = newestUsableGeneratedDataset(nextData, productOffersMemoryCache.get(cacheKey)) ?? nextData;
         rememberHealthyProductOffers(cacheKey, latestData);
@@ -196,8 +207,10 @@ export function ProductOffersPanel({
   }, [
     initialData,
     initialFilterKey,
+    normalizedInitialDelivery,
     normalizedInitialExcludeQuery,
     normalizedInitialQuery,
+    deliveryFilter,
     offerExcludeQuery,
     offerQuery,
     productId,
@@ -214,21 +227,21 @@ export function ProductOffersPanel({
     selectedFilterTags,
   );
   const hasMore = Boolean(activeData) && !loading && offers.length < total;
-  const activeFilters = selectedFilterTags.length > 0 || Boolean(offerQueryKey || offerExcludeQueryKey);
+  const activeFilters = deliveryFilter !== "all" || selectedFilterTags.length > 0 || Boolean(offerQueryKey || offerExcludeQueryKey);
 
   const loadMoreOffers = useCallback(async () => {
     if (!activeData || loading || paging || offers.length >= total) return;
     const filterTags = parseOfferFilterTagsForProduct(productId, selectedFilterTags);
     const query = normalizeOfferSearchQuery(offerQuery);
     const excludeQuery = normalizeOfferSearchQuery(offerExcludeQuery, 160);
-    const requestCacheKey = productOffersCacheKey(productId, 0, filterTags, query, excludeQuery);
+    const requestCacheKey = productOffersCacheKey(productId, 0, deliveryFilter, filterTags, query, excludeQuery);
     if (dataCacheKey !== requestCacheKey) return;
 
     setPaging(true);
     setError(null);
 
     try {
-      const nextPage = await fetchProductOfferPage(productId, offers.length, filterTags, query, excludeQuery);
+      const nextPage = await fetchProductOfferPage(productId, offers.length, deliveryFilter, filterTags, query, excludeQuery);
       if (activeCacheKeyRef.current !== requestCacheKey) return;
       setData((current) => {
         if (activeCacheKeyRef.current !== requestCacheKey) return current;
@@ -244,7 +257,7 @@ export function ProductOffersPanel({
           limited: nextPage.limited,
         };
 
-        const cacheKey = productOffersCacheKey(productId, 0, filterTags, query, excludeQuery);
+        const cacheKey = productOffersCacheKey(productId, 0, deliveryFilter, filterTags, query, excludeQuery);
         rememberHealthyProductOffers(cacheKey, mergedData);
 
         return mergedData;
@@ -255,7 +268,7 @@ export function ProductOffersPanel({
     } finally {
       if (activeCacheKeyRef.current === requestCacheKey) setPaging(false);
     }
-  }, [activeData, dataCacheKey, loading, offerExcludeQuery, offerQuery, offers.length, paging, productId, selectedFilterTags, total]);
+  }, [activeData, dataCacheKey, deliveryFilter, loading, offerExcludeQuery, offerQuery, offers.length, paging, productId, selectedFilterTags, total]);
 
   useEffect(() => {
     if (!hasMore) return;
@@ -280,7 +293,12 @@ export function ProductOffersPanel({
   const handleToggleFilterTag = useCallback((tagId: OfferFilterTagId) => {
     const nextTags = toggleOfferFilterTag(selectedFilterTags, tagId);
     setSelectedFilterTags(nextTags);
-    syncOfferFiltersToUrl(nextTags, offerQuery, offerExcludeQuery);
+    syncOfferFiltersToUrl(deliveryFilter, nextTags, offerQuery, offerExcludeQuery);
+  }, [deliveryFilter, offerExcludeQuery, offerQuery, selectedFilterTags]);
+
+  const handleDeliveryChange = useCallback((nextDelivery: DeliveryFilterId) => {
+    setDeliveryFilter(nextDelivery);
+    syncOfferFiltersToUrl(nextDelivery, selectedFilterTags, offerQuery, offerExcludeQuery);
   }, [offerExcludeQuery, offerQuery, selectedFilterTags]);
 
   const handleSearchSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
@@ -292,17 +310,18 @@ export function ProductOffersPanel({
     setOfferQuery(nextQuery);
     setOfferExcludeQuery(nextExcludeQuery);
     setSearchOpen(Boolean(nextQuery || nextExcludeQuery) || searchOpen);
-    syncOfferFiltersToUrl(selectedFilterTags, nextQuery, nextExcludeQuery);
-  }, [excludeInput, queryInput, searchOpen, selectedFilterTags]);
+    syncOfferFiltersToUrl(deliveryFilter, selectedFilterTags, nextQuery, nextExcludeQuery);
+  }, [deliveryFilter, excludeInput, queryInput, searchOpen, selectedFilterTags]);
 
   const clearOfferFilters = useCallback(() => {
+    setDeliveryFilter("all");
     setSelectedFilterTags([]);
     setQueryInput("");
     setExcludeInput("");
     setOfferQuery("");
     setOfferExcludeQuery("");
     setSearchOpen(false);
-    syncOfferFiltersToUrl([], "", "");
+    syncOfferFiltersToUrl("all", [], "", "");
   }, []);
 
   if (loading && !data) {
@@ -329,6 +348,7 @@ export function ProductOffersPanel({
       ) : null}
       <OfferFilterBar
         facets={filterFacets}
+        deliveryFilter={deliveryFilter}
         selectedTags={selectedFilterTags}
         total={total}
         active={activeFilters}
@@ -341,6 +361,7 @@ export function ProductOffersPanel({
         onSearchInputChange={setQueryInput}
         onSearchOpen={() => setSearchOpen(true)}
         onSearchSubmit={handleSearchSubmit}
+        onDeliveryChange={handleDeliveryChange}
         onToggle={handleToggleFilterTag}
       />
       {loading || !activeData ? (
@@ -410,6 +431,7 @@ function InlineErrorBanner({ message }: { message: string }) {
 async function fetchProductOfferPage(
   productId: string,
   offset: number,
+  delivery: DeliveryFilterId = "all",
   filterTags: OfferFilterTagId[] = [],
   query = "",
   excludeQuery = "",
@@ -419,6 +441,7 @@ async function fetchProductOfferPage(
     limit: String(OFFER_PAGE_SIZE),
     offset: String(offset),
   });
+  if (delivery !== "all") params.set("delivery", delivery);
   if (filterTags.length) params.set("tags", filterTags.join(","));
   if (query) params.set("q", query);
   if (excludeQuery) params.set("exclude", excludeQuery);
@@ -434,11 +457,12 @@ async function fetchProductOfferPage(
 function productOffersCacheKey(
   productId: string,
   offset: number,
+  delivery: DeliveryFilterId = "all",
   filterTags: OfferFilterTagId[] = [],
   query = "",
   excludeQuery = "",
 ): string {
-  return `priceai:product-offers:v11-risk-feedback:${productId}:${offset}:${OFFER_PAGE_SIZE}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}`;
+  return `priceai:product-offers:v12-delivery:${productId}:${offset}:${OFFER_PAGE_SIZE}:${delivery}:${filterTags.join(",") || "all"}:${query || "none"}:${excludeQuery || "none"}`;
 }
 
 function productOfferFilterFacets(
@@ -465,6 +489,10 @@ function firstProductOfferFilterFacets(...candidates: Array<OfferFilterTagFacet[
   return candidates.find((candidate) => candidate && candidate.length > 0) ?? [];
 }
 
+function isDeliveryFacet(id: OfferFilterTagId): boolean {
+  return id === "delivery_recharge" || id === "delivery_cdk" || id === "delivery_account" || id === "shared_access";
+}
+
 function rememberProductOffers(cacheKey: string, value: ProductOffersResponse) {
   productOffersMemoryCache.delete(cacheKey);
   productOffersMemoryCache.set(cacheKey, value);
@@ -487,21 +515,27 @@ function normalizeOfferSearchQuery(value: string, limit = 80): string {
   return value.trim().slice(0, limit);
 }
 
-function readOfferFiltersFromUrl(): { tags: string | null; query: string; excludeQuery: string } | null {
+function readOfferFiltersFromUrl(): { delivery: string | null; tags: string | null; query: string; excludeQuery: string } | null {
   if (typeof window === "undefined") return null;
 
   const params = new URL(window.location.href).searchParams;
   return {
+    delivery: params.get("delivery"),
     tags: params.get("tags"),
     query: params.get("q") || "",
     excludeQuery: params.get("exclude") || "",
   };
 }
 
-function syncOfferFiltersToUrl(filterTags: OfferFilterTagId[], query: string, excludeQuery: string) {
+function syncOfferFiltersToUrl(delivery: DeliveryFilterId, filterTags: OfferFilterTagId[], query: string, excludeQuery: string) {
   if (typeof window === "undefined") return;
 
   const url = new URL(window.location.href);
+  if (delivery !== "all") {
+    url.searchParams.set("delivery", delivery);
+  } else {
+    url.searchParams.delete("delivery");
+  }
   if (filterTags.length) {
     url.searchParams.set("tags", filterTags.join(","));
   } else {
@@ -525,6 +559,7 @@ function syncOfferFiltersToUrl(filterTags: OfferFilterTagId[], query: string, ex
 
 function OfferFilterBar({
   facets,
+  deliveryFilter,
   selectedTags,
   total,
   active,
@@ -537,9 +572,11 @@ function OfferFilterBar({
   onSearchInputChange,
   onSearchOpen,
   onSearchSubmit,
+  onDeliveryChange,
   onToggle,
 }: {
   facets: OfferFilterTagFacet[];
+  deliveryFilter: DeliveryFilterId;
   selectedTags: OfferFilterTagId[];
   total: number;
   active: boolean;
@@ -552,14 +589,41 @@ function OfferFilterBar({
   onSearchInputChange: (value: string) => void;
   onSearchOpen: () => void;
   onSearchSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onDeliveryChange: (value: DeliveryFilterId) => void;
   onToggle: (tagId: OfferFilterTagId) => void;
 }) {
   const facetById = new Map(facets.map((facet) => [facet.id, facet]));
   const visibleFacets = Array.from(OFFER_FILTER_TAG_BY_ID.values())
-    .filter((definition) => facetById.has(definition.id));
+    .filter((definition) => facetById.has(definition.id) && !isDeliveryFacet(definition.id));
 
   return (
-    <section className="mt-5 flex flex-col gap-3 border-y border-[#e5eaea] py-3 md:flex-row md:items-center md:justify-between">
+    <section className="mt-5 flex flex-col gap-3 border-y border-[#e5eaea] py-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="shrink-0 text-xs font-semibold text-[#5a6061]">交付</span>
+        {DELIVERY_FILTERS.map((item) => {
+          const selected = item.id === deliveryFilter;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onDeliveryChange(item.id)}
+              aria-pressed={selected}
+              className={`inline-flex h-8 shrink-0 items-center justify-center rounded-full px-3 text-sm font-semibold transition ${
+                selected
+                  ? "bg-[#202829] text-white"
+                  : "bg-[#eef1f1] text-[#4d5657] hover:bg-[#e3e9e9] hover:text-[#202829]"
+              }`}
+            >
+              {item.shortLabel}
+            </button>
+          );
+        })}
+        {deliveryFilter !== "all" ? (
+          <span className="text-xs text-[#7a8587]">{deliveryFilterLabel(deliveryFilter)}</span>
+        ) : null}
+      </div>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="shrink-0 text-xs font-semibold text-[#5a6061]">只看</span>
         {visibleFacets.map((facet) => {
@@ -637,6 +701,7 @@ function OfferFilterBar({
             清除
           </button>
         ) : null}
+      </div>
       </div>
     </section>
   );
@@ -781,7 +846,10 @@ function OfferTable({
                     <OfferRiskCell offer={offer} />
                   </td>
                   <td className="px-3 py-3 text-center">
-                    <OfferLink offer={offer} available={available} compact onRequestPurchase={onRequestPurchase} />
+                    <div className="flex items-center justify-center gap-2">
+                      <OfferLink offer={offer} available={available} compact onRequestPurchase={onRequestPurchase} />
+                      <FavoriteButton targetType="offer" targetId={offer.id} snapshot={offerSnapshot(offer)} compact />
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-center">
                     <OfferFeedbackButton offer={offer} onFeedback={onFeedback} compact />
@@ -868,7 +936,7 @@ function OfferSourceTitle({ title, mode, sharedAccess }: { title: string; mode: 
 function OfferSharedAccessBadge() {
   return (
     <span className="mb-1 mr-1.5 inline-flex shrink-0 items-center rounded-full bg-[#fff7df] px-2 py-0.5 text-[0.68rem] font-semibold leading-5 text-[#8a5a10] ring-1 ring-[#efd38a]">
-      拼车/团购
+      拼车/共享
     </span>
   );
 }
@@ -1072,6 +1140,7 @@ function riskFeedbackReasonLabel(reason: "aftersales_shipping" | "bad_source" | 
 }
 
 function OfferExitNoticeDialog({ offer, onClose }: { offer: RawOffer; onClose: () => void }) {
+  const { recordView } = useAuth();
   const [muteToday, setMuteToday] = useState(false);
   const titleId = "offer-exit-notice-title";
   const shopApi = isShopApiOffer(offer);
@@ -1099,6 +1168,7 @@ function OfferExitNoticeDialog({ offer, onClose }: { offer: RawOffer; onClose: (
 
   function continueToOffer() {
     if (muteToday) muteOfferExitNoticeToday();
+    void recordView("offer", offer.id, offerSnapshot(offer));
     window.open(offer.url, "_blank", "noopener,noreferrer");
     onClose();
   }
@@ -1268,6 +1338,7 @@ export function OfferLink({
   compact?: boolean;
   onRequestPurchase?: (offer: RawOffer) => void;
 }) {
+  const { recordView } = useAuth();
   const [localOutboundOffer, setLocalOutboundOffer] = useState<RawOffer | null>(null);
 
   return (
@@ -1281,7 +1352,10 @@ export function OfferLink({
             source_id: offer.sourceId || "unknown",
             available,
           });
-          if (isOfferExitNoticeMutedToday()) return;
+          if (isOfferExitNoticeMutedToday()) {
+            void recordView("offer", offer.id, offerSnapshot(offer));
+            return;
+          }
           event.preventDefault();
           if (onRequestPurchase) {
             onRequestPurchase(offer);
@@ -1323,9 +1397,24 @@ export function OfferActions({
   return (
     <div className="flex flex-nowrap items-center justify-end gap-2">
       <OfferLink offer={offer} available={available} compact={compact} onRequestPurchase={onRequestPurchase} />
+      <FavoriteButton targetType="offer" targetId={offer.id} snapshot={offerSnapshot(offer)} compact />
       <OfferFeedbackButton offer={offer} onFeedback={onFeedback} compact={compact} />
     </div>
   );
+}
+
+function offerSnapshot(offer: RawOffer) {
+  return {
+    id: offer.id,
+    sourceId: offer.sourceId,
+    sourceName: offer.sourceName,
+    sourceStoreName: offer.sourceStoreName,
+    sourceTitle: offer.sourceTitle,
+    price: offer.price,
+    currency: offer.currency,
+    url: offer.url,
+    status: offer.status,
+  };
 }
 
 export function OfferFeedbackButton({

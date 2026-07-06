@@ -4,11 +4,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { BrandIcon } from "@/components/BrandIcon";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import { JsonLd } from "@/components/JsonLd";
 import { ProductDetailHeader, ProductReturnLink } from "@/components/ProductDetailHeader";
 import { ProductOffersPanel } from "@/components/ProductOffersPanel";
+import { UserActivityTracker } from "@/components/UserActivityTracker";
 import { publicCatalogProducts } from "@/lib/catalog";
 import { getPublicProductSummary, listPublicProductOffers } from "@/lib/data";
+import { parseDeliveryFilter } from "@/lib/delivery-filter";
+import { parseOfferFilterTagsForProduct } from "@/lib/offer-filter-tags";
 import {
   getOfficialPricePlanSummaryFromDataset,
   getOfficialPriceRowsByIdFromDataset,
@@ -93,20 +97,35 @@ const productTypeLabels: Record<string, string> = {
 
 export default async function ProductDetail({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const product = await getPublicProductSummary(id);
+  const resolvedSearchParams = await searchParams;
+  const delivery = parseDeliveryFilter(resolvedSearchParams?.delivery);
+  const product = await getPublicProductSummary(id, { delivery });
 
   if (!product) notFound();
 
   const seoProfile = getProductSeoProfile(product);
-  const initialOffers = await listPublicProductOffers(product.id, { limit: PUBLIC_OFFER_DEFAULT_LIMIT, offset: 0 });
+  const initialFilterTags = parseOfferFilterTagsForProduct(product.id, resolvedSearchParams?.tags || null);
+  const initialQuery = firstSearchParam(resolvedSearchParams?.q);
+  const initialExcludeQuery = firstSearchParam(resolvedSearchParams?.exclude);
+  const initialOffers = await listPublicProductOffers(product.id, {
+    limit: PUBLIC_OFFER_DEFAULT_LIMIT,
+    offset: 0,
+    delivery,
+    filterTags: initialFilterTags,
+    query: initialQuery,
+    excludeQuery: initialExcludeQuery,
+  });
 
   return (
     <>
     <JsonLd data={buildProductJsonLd(product, seoProfile)} />
+    <UserActivityTracker targetType="product" targetId={product.id} snapshot={productSnapshot(product)} />
     <main className="min-h-screen bg-[#f9f9f9] text-[#2d3435]">
       <ProductDetailHeader />
 
@@ -116,16 +135,19 @@ export default async function ProductDetail({
         </div>
 
         <section className="rounded-lg bg-[#f2f4f4] p-5 shadow-[0_20px_60px_rgba(45,52,53,0.04)] lg:p-6">
-          <div className="min-w-0 max-w-4xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge>{platformIcon(product.platform, product.id)} {product.platform}</Badge>
-              <Badge>{productTypeLabel(product.productType)}</Badge>
-              <Badge>{product.spec}</Badge>
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0 max-w-4xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge>{platformIcon(product.platform, product.id)} {product.platform}</Badge>
+                <Badge>{productTypeLabel(product.productType)}</Badge>
+                <Badge>{product.spec}</Badge>
+              </div>
+              <h1 className="mt-4 font-serif text-3xl font-bold tracking-normal text-[#202829] sm:text-4xl">
+                {product.displayName}
+              </h1>
+              <p className="mt-3 text-sm leading-7 text-[#5a6061]">{product.summary}</p>
             </div>
-            <h1 className="mt-4 font-serif text-3xl font-bold tracking-normal text-[#202829] sm:text-4xl">
-              {product.displayName}
-            </h1>
-            <p className="mt-3 text-sm leading-7 text-[#5a6061]">{product.summary}</p>
+            <FavoriteButton targetType="product" targetId={product.id} snapshot={productSnapshot(product)} label="收藏商品" />
           </div>
         </section>
 
@@ -152,6 +174,10 @@ export default async function ProductDetail({
           productName={product.displayName}
           initialCount={product.offerCount}
           initialData={initialOffers}
+          initialDelivery={delivery}
+          initialFilterTags={initialFilterTags}
+          initialQuery={initialQuery}
+          initialExcludeQuery={initialExcludeQuery}
         />
 
         <ProductRelatedCta product={product} />
@@ -163,6 +189,23 @@ export default async function ProductDetail({
     </main>
     </>
   );
+}
+
+function firstSearchParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] || "" : value || "";
+}
+
+function productSnapshot(product: ExplorerProductSummary) {
+  return {
+    id: product.id,
+    slug: product.slug,
+    displayName: product.displayName,
+    platform: product.platform,
+    productType: product.productType,
+    spec: product.spec,
+    lowestPrice: product.lowestPrice,
+    currency: product.lowestOffer?.currency || "CNY",
+  };
 }
 
 type OfficialPriceReference = {

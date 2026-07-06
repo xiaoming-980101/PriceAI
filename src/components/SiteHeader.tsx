@@ -3,10 +3,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ExternalLink, Info, Menu, MessageCircle, X } from "lucide-react";
+import { ExternalLink, Info, LogIn, Menu, MessageCircle, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AppLogo } from "@/components/AppLogo";
+import { useAuth } from "@/components/AuthProvider";
 import { FeedbackDialog, FeedbackLink, GitHubLink, QQGroupDialog, QQGroupLink, TelegramLink } from "@/components/FeedbackLink";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { qqGroupNumber, telegramUrl } from "@/lib/community";
@@ -83,10 +84,12 @@ export function SiteHeader({
         </nav>
 
         <div className="relative z-10 flex min-w-0 items-center justify-end justify-self-end gap-1.5 min-[720px]:hidden">
+          <AccountHeaderButton compact />
           <ThemeToggle compact labelFrom="never" />
         </div>
 
         <div className={`relative z-10 hidden min-w-0 items-center justify-end justify-self-end min-[720px]:col-start-3 min-[720px]:flex ${actionGroupGapClassName}`}>
+          <AccountHeaderButton compact={compactActionLabelFrom === "never"} />
           <ThemeToggle compact labelFrom={compactActionLabelFrom} />
           <FeedbackLink compact labelFrom={compactActionLabelFrom} />
           <QQGroupLink compact labelFrom={compactActionLabelFrom} />
@@ -108,11 +111,48 @@ export function SiteHeader({
             setMobileDrawerOpen(false);
             setQqGroupOpen(true);
           }}
+          onAccount={() => setMobileDrawerOpen(false)}
         />
       ) : null}
       {feedbackOpen ? <FeedbackDialog onClose={() => setFeedbackOpen(false)} /> : null}
       {qqGroupOpen ? <QQGroupDialog onClose={() => setQqGroupOpen(false)} /> : null}
     </header>
+  );
+}
+
+function AccountHeaderButton({ compact = false }: { compact?: boolean }) {
+  const auth = useAuth();
+  const loggedIn = Boolean(auth.user);
+  const label = loggedIn ? "我的" : "登录";
+  const Icon = loggedIn ? UserRound : LogIn;
+
+  if (loggedIn) {
+    return (
+      <Link
+        href="/account"
+        aria-label="查看我的账号"
+        className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white text-sm font-semibold text-[#2d3435] shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:bg-[#f5f7f7] hover:text-[#202829] ${
+          compact ? "w-11 px-0" : "px-4"
+        }`}
+      >
+        <Icon size={17} />
+        {compact ? null : <span>{label}</span>}
+      </Link>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={auth.openAuthModal}
+      aria-label="登录或注册"
+      className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white text-sm font-semibold text-[#2d3435] shadow-[0_10px_30px_rgba(45,52,53,0.06)] ring-1 ring-[#adb3b4]/25 transition hover:bg-[#f5f7f7] hover:text-[#202829] ${
+        compact ? "w-11 px-0" : "px-4"
+      }`}
+    >
+      <Icon size={17} />
+      {compact ? null : <span>{label}</span>}
+    </button>
   );
 }
 
@@ -122,13 +162,17 @@ function MobileModuleDrawer({
   onClose,
   onFeedback,
   onQQGroup,
+  onAccount,
 }: {
   activeKey?: (typeof navItems)[number]["key"];
   aboutActive: boolean;
   onClose: () => void;
   onFeedback: () => void;
   onQQGroup: () => void;
+  onAccount: () => void;
 }) {
+  const auth = useAuth();
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -191,6 +235,35 @@ function MobileModuleDrawer({
 
         <div className="mt-4 border-t border-[var(--color-border-soft)] pt-3">
           <div className="space-y-1">
+            {auth.user ? (
+              <Link
+                href="/account"
+                onClick={() => {
+                  onAccount();
+                  onClose();
+                }}
+                className="flex h-11 items-center justify-between rounded-lg px-3 text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
+              >
+                <span className="inline-flex items-center gap-3">
+                  <UserRound size={17} />
+                  我的账号
+                </span>
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  auth.openAuthModal();
+                }}
+                className="flex h-11 w-full items-center justify-between rounded-lg px-3 text-left text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-surface-hover)]"
+              >
+                <span className="inline-flex items-center gap-3">
+                  <LogIn size={17} />
+                  登录 / 注册
+                </span>
+              </button>
+            )}
             <Link
               href="/about"
               onClick={onClose}

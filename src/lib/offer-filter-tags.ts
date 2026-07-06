@@ -13,6 +13,9 @@ export type OfferFilterTagGroup = keyof typeof OFFER_FILTER_TAG_GROUPS;
 
 export type OfferFilterTagId =
   | "shared_access"
+  | "delivery_recharge"
+  | "delivery_cdk"
+  | "delivery_account"
   | "duration_trial"
   | "duration_month"
   | "duration_quarter"
@@ -48,9 +51,27 @@ export type OfferFilterTagFacet = OfferFilterTagDefinition & {
 export const OFFER_FILTER_TAGS: OfferFilterTagDefinition[] = [
   {
     id: "shared_access",
-    label: "拼车/团购",
+    label: "拼车/共享",
     group: "access",
     description: "多人共享、几人车、拼车、团购、车位或合租类报价。",
+  },
+  {
+    id: "delivery_recharge",
+    label: "直充/代充",
+    group: "access",
+    description: "直充、代充、代开、续费、官方充值或人工充值类报价。",
+  },
+  {
+    id: "delivery_cdk",
+    label: "卡密/CDK",
+    group: "access",
+    description: "卡密、CDK、兑换码、激活码、提链或自助兑换类报价。",
+  },
+  {
+    id: "delivery_account",
+    label: "成品账号",
+    group: "access",
+    description: "成品号、独享账号、账密、Token、2FA 或邮箱账号交付类报价。",
   },
   {
     id: "duration_trial",
@@ -186,6 +207,12 @@ const DURATION_FILTER_TAG_IDS = new Set<OfferFilterTagId>([
   "duration_half_year",
   "duration_year",
 ]);
+const DELIVERY_FILTER_TAG_IDS = new Set<OfferFilterTagId>([
+  "shared_access",
+  "delivery_recharge",
+  "delivery_cdk",
+  "delivery_account",
+]);
 const VERIFICATION_FILTER_TAG_IDS = new Set<OfferFilterTagId>([
   "verification_single",
   "verification_short",
@@ -255,6 +282,7 @@ export function filterOfferFilterFacetsForProduct(productId: string, facets: Off
 }
 
 export function offerFilterTagAppliesToProduct(productId: string, tagId: OfferFilterTagId): boolean {
+  if (DELIVERY_FILTER_TAG_IDS.has(tagId)) return true;
   if (DURATION_FILTER_TAG_IDS.has(tagId)) return DURATION_FILTER_PRODUCT_IDS.has(productId);
   if (VERIFICATION_FILTER_TAG_IDS.has(tagId)) return VERIFICATION_FILTER_PRODUCT_IDS.has(productId);
   if (TELEGRAM_ACCOUNT_FILTER_TAG_IDS.has(tagId)) return productId === "telegram-account";
@@ -272,6 +300,16 @@ export function deriveOfferFilterTags(input: {
 
   if (!hasUnsupportedProxySignal(text) && hasSupportedProxySignal(text)) {
     output.add("proxy_supported");
+  }
+
+  if (hasDeliveryRechargeSignal(text)) {
+    output.add("delivery_recharge");
+  }
+  if (hasDeliveryCdkSignal(text)) {
+    output.add("delivery_cdk");
+  }
+  if (hasDeliveryAccountSignal(text)) {
+    output.add("delivery_account");
   }
 
   if (!hasSharedAccessNegativeSignal(text) && hasSharedAccessSignal(text)) {
@@ -387,6 +425,18 @@ function hasUnsupportedProxySignal(text: string): boolean {
 
 function hasSupportedProxySignal(text: string): boolean {
   return /可反代|支持反代|反代\+?codex|可用codex|支持codex|直接登录codex|sub2|cpa|api格式|json格式|json文件|sub格式|cpa格式/.test(text);
+}
+
+function hasDeliveryRechargeSignal(text: string): boolean {
+  return /直充|直冲|代充|代冲|人工充值|官方充值|正规充值|会员充值|订阅充值|续费|代续费|内购|代开|官方代开|卡冲|卡充|充值月卡|充值年卡/.test(text);
+}
+
+function hasDeliveryCdkSignal(text: string): boolean {
+  return /卡密|cdk|兑换码|激活码|礼品码|充值码|兑换链接|提链|取链|优惠链接|json格式|json文件|cpa格式|api格式|sub格式/.test(text);
+}
+
+function hasDeliveryAccountSignal(text: string): boolean {
+  return /成品号|成品账号|成品帐号|独享账号|独享帐号|账号密码|帐号密码|账密|白号|老号|普号|账号交付|帐号交付|邮箱交付|token|2fa|rt凭证|access_token|refresh_token/.test(text);
 }
 
 function hasSharedAccessNegativeSignal(text: string): boolean {

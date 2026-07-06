@@ -148,10 +148,24 @@ export type PublicOfferSummary = Pick<
   | "url"
 >;
 
+export type ProductPriceTrend = {
+  currentPrice: number;
+  previousDayPrice: number | null;
+  previous7dPrice: number | null;
+  deltaDay: number | null;
+  delta7d: number | null;
+  isNewLow7d: boolean;
+  isNewListing: boolean;
+  latestSnapshotDate: string | null;
+  previousDayDate: string | null;
+  previous7dDate: string | null;
+};
+
 export type ExplorerProductSummary = Omit<ProductGroup, "offers" | "lowestOffer" | "warrantyLowestOffer"> & {
   lowestOffer: PublicOfferSummary | null;
   warrantyLowestOffer: PublicOfferSummary | null;
   offerSearchText: string;
+  priceTrend?: ProductPriceTrend | null;
 };
 
 export type MerchantCollectorGroup = "shopApi" | "dujiao" | "kami" | "other";

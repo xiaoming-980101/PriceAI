@@ -19,6 +19,7 @@ export async function GET(
     const result = await listPublicProductOffers(id, {
       ...pagination,
       filterTags: request.nextUrl.searchParams.get("tags")?.split(/[,，\s]+/) ?? [],
+      delivery: request.nextUrl.searchParams.get("delivery"),
       query: request.nextUrl.searchParams.get("q"),
       excludeQuery: request.nextUrl.searchParams.get("exclude"),
     });
