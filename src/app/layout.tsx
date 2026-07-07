@@ -7,6 +7,7 @@ import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 import { QQGroupAutoPrompt } from "@/components/QQGroupAutoPrompt";
 import { SiteNoticePrompt } from "@/components/SiteNoticePrompt";
 import { UmamiAnalytics } from "@/components/UmamiAnalytics";
+import { getRuntimeEnv } from "@/lib/runtime-env";
 import "./globals.css";
 
 const themeInitScript = `
@@ -66,10 +67,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const publicEnvScript = `window.__PRICEAI_PUBLIC_ENV__=${JSON.stringify({
+    NEXT_PUBLIC_SUPABASE_URL: getRuntimeEnv("NEXT_PUBLIC_SUPABASE_URL") || "",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: getRuntimeEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY") || "",
+  })};`;
+
   return (
     <html lang="zh-CN" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col">
         <Script id="priceai-theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script id="priceai-public-env" dangerouslySetInnerHTML={{ __html: publicEnvScript }} />
         <AuthProvider>
           <GlobalSponsorPlacements>
             {children}

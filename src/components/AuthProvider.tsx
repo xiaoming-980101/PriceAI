@@ -39,11 +39,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(Boolean(supabase));
   const [authOpen, setAuthOpen] = useState(false);
   const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set());
+  const accessToken = session?.access_token || null;
 
   const authHeaders = useCallback((): HeadersInit | null => {
-    if (!session?.access_token) return null;
-    return { Authorization: `Bearer ${session.access_token}` };
-  }, [session?.access_token]);
+    if (!accessToken) return null;
+    return { Authorization: `Bearer ${accessToken}` };
+  }, [accessToken]);
 
   const refreshFavorites = useCallback(async () => {
     const headers = authHeaders();
@@ -59,10 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [authHeaders]);
 
   useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
+    if (!supabase) return;
 
     let active = true;
     supabase.auth.getSession().then(({ data }) => {
@@ -86,7 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session) return;
-    void refreshFavorites();
+    const timeoutId = window.setTimeout(() => void refreshFavorites(), 0);
+    return () => window.clearTimeout(timeoutId);
   }, [refreshFavorites, session]);
 
   const value = useMemo<AuthContextValue>(() => ({
@@ -209,17 +208,51 @@ function AuthDialog({ onClose }: { onClose: () => void }) {
     setMessage(null);
     try {
       const payload = { email: email.trim(), password };
-      const result = mode === "login"
-        ? await supabase.auth.signInWithPassword(payload)
-        : await supabase.auth.signUp(payload);
-      if (result.error) throw result.error;
-      if (mode === "register" && !result.data.session) {
-        setMessage("注册已提交，请检查邮箱确认链接后再登录。");
-      } else {
+      if (mode === "login") {
+        const result = await supabase.auth.signInWithPassword(payload);
+        if (result.error) {
+          if (!isEmailNotConfirmedError(result.error)) throw result.error;
+          setMessage("正在确认旧账号状态...");
+          const confirmResponse = await fetch("/api/auth/confirm-login", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+          const confirmPayload = await confirmResponse.json().catch(() => ({})) as { message?: string };
+          if (!confirmResponse.ok) {
+            throw new Error(confirmPayload.message || "账号确认失败，请稍后重试。");
+          }
+
+          const retryResult = await supabase.auth.signInWithPassword(payload);
+          if (retryResult.error) throw retryResult.error;
+        }
         onClose();
+        return;
       }
+
+      const registerResponse = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      const registerPayload = await registerResponse.json().catch(() => ({})) as { message?: string };
+      if (!registerResponse.ok) {
+        if (registerResponse.status === 409) setMode("login");
+        throw new Error(registerPayload.message || "注册失败，请稍后重试。");
+      }
+      const loginResult = await supabase.auth.signInWithPassword(payload);
+      if (!loginResult.error && loginResult.data.session) {
+        onClose();
+        return;
+      }
+
+      throw loginResult.error || new Error("注册成功，但自动登录失败，请直接登录。");
     } catch (currentError) {
-      setError(currentError instanceof Error ? currentError.message : "登录失败，请稍后重试。");
+      setError(authDialogErrorMessage(currentError));
     } finally {
       setSubmitting(false);
     }
@@ -316,4 +349,18 @@ function AuthDialog({ onClose }: { onClose: () => void }) {
 
 function favoriteKey(targetType: UserTargetType, targetId: string): string {
   return `${targetType}:${targetId}`;
+}
+
+function isEmailNotConfirmedError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: unknown; message?: unknown };
+  return record.code === "email_not_confirmed" || /email not confirmed/i.test(String(record.message || ""));
+}
+
+function authDialogErrorMessage(error: unknown): string {
+  if (isEmailNotConfirmedError(error)) return "账号邮箱尚未确认，请重新点一次登录。";
+  if (!(error instanceof Error)) return "登录失败，请稍后重试。";
+  if (/invalid login credentials/i.test(error.message)) return "邮箱或密码不正确。";
+  if (/email not confirmed/i.test(error.message)) return "账号邮箱尚未确认，请重新点一次登录。";
+  return error.message || "登录失败，请稍后重试。";
 }

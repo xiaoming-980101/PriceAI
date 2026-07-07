@@ -5,8 +5,10 @@ import { getRuntimeEnv } from "@/lib/runtime-env";
 
 const SUPABASE_DB_TIMEOUT_MS = 8_000;
 const SUPABASE_CIRCUIT_BREAKER_COOLDOWN_MS = 60_000;
+const SUPABASE_AUTH_TIMEOUT_MS = 12_000;
 
 let serverClient: SupabaseClient | null = null;
+let authAdminClient: SupabaseClient | null = null;
 let supabaseUnavailableUntil = 0;
 
 export function getSupabaseServerClient(): SupabaseClient | null {
@@ -33,6 +35,27 @@ export function getSupabaseServerClient(): SupabaseClient | null {
   return serverClient;
 }
 
+export function getSupabaseAuthAdminClient(): SupabaseClient | null {
+  const url = getRuntimeEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const key = getRuntimeEnv("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!url || !key) return null;
+
+  if (!authAdminClient) {
+    authAdminClient = createClient(url, key, {
+      global: {
+        fetch: supabaseFetchWithTimeout,
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+  }
+
+  return authAdminClient;
+}
+
 async function supabaseFetchWithCircuitBreaker(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -51,6 +74,24 @@ async function supabaseFetchWithCircuitBreaker(
   } catch (error) {
     if (isAbortLikeError(error)) openSupabaseCircuitBreaker();
     throw error;
+  }
+}
+
+async function supabaseFetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  if (init?.signal) return fetch(input, init);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SUPABASE_AUTH_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (isAbortLikeError(error)) {
+      throw new Error("Supabase 连接超时，请稍后再试。");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
